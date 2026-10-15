@@ -1,0 +1,82 @@
+import { useState, useEffect } from 'react';
+
+const API_BASE = '/api';
+
+export function useAuth() {
+  const [token, setToken] = useState(() => localStorage.getItem('token'));
+  const [user, setUser] = useState(() => {
+    const stored = localStorage.getItem('user');
+    return stored ? JSON.parse(stored) : null;
+  });
+  const [menuActions, setMenuActions] = useState(() => {
+    const stored = localStorage.getItem('menu_actions');
+    return stored ? JSON.parse(stored) : [];
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function login(email, password) {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Login gagal');
+
+      setToken(data.token);
+      setUser(data.user);
+      setMenuActions(data.menu_actions || []);
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      localStorage.setItem('menu_actions', JSON.stringify(data.menu_actions || []));
+      return data;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function logout() {
+    fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {});
+    setToken(null);
+    setUser(null);
+    setMenuActions([]);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('menu_actions');
+  }
+
+  async function fetchMe() {
+    if (!token) return;
+    const res = await fetch(`${API_BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 401) { logout(); return; }
+    const data = await res.json();
+    setUser(data.user);
+    setMenuActions(data.menu_actions || []);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    localStorage.setItem('menu_actions', JSON.stringify(data.menu_actions || []));
+  }
+
+  function can(modul, action) {
+    return menuActions.some(
+      (a) => a.modul === modul && a.action === action,
+    );
+  }
+
+  useEffect(() => {
+    if (token && !user) fetchMe();
+  }, []);
+
+  return { token, user, menuActions, loading, error, login, logout, fetchMe, can };
+}

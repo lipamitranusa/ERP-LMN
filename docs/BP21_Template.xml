@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Bp21Bulk xsi:noNamespaceSchemaLocation="schema.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<TIN>xxxxxxxxxxxxxxxx</TIN>
+	<ListOfBp21>
+		<Bp21>
+			<TaxPeriodMonth>3</TaxPeriodMonth>
+			<TaxPeriodYear>2023</TaxPeriodYear>
+			<CounterpartTin>xxxxxxxxxxxxxxxx</CounterpartTin>
+			<IDPlaceOfBusinessActivityOfIncomeRecipient>000000</IDPlaceOfBusinessActivityOfIncomeRecipient>
+			<StatusTaxExemption>TK/1</StatusTaxExemption>
+			<TaxCertificate>N/A</TaxCertificate>
+			<TaxObjectCode>21-100-14</TaxObjectCode>
+			<Gross>1000000</Gross>
+			<Deemed>50.25</Deemed>
+			<Rate>12.2349058</Rate>
+			<Document>Contract</Document>
+			<DocumentNumber>Test</DocumentNumber>
+			<DocumentDate>1999-11-16</DocumentDate>
+			<IDPlaceOfBusinessActivity>000000</IDPlaceOfBusinessActivity>
+			<WithholdingDate>2022-08-14</WithholdingDate>
+		</Bp21>
+	</ListOfBp21>
+</Bp21Bulk>

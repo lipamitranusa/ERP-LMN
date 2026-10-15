@@ -1,0 +1,52 @@
+# =============================================================================
+# Root .gitignore — Sistem ERP Akreditasi Faskes
+# Aturan spesifik backend ada di `backend/.gitignore` (bawaan Laravel).
+# Aturan spesifik frontend ada di `frontend/.gitignore`.
+# =============================================================================
+
+# Secrets — jangan pernah commit
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Tooling
+.vscode/
+.idea/
+.cursor/
+.DS_Store
+Thumbs.db
+
+# Logs umum
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs (jika ada di root)
+node_modules/
+dist/
+build/
+
+# Windows reserved filenames
+nul
+CON
+PRN
+AUX
+COM1
+LPT1
+
+# Backend leftovers saat pemindahan (lihat backend/.gitignore untuk rule utama)
+/backend/vendor
+/backend/node_modules
+/backend/.phpunit.result.cache
+/backend/.phpunit.cache
+/backend/public/storage
+/backend/public/hot
+/backend/public/build
+
+# Frontend leftovers
+/frontend/dist
+/frontend/node_modules
+/frontend/.vite
