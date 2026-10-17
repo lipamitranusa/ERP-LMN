@@ -1,25 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useHistory, useParams } from "react-router-dom";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const e = new Error(body.message || `API error: ${res.status}`);
-    e.status = res.status;
-    throw e;
-  }
-  return body;
-}
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -59,8 +41,6 @@ function StatusBadge({ status }) {
 export default function ApHonorPaymentDetail() {
   const history = useHistory();
   const { id } = useParams();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionInProgress, setActionInProgress] = useState(false);
 
@@ -68,20 +48,13 @@ export default function ApHonorPaymentDetail() {
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelAlasan, setCancelAlasan] = useState("");
 
-  const load = () => {
-    setLoading(true);
-    api(`/keuangan/ap-honor/payments/${id}`)
-      .then(d => {
-        setData(d?.data || null);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
-  };
+  const { data, isLoading, error: fetchError } = useApi(
+    ["ap-honor-payment-detail", id],
+    `/keuangan/ap-honor/payments/${id}`
+  );
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
+  const approveMutate = useMutateKeys([["ap-honor-payment-detail", id], ["ap-honor-history"]]);
+  const cancelMutate = useMutateKeys([["ap-honor-payment-detail", id], ["ap-honor-history"]]);
 
   // Kirim Slip state
   const [showSlipPanel, setShowSlipPanel] = useState(false);
@@ -180,8 +153,7 @@ export default function ApHonorPaymentDetail() {
     setActionInProgress(true);
     setError("");
     try {
-      await api(`/keuangan/ap-honor/payments/${id}/approve`, { method: "POST" });
-      load();
+      await approveMutate.mutateAsync({ path: `/keuangan/ap-honor/payments/${id}/approve`, method: "POST" });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -198,13 +170,9 @@ export default function ApHonorPaymentDetail() {
     setActionInProgress(true);
     setError("");
     try {
-      await api(`/keuangan/ap-honor/payments/${id}/cancel`, {
-        method: "POST",
-        body: JSON.stringify({ alasan: cancelAlasan }),
-      });
+      await cancelMutate.mutateAsync({ path: `/keuangan/ap-honor/payments/${id}/cancel`, method: "POST", body: { alasan: cancelAlasan } });
       setShowCancelForm(false);
       setCancelAlasan("");
-      load();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -212,7 +180,7 @@ export default function ApHonorPaymentDetail() {
     }
   };
 
-  if (loading && !data) {
+  if (isLoading && !data) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat detail pembayaran...</div>;
   }
   if (error && !data) {

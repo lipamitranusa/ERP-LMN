@@ -1,27 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  try {
-    const res = await fetch(`/api${path}`, { ...options, headers });
-    if (res.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/auth/login";
-      return null;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `HTTP ${res.status}`);
-    }
-    return res;
-  } catch (err) {
-    console.error("[api]", err);
-    throw err;
-  }
-}
+import React, { useState, useMemo } from "react";
+import { useApi, useMutate } from "@/hooks/useApi";
 
 function PasswordField({ value, onChange, label }) {
   const [show, setShow] = useState(false);
@@ -109,9 +87,6 @@ const VA_BANK_OPTIONS = {
 };
 
 export default function PengaturanPembayaran() {
-  const [settings, setSettings] = useState([]);
-  const [grouped, setGrouped] = useState({});
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [activeTab, setActiveTab] = useState("gateway");
@@ -119,35 +94,19 @@ export default function PengaturanPembayaran() {
   const [dirty, setDirty] = useState({});
   const [tempValues, setTempValues] = useState({});
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api("/payment-settings");
-      if (!res) {
-        setLoading(false);
-        return;
-      }
-      const json = await res.json();
-      console.log("[payment-settings] response:", json);
-      const all = Array.isArray(json) ? json : (json.data || []);
-      setSettings(all);
+  const { data, isLoading } = useApi("payment-settings", "/payment-settings");
+  const mutateSave = useMutate({});
 
-      const grp = {};
-      all.forEach(s => {
-        if (!grp[s.kategori]) grp[s.kategori] = {};
-        grp[s.kategori][s.kunci] = s;
-      });
-      console.log("[payment-settings] grouped:", grp);
-      setGrouped(grp);
-    } catch (err) {
-      console.error("[load payment settings]", err);
-      showToast("Gagal memuat pengaturan: " + err.message, "error");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const settings = data?.data || [];
 
-  useEffect(() => { load(); }, [load]);
+  const grouped = useMemo(() => {
+    const grp = {};
+    settings.forEach(s => {
+      if (!grp[s.kategori]) grp[s.kategori] = {};
+      grp[s.kategori][s.kunci] = s;
+    });
+    return grp;
+  }, [settings]);
 
   const getVal = (kat, kunci) => {
     const key = `${kat}:${kunci}`;
@@ -165,16 +124,6 @@ export default function PengaturanPembayaran() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const values = {};
-      Object.entries(tempValues).forEach(([key, val]) => {
-        if (dirty[key]) {
-          values[key] = val;
-        }
-      });
-      if (Object.keys(values).length === 0) {
-        showToast("Tidak ada perubahan untuk disimpan.", "info");
-        return;
-      }
       const payload = {};
       settings.forEach(s => {
         const key = `${s.kategori}:${s.kunci}`;
@@ -183,16 +132,20 @@ export default function PengaturanPembayaran() {
         }
       });
 
-      const res = await api("/payment-settings", {
+      if (Object.keys(payload).length === 0) {
+        showToast("Tidak ada perubahan untuk disimpan.", "info");
+        setSaving(false);
+        return;
+      }
+
+      await mutateSave.mutateAsync({
+        path: "/payment-settings",
         method: "PUT",
-        body: JSON.stringify({ values: payload }),
+        body: { values: payload },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
       setTempValues({});
       setDirty({});
-      await load();
-      showToast(data.message || "Berhasil disimpan.", "success");
+      showToast("Berhasil disimpan.", "success");
     } catch (err) {
       showToast(err.message || "Gagal menyimpan.", "error");
     } finally {
@@ -212,12 +165,12 @@ export default function PengaturanPembayaran() {
       if (driver === "midtrans") body.server_key = serverKey;
       if (driver === "xendit") body.api_key = apiKey;
 
-      const res = await api("/payment-settings/test-connection", {
+      const { api } = await import("@/lib/api");
+      // api() sudah parse JSON & throw on non-ok — langsung dapat response body
+      const data = await api("/payment-settings/test-connection", {
         method: "POST",
         body: JSON.stringify(body),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
       showToast(data.message, "success");
     } catch (err) {
       showToast(err.message || "Gagal koneksi.", "error");
@@ -344,7 +297,7 @@ export default function PengaturanPembayaran() {
     );
   };
 
-  if (loading) return <LoadingSpinner />;
+  if (isLoading) return <LoadingSpinner />;
 
   return (
     <div>

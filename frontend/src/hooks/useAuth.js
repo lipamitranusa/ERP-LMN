@@ -53,6 +53,8 @@ export function useAuth() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('menu_actions');
+    // JANGAN hapus lembaga_id — simpan untuk auto-restore saat login ulang
+    // (lihat Login.jsx yang membaca lembaga_id dari localStorage)
   }
 
   async function fetchMe() {
@@ -66,6 +68,9 @@ export function useAuth() {
     setMenuActions(data.menu_actions || []);
     localStorage.setItem('user', JSON.stringify(data.user));
     localStorage.setItem('menu_actions', JSON.stringify(data.menu_actions || []));
+    if (data.lembaga_id) {
+      localStorage.setItem('lembaga_id', data.lembaga_id);
+    }
   }
 
   function can(modul, action) {
@@ -75,8 +80,11 @@ export function useAuth() {
   }
 
   useEffect(() => {
-    if (token && !user) fetchMe();
-  }, []);
+    // Selalu fetch /auth/me saat mount agar user.lembaga_ids (multi-lembaga)
+    // selalu fresh — admin bisa saja menambah akses lembaga via Manajemen
+    // Akun, sehingga perlu di-refresh saat user buka halaman lagi.
+    if (token) fetchMe();
+  }, [token]);
 
   return { token, user, menuActions, loading, error, login, logout, fetchMe, can };
 }

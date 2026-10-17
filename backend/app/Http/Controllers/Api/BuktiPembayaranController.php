@@ -26,6 +26,7 @@ class BuktiPembayaranController extends Controller
 
     public function show(BuktiPembayaran $bukti): JsonResponse
     {
+        $this->ensureSameLembaga($bukti);
         $bukti->load(['invoice', 'submitter', 'verifier']);
         $bukti->is_overdue = $bukti->isOverdue();
         return response()->json(['data' => $bukti]);
@@ -36,6 +37,7 @@ class BuktiPembayaranController extends Controller
      */
     public function view(BuktiPembayaran $bukti)
     {
+        $this->ensureSameLembaga($bukti);
         if (! $bukti->path_bukti) {
             return response()->json(['message' => 'Bukti tidak memiliki file.'], 404);
         }
@@ -61,6 +63,7 @@ class BuktiPembayaranController extends Controller
      */
     public function download(BuktiPembayaran $bukti)
     {
+        $this->ensureSameLembaga($bukti);
         if (! $bukti->path_bukti) {
             return response()->json(['message' => 'Bukti tidak memiliki file.'], 404);
         }
@@ -89,6 +92,15 @@ class BuktiPembayaranController extends Controller
 
     public function byInvoice(Invoice $invoice): JsonResponse
     {
+        $sessionLembagaId = session('lembaga_id');
+        if ($sessionLembagaId !== null) {
+            $siklusLembagaId = $invoice->siklus?->lembaga_id
+                ?? $invoice->siklus()->value('lembaga_id');
+            if ($siklusLembagaId !== $sessionLembagaId) {
+                abort(response()->json(['message' => 'Invoice tidak ditemukan.'], 404));
+            }
+        }
+
         $bukti = $invoice->buktiPembayaran()
             ->with(['submitter', 'verifier'])
             ->orderByDesc('created_at')
@@ -105,8 +117,16 @@ class BuktiPembayaranController extends Controller
      */
     public function antrianMenunggu(): JsonResponse
     {
-        $bukti = BuktiPembayaran::where('status_verifikasi', BuktiPembayaran::STATUS_MENUNGGU)
-            ->with(['invoice.siklus.faskes', 'submitter'])
+        $query = BuktiPembayaran::where('status_verifikasi', BuktiPembayaran::STATUS_MENUNGGU)
+            ->with(['invoice.siklus.faskes', 'invoice.siklus.lembaga', 'submitter']);
+
+        // Filter per lembaga aktif: hanya bukti dari invoice di siklus lembaga
+        // yang sama dengan session user.
+        if ($lembagaId = session('lembaga_id')) {
+            $query->whereHas('invoice.siklus', fn ($q) => $q->where('lembaga_id', $lembagaId));
+        }
+
+        $bukti = $query
             ->orderBy('tanggal_submit')
             ->get()
             ->each(function (BuktiPembayaran $b) {
@@ -122,6 +142,7 @@ class BuktiPembayaranController extends Controller
      */
     public function verifikasi(Request $request, BuktiPembayaran $bukti): JsonResponse
     {
+        $this->ensureSameLembaga($bukti);
         $data = $request->validate([
             'status' => 'required|in:diterima,ditolak',
             'alasan_penolakan' => 'required_if:status,ditolak|nullable|string|max:1000',
@@ -194,5 +215,27 @@ class BuktiPembayaranController extends Controller
                 'invoice_status' => $newInvoiceStatus,
             ]);
         });
+    }
+
+    /**
+     * Guard lembaga: bukti pembayaran hanya bisa diakses dari session lembaga
+     * yang sama dengan lembaga siklus invoice di bawahnya. Melengkapi trait
+     * BelongsToLembaga pada SiklusAkreditasi (tabel bukti_pembayaran tidak
+     * memiliki kolom lembaga_id).
+     */
+    private function ensureSameLembaga(BuktiPembayaran $bukti): void
+    {
+        $sessionLembagaId = session('lembaga_id');
+        if ($sessionLembagaId === null) {
+            // Superadmin tanpa pilihan lembaga: skip filter
+            return;
+        }
+
+        $siklusLembagaId = $bukti->invoice?->siklus?->lembaga_id
+            ?? $bukti->invoice()?->siklus()->value('lembaga_id');
+
+        if ($siklusLembagaId !== $sessionLembagaId) {
+            abort(response()->json(['message' => 'Bukti pembayaran tidak ditemukan.'], 404));
+        }
     }
 }

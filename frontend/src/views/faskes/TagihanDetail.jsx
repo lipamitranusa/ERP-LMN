@@ -1,22 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { useParams, useHistory } from "react-router-dom";
 import InvoiceStatusCard from "@/components/InvoiceStatusCard";
 import PaymentMethodSelector from "@/components/PaymentMethodSelector";
 import { formatDate, formatDateTime } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {};
-  if (!(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  return res;
-}
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -268,7 +255,6 @@ function getBankInstructions(vaNumber, gateway, selectedBank) {
     },
   ];
 
-  // Jika bank tertentu dipilih, tampilkan hanya bank itu
   if (selectedBank) {
     const bank = allBanks.find(b => b.key === selectedBank);
     return bank ? [bank] : allBanks;
@@ -280,13 +266,8 @@ function getBankInstructions(vaNumber, gateway, selectedBank) {
 export default function TagihanDetail() {
   const { id } = useParams();
   const history = useHistory();
-  const [invoice, setInvoice] = useState(null);
-  const [bukti, setBukti] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [method, setMethod] = useState("virtual_account");
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [tick, setTick] = useState(0);
 
   // Manual transfer form
   const [nominal, setNominal] = useState("");
@@ -301,105 +282,69 @@ export default function TagihanDetail() {
   const [showMethodPicker, setShowMethodPicker] = useState(false);
   const [pendingMethod, setPendingMethod] = useState(null);
 
-  const reload = useCallback(async () => {
-    if (!id) {
-      setLoading(false);
-      return;
+  // Fetch invoice detail
+  const {
+    data: invoiceData,
+    isLoading: loading,
+    refetch: refetchInvoice,
+    isFetching,
+  } = useApi(
+    ["invoice", id],
+    `/invoice/${id}`,
+    {
+      enabled: !!id,
+      // Polling: refetch every 10 seconds for faster payment detection
+      refetchInterval: (data) => {
+        // Stop polling once paid
+        if (data?.status === "lunas") return false;
+        return 10000;
+      },
     }
-    try {
-      const res = await api(`/invoice/${id}`);
-      if (!res) {
-        setLoading(false);
-        return;
-      }
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.message || "Gagal memuat invoice.");
-        setLoading(false);
-        return;
-      }
-      setInvoice(data?.data);
-      setVaData(data?.data?.payment_reference ? {
-        reference: data.data.payment_reference,
-        expiredAt: data.data.payment_expired_at,
-        metode: data.data.metode_pembayaran,
-        bank: data.data.va_bank,
-      } : null);
+  );
 
-      const buktiRes = await api(`/invoice/${id}/bukti`);
-      if (buktiRes?.ok) {
-        const buktiData = await buktiRes.json();
-        setBukti(buktiData?.data || []);
-      }
-    } catch (err) {
-      console.error("[TagihanDetail] reload error:", err);
-      setError("Gagal memuat invoice: " + err.message);
-    } finally {
-      setLoading(false);
+  const invoice = invoiceData?.data || null;
+
+  // Sync vaData from invoice data
+  React.useEffect(() => {
+    if (invoice?.payment_reference) {
+      setVaData({
+        reference: invoice.payment_reference,
+        expiredAt: invoice.payment_expired_at,
+        metode: invoice.metode_pembayaran,
+        bank: invoice.va_bank,
+      });
     }
-  }, [id]);
+  }, [invoice]);
 
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  // Fetch bukti list
+  const { data: buktiData } = useApi(
+    ["invoice-bukti", id],
+    `/invoice/${id}/bukti`,
+    { enabled: !!id }
+  );
 
-  // Polling setiap 10 detik untuk deteksi pembayaran lebih cepat
-  useEffect(() => {
-    if (invoice?.status !== "lunas") {
-      const interval = setInterval(() => setTick(t => t + 1), 10000);
-      return () => clearInterval(interval);
-    }
-  }, [invoice?.status]);
+  const bukti = buktiData?.data || [];
 
-  useEffect(() => {
-    if (tick > 0) reload();
-  }, [tick]);
-
-  // Reload saat user kembali ke tab (mis. setelah membayar di Midtrans simulator di tab lain)
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === "visible" && invoice?.status !== "lunas") {
-        reload();
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [reload, invoice?.status]);
-
-  async function handleGatewayPayment(forceNew = false) {
-    setError("");
-    setSubmitting(true);
-    try {
-      const endpoint = method === "qris" ? "bayar-qris" : "bayar-va";
-      const qs = forceNew ? "?force=true" : "";
-      const res = await api(`/invoice/${id}/${endpoint}${qs}`, { method: "POST", body: JSON.stringify({}) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal memulai pembayaran.");
+  // Gateway payment mutation (VA or QRIS)
+  const gatewayMutation = useMutateKeys(["invoice", id, "invoices"], {
+    onSuccess: (data) => {
       setVaData({
         reference: method === "qris" ? data.data.reference : data.data.nomor_va,
         expiredAt: data.data.expired_at,
         metode: method === "qris" ? "qris" : "va",
         bank: data.data.bank,
       });
-      // Tunda reload agar database来得及 update sebelum dibaca ulang
-      setTimeout(() => reload(), 500);
-    } catch (err) {
+      // Reload after DB update
+      setTimeout(() => refetchInvoice(), 500);
+    },
+    onError: (err) => {
       setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
+    },
+  });
 
-  async function handleGantiMetode() {
-    if (!pendingMethod) return;
-    setError("");
-    setSubmitting(true);
-    setShowMethodPicker(false);
-    try {
-      const endpoint = pendingMethod === "qris" ? "bayar-qris" : "bayar-va";
-      const res = await api(`/invoice/${id}/${endpoint}?force=true`, { method: "POST", body: JSON.stringify({}) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal mengganti metode pembayaran.");
+  // Ganti metode mutation
+  const gantiMetodeMutation = useMutateKeys(["invoice", id, "invoices"], {
+    onSuccess: (data) => {
       setVaData({
         reference: pendingMethod === "qris" ? data.data.reference : data.data.nomor_va,
         expiredAt: data.data.expired_at,
@@ -407,39 +352,68 @@ export default function TagihanDetail() {
         bank: data.data.bank,
       });
       setMethod(pendingMethod);
-      setTimeout(() => reload(), 500);
-    } catch (err) {
+      setTimeout(() => refetchInvoice(), 500);
+    },
+    onError: (err) => {
       setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
+    },
+  });
+
+  // Manual bukti upload mutation
+  const buktiMutation = useMutateKeys(["invoice", id, "invoices", "invoice-bukti", id], {
+    onSuccess: () => {
+      setShowMethodPicker(false);
+      setMethod("transfer_manual");
+      setVaData(null);
+      setNominal(""); setNoRef(""); setDariRek(""); setFileBukti(null);
+      refetchInvoice();
+      alert("Bukti transfer berhasil diunggah. Admin akan memverifikasi dalam 1x24 jam kerja.");
+    },
+    onError: (err) => {
+      setError(err.message);
+    },
+  });
+
+  function handleGatewayPayment(forceNew = false) {
+    setError("");
+    const endpoint = method === "qris" ? "bayar-qris" : "bayar-va";
+    const path = forceNew ? `/invoice/${id}/${endpoint}?force=true` : `/invoice/${id}/${endpoint}`;
+    gatewayMutation.mutate({
+      path,
+      method: "POST",
+      body: {},
+    });
   }
 
-  async function handleManualSubmit(e) {
+  function handleGantiMetode() {
+    if (!pendingMethod) return;
+    setError("");
+    setShowMethodPicker(false);
+    const endpoint = pendingMethod === "qris" ? "bayar-qris" : "bayar-va";
+    gantiMetodeMutation.mutate({
+      path: `/invoice/${id}/${endpoint}?force=true`,
+      method: "POST",
+      body: {},
+    });
+  }
+
+  function handleManualSubmit(e) {
     e.preventDefault();
     setError("");
     if (!fileBukti) { setError("Pilih file bukti transfer."); return; }
-    setSubmitting(true);
-
     const fd = new FormData();
     fd.append("nominal", nominal);
     fd.append("nomor_referensi", noRef);
     fd.append("dari_rekening", dariRek);
     fd.append("bukti", fileBukti);
-
-    try {
-      const res = await api(`/invoice/${id}/bukti-manual`, { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal mengunggah bukti.");
-      setNominal(""); setNoRef(""); setDariRek(""); setFileBukti(null);
-      reload();
-      alert("Bukti transfer berhasil diunggah. Admin akan memverifikasi dalam 1x24 jam kerja.");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
+    buktiMutation.mutate({
+      path: `/invoice/${id}/bukti-manual`,
+      method: "POST",
+      body: fd,
+    });
   }
+
+  const submitting = gatewayMutation.isPending || gantiMetodeMutation.isPending || buktiMutation.isPending;
 
   if (loading || !invoice) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>;
@@ -583,13 +557,13 @@ export default function TagihanDetail() {
 
           {/* Cek status pembayaran manual — untuk kasus webhook belum sampai */}
           <button
-            onClick={reload}
-            disabled={loading}
+            onClick={refetchInvoice}
+            disabled={isFetching}
             className="btn btn-ghost"
             style={{ width: "100%", marginTop: "12px", fontSize: "12px", color: "#475569" }}
             title="Paksa refresh status invoice dari server"
           >
-            {loading ? "Memuat..." : "Cek Status Pembayaran"}
+            {isFetching ? "Memuat..." : "Cek Status Pembayaran"}
           </button>
 
           {/* Refresh VA — selalu generate VA baru dari Midtrans */}
@@ -624,29 +598,20 @@ export default function TagihanDetail() {
           <PaymentMethodSelector value={pendingMethod} onChange={setPendingMethod} disabled={submitting} />
 
           {pendingMethod === "transfer_manual" ? (
-            <form onSubmit={async (e) => {
+            <form onSubmit={(e) => {
               e.preventDefault();
               setError("");
-              setSubmitting(true);
-              try {
-                const fd = new FormData();
-                fd.append("nominal", nominal);
-                fd.append("nomor_referensi", noRef);
-                fd.append("dari_rekening", dariRek);
-                fd.append("bukti", fileBukti);
-                const res = await api(`/invoice/${id}/bukti-manual`, { method: "POST", body: fd });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.message || "Gagal mengunggah bukti.");
-                setShowMethodPicker(false);
-                setMethod("transfer_manual");
-                setVaData(null);
-                setNominal(""); setNoRef(""); setDariRek(""); setFileBukti(null);
-                alert("Bukti transfer berhasil diunggah. Admin akan memverifikasi dalam 1x24 jam kerja.");
-              } catch (err) {
-                setError(err.message);
-              } finally {
-                setSubmitting(false);
-              }
+              if (!fileBukti) { setError("Pilih file bukti transfer."); return; }
+              const fd = new FormData();
+              fd.append("nominal", nominal);
+              fd.append("nomor_referensi", noRef);
+              fd.append("dari_rekening", dariRek);
+              fd.append("bukti", fileBukti);
+              buktiMutation.mutate({
+                path: `/invoice/${id}/bukti-manual`,
+                method: "POST",
+                body: fd,
+              });
             }} style={{ marginTop: "16px" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div>
@@ -778,7 +743,7 @@ export default function TagihanDetail() {
               {error && (
                 <div style={{ padding: "10px 12px", background: "#FEE2E2", color: "#991B1B", borderRadius: "6px", fontSize: "12px", marginBottom: "12px" }}>{error}</div>
               )}
-              <button onClick={handleGatewayPayment} className="btn btn-primary" disabled={submitting} style={{ width: "100%" }}>
+              <button onClick={() => handleGatewayPayment(false)} className="btn btn-primary" disabled={submitting} style={{ width: "100%" }}>
                 {submitting ? "Memproses..." : method === "qris" ? "Generate QRIS" : "Dapatkan Nomor VA"}
               </button>
             </div>

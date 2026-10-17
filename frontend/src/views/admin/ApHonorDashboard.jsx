@@ -1,26 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { useHistory } from "react-router-dom";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const errBody = await res.json().catch(() => ({}));
-    const e = new Error(errBody.message || `API error: ${res.status}`);
-    e.status = res.status;
-    e.body = errBody;
-    throw e;
-  }
-  return res;
-}
+import { useApi } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -125,39 +106,32 @@ function StatusBadge({ status }) {
 
 export default function ApHonorDashboard() {
   const history = useHistory();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      api("/keuangan/ap-honor/dashboard").then(r => r?.json()),
-      api("/keuangan/ap-honor/payments").then(r => r?.json()),
-    ]).then(([dash, payments]) => {
-      setData({
-        kpi: dash?.data?.kpi || {},
-        aging: dash?.data?.aging || {},
-        top_penerima: dash?.data?.top_penerima || [],
-        tanggal_snapshot: dash?.data?.tanggal_snapshot,
-        recent_payments: (payments?.data || []).slice(0, 5),
-      });
-      setLoading(false);
-    }).catch(err => {
-      setError(err.message);
-      setLoading(false);
-    });
-  }, []);
+  const { data: dashData, isLoading: dashLoading, error: dashError } = useApi(
+    "ap-honor-dashboard",
+    "/keuangan/ap-honor/dashboard"
+  );
+  const { data: paymentsData, isLoading: paymentsLoading, error: paymentsError } = useApi(
+    "ap-honor-payments-recent",
+    "/keuangan/ap-honor/payments"
+  );
 
-  if (loading && !data) {
+  const isLoading = dashLoading || paymentsLoading;
+  const error = dashError?.message || paymentsError?.message || "";
+
+  const kpi = dashData?.data?.kpi || {};
+  const aging = dashData?.data?.aging || {};
+  const top_penerima = dashData?.data?.top_penerima || [];
+  const tanggal_snapshot = dashData?.data?.tanggal_snapshot;
+  const recent_payments = (paymentsData?.data || []).slice(0, 5);
+
+  if (isLoading && !dashData) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat dasbor AP...</div>;
   }
   if (error) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#DC2626", fontSize: "13px" }}>{error}</div>;
   }
-  if (!data) return null;
-
-  const { kpi, aging, top_penerima, recent_payments, tanggal_snapshot } = data;
+  if (!dashData) return null;
 
   return (
     <div>

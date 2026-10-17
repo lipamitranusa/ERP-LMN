@@ -1,25 +1,7 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
 import { formatDate, formatDateTime } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("menu_actions");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `HTTP ${res.status}`);
-  }
-  return res;
-}
 
 const STATUS_BADGE = {
   menunggu:   { label: "Menunggu Rekomendasi",  bg: "#FEF3C7", text: "#92400E" },
@@ -173,106 +155,68 @@ function DokumenVerifikator({ lv }) {
 export default function RekomendasiWorkspace() {
   const { menuActions } = useAuth();
   const canSetujui = menuActions?.some(a => a.modul === "Rekomendasi" && a.action === "Setujui");
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [actionLoading, setActionLoading] = useState(false);
 
   const [selected, setSelected] = useState(null);
-  const [detail, setDetail] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [catatan, setCatatan] = useState("");
 
-  const load = useCallback(() => {
-    setLoading(true);
-    api("/rekomendasi")
-      .then(r => r?.json())
-      .then(d => {
-        setItems(Array.isArray(d?.data) ? d.data : []);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("[RekomendasiWorkspace]", err);
-        setError(err.message);
-        setLoading(false);
-      });
-  }, []);
+  const { data: rawData, isLoading } = useApi("rekomendasi-list", "/rekomendasi");
+  const items = Array.isArray(rawData?.data) ? rawData.data : [];
 
-  useEffect(() => { load(); }, [load]);
+  const { data: detailData, isLoading: detailLoading } = useApi(
+    ["rekomendasi-detail", selected?.id],
+    selected ? "/rekomendasi/" + selected.id : "/rekomendasi",
+    { enabled: !!selected }
+  );
+
+  const setujuiMutate = useMutateKeys(["rekomendasi-list"], {
+    onSuccess: (d) => {
+      alert(d.message || "Rekomendasi disetujui.");
+      setSelected(null);
+    },
+  });
+
+  const tolakMutate = useMutateKeys(["rekomendasi-list"], {
+    onSuccess: (d) => {
+      alert(d.message || "Rekomendasi ditolak.");
+      setSelected(null);
+    },
+  });
 
   function openDetail(lv) {
     setSelected(lv);
-    setDetail(null);
-    setDetailLoading(true);
     setCatatan("");
-    api(`/rekomendasi/${lv.id}`)
-      .then(r => r?.json())
-      .then(d => {
-        setDetail(d?.data || null);
-        setDetailLoading(false);
-      })
-      .catch(err => {
-        console.error("[RekomendasiWorkspace.detail]", err);
-        setDetailLoading(false);
-      });
   }
 
   function closeDetail() {
     setSelected(null);
-    setDetail(null);
     setCatatan("");
   }
 
-  async function handleSetujui() {
+  function handleSetujui() {
     if (!selected) return;
     if (!confirm("Setujui hasil verifikasi ini? AP honor untuk surveior, verifikator, dan rekomendator akan dicatat.")) return;
-    setActionLoading(true);
-    try {
-      const res = await api(`/rekomendasi/${selected.id}/setujui`, { method: "POST" });
-      if (!res) {
-        setActionLoading(false);
-        return;
-      }
-      const d = await res.json();
-      alert(d.message || "Rekomendasi disetujui.");
-      closeDetail();
-      load();
-    } catch (err) {
-      alert("Gagal: " + err.message);
-    }
-    setActionLoading(false);
+    setujuiMutate.mutate({
+      path: `/rekomendasi/${selected.id}/setujui`,
+      method: "POST",
+    });
   }
 
-  async function handleTolak() {
+  function handleTolak() {
     if (!selected) return;
     if (!catatan.trim() || catatan.trim().length < 5) {
       alert("Catatan penolakan wajib diisi (min. 5 karakter).");
       return;
     }
     if (!confirm("Tolak hasil verifikasi ini?")) return;
-    setActionLoading(true);
-    try {
-      const res = await api(`/rekomendasi/${selected.id}/tolak`, {
-        method: "POST",
-        body: JSON.stringify({ catatan: catatan.trim() }),
-      });
-      if (!res) {
-        setActionLoading(false);
-        return;
-      }
-      const d = await res.json();
-      alert(d.message || "Rekomendasi ditolak.");
-      closeDetail();
-      load();
-    } catch (err) {
-      alert("Gagal: " + err.message);
-    }
-    setActionLoading(false);
+    tolakMutate.mutate({
+      path: `/rekomendasi/${selected.id}/tolak`,
+      method: "POST",
+      body: { catatan: catatan.trim() },
+    });
   }
 
   const faskesName = (item) => item?.laporan?.penugasan?.siklus?.faskes?.nama || "—";
+  const actionLoading = setujuiMutate.isPending || tolakMutate.isPending;
 
   return (
     <div>
@@ -286,13 +230,7 @@ export default function RekomendasiWorkspace() {
         </p>
       </div>
 
-      {error && (
-        <div style={{ background: "#FEE2E2", color: "#991B1B", padding: "10px 14px", borderRadius: "6px", marginBottom: "12px", fontSize: "13px" }}>
-          {error}
-        </div>
-      )}
-
-      {loading ? (
+      {isLoading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>
       ) : items.length === 0 ? (
         <div className="card" style={{ padding: "48px", textAlign: "center" }}>
@@ -351,31 +289,31 @@ export default function RekomendasiWorkspace() {
           <div style={{ padding: "20px 24px", overflowY: "auto", flex: 1 }}>
             {detailLoading ? (
               <div style={{ padding: "20px", textAlign: "center", color: "#94A3B8" }}>Memuat detail...</div>
-            ) : detail ? (
+            ) : detailData ? (
               <>
                 <Section title="Dokumen Surveior">
-                  <DokumenSurveior laporan={detail?.laporan} />
+                  <DokumenSurveior laporan={detailData?.laporan} />
                 </Section>
 
                 <Section title="Dokumen Verifikator">
-                  <DokumenVerifikator lv={detail} />
+                  <DokumenVerifikator lv={detailData} />
                 </Section>
 
                 <Section title="Status Rekomendasi">
-                  <StatusBadge status={detail?.status_rekomendasi} />
-                  {detail?.direkomendasikan_at && (
+                  <StatusBadge status={detailData?.status_rekomendasi} />
+                  {detailData?.direkomendasikan_at && (
                     <div style={{ fontSize: "12px", color: "#64748B", marginTop: "4px" }}>
-                      Diputuskan: {formatDateTime(detail.direkomendasikan_at)}
+                      Diputuskan: {formatDateTime(detailData.direkomendasikan_at)}
                     </div>
                   )}
-                  {detail?.catatan_rekomendasi && (
+                  {detailData?.catatan_rekomendasi && (
                     <div style={{ padding: "10px 12px", background: "#F8FAFC", borderRadius: "6px", fontSize: "13px", color: "#475569", whiteSpace: "pre-wrap", marginTop: "8px" }}>
-                      {detail.catatan_rekomendasi}
+                      {detailData.catatan_rekomendasi}
                     </div>
                   )}
                 </Section>
 
-                {canSetujui && detail?.status_rekomendasi === "menunggu" && (
+                {canSetujui && detailData?.status_rekomendasi === "menunggu" && (
                   <Section title="Catatan Rekomendator (opsional)">
                     <textarea
                       className="form-input"
@@ -400,7 +338,7 @@ export default function RekomendasiWorkspace() {
             <button className="btn btn-secondary" onClick={closeDetail} disabled={actionLoading}>
               Tutup
             </button>
-            {canSetujui && detail?.status_rekomendasi === "menunggu" && (
+            {canSetujui && detailData?.status_rekomendasi === "menunggu" && (
               <div style={{ display: "flex", gap: "8px" }}>
                 <button
                   className="btn btn-primary"

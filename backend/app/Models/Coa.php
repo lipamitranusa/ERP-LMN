@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToLembaga;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Coa extends Model
 {
-    use HasUuids;
+    use HasUuids, BelongsToLembaga;
 
     public $incrementing = false;
     protected $keyType = 'string';
@@ -69,6 +70,7 @@ class Coa extends Model
         'is_aktif',
         'urutan',
         'deskripsi',
+        'lembaga_id',
     ];
 
     protected $casts = [

@@ -57,23 +57,27 @@ use Illuminate\Support\Facades\Route;
 Route::post('/auth/login', [AuthController::class, 'login']);
 
 // Auth — setelah login
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('auth:sanctum', 'lembaga')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::put('/auth/password', [AuthController::class, 'changePassword']);
+    Route::post('/auth/switch-lembaga', [AuthController::class, 'switchLembaga']);
 
-    // Endpoint demo untuk verifikasi AC-10 — tersebar di tiap modul.
-    // Return shape seragam: daftar modul+action yang berhasil lolos middleware.
-    Route::get('/demo', function (Request $request) {
-        return response()->json([
-            'message' => 'OK',
-            'user' => $request->user()?->only(['id', 'email', 'role_id']),
-        ]);
+    // Set session['lembaga_id'] dari user yang login — AGAR global scope BelongsToLembaga bekerja
+    Route::middleware('lembaga')->group(function () {
+        // Endpoint demo untuk verifikasi AC-10 — tersebar di tiap modul.
+        // Return shape seragam: daftar modul+action yang berhasil lolos middleware.
+        Route::get('/demo', function (Request $request) {
+            return response()->json([
+                'message' => 'OK',
+                'user' => $request->user()?->only(['id', 'email', 'role_id']),
+            ]);
+        });
     });
 });
 
 // Pengaturan Hak Akses (admin)
-Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
+Route::middleware('auth:sanctum', 'lembaga')->prefix('admin')->group(function () {
     // Role CRUD
     Route::middleware('privilege:Pengaturan Hak Akses,Lihat')
         ->get('/roles', [RoleController::class, 'index']);
@@ -104,7 +108,7 @@ Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
 });
 
 // Endpoint demo per modul — untuk membuktikan AC-10 di setiap modul
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('auth:sanctum', 'lembaga')->group(function () {
     Route::middleware('privilege:Pendaftaran & Validasi Dokumen,Lihat')
         ->get('/faskes-list', fn () => response()->json(['modul' => 'Pendaftaran & Validasi Dokumen', 'data' => []]));
 
@@ -125,17 +129,20 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 // Akun Pengguna CRUD — dibuat oleh SDM/Admin (NFR-3: tanpa self-registration)
-Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('admin')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:SDM & Siklus Penugasan,Tambah')
         ->get('/akun-pengguna', [AkunPenggunaController::class, 'index']);
     Route::middleware('privilege:SDM & Siklus Penugasan,Tambah')
         ->post('/akun-pengguna', [AkunPenggunaController::class, 'store']);
     Route::middleware('privilege:SDM & Siklus Penugasan,Tambah')
-        ->get('/akun-pengguna/{akun}', [AkunPenggunaController::class, 'show']);
+        ->get('/akun-pengguna/{akun}', [AkunPenggunaController::class, 'show'])
+        ->whereUuid('akun');
     Route::middleware('privilege:SDM & Siklus Penugasan,Ubah')
-        ->put('/akun-pengguna/{akun}', [AkunPenggunaController::class, 'update']);
+        ->put('/akun-pengguna/{akun}', [AkunPenggunaController::class, 'update'])
+        ->whereUuid('akun');
     Route::middleware('privilege:SDM & Siklus Penugasan,Hapus')
-        ->delete('/akun-pengguna/{akun}', [AkunPenggunaController::class, 'destroy']);
+        ->delete('/akun-pengguna/{akun}', [AkunPenggunaController::class, 'destroy'])
+        ->whereUuid('akun');
     Route::middleware('privilege:SDM & Siklus Penugasan,Ubah')
         ->post('/akun-pengguna/{akun}/reset-password', [AkunPenggunaController::class, 'resetPassword']);
 });
@@ -144,7 +151,7 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
 // Modul Pendaftaran & Validasi Dokumen (FR-1.1 s/d FR-1.5)
 // Privilege: "Pendaftaran & Validasi Dokumen"
 // =============================================================================
-Route::prefix('pendaftaran')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('pendaftaran')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     // Daftar lembaga (dropdown)
     Route::middleware('privilege:Pendaftaran & Validasi Dokumen,Lihat')
         ->get('/lembaga', [SiklusAkreditasiController::class, 'lembaga']);
@@ -198,7 +205,7 @@ Route::prefix('pendaftaran')->middleware(['auth:sanctum'])->group(function () {
 // Modul Penugasan (FR-3.1 s/d FR-3.8)
 // Privilege: "Penugasan"
 // =============================================================================
-Route::prefix('penugasan')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('penugasan')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     // Surat Tugas PDF (FR-3.1)
     Route::middleware('privilege:Penugasan,Tambah')
         ->post('/surat-tugas', [SuratTugasController::class, 'store']);
@@ -255,7 +262,7 @@ Route::prefix('penugasan')->middleware(['auth:sanctum'])->group(function () {
 // =============================================================================
 // Master Biaya Tenaga Ahli (per tipe faskes) — privilege "Master Data"
 // =============================================================================
-Route::prefix('penugasan/master-biaya')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('penugasan/master-biaya')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:Master Data,Lihat')
         ->get('/', [MasterBiayaTenagaAhliController::class, 'index']);
     Route::middleware('privilege:Master Data,Tambah')
@@ -272,7 +279,7 @@ Route::prefix('penugasan/master-biaya')->middleware(['auth:sanctum'])->group(fun
 // SDM & Siklus Penugasan — queue management & konfigurasi (FR-3.3, FR-3.8)
 // Privilege: "SDM & Siklus Penugasan"
 // =============================================================================
-Route::prefix('sdm')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('sdm')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:SDM & Siklus Penugasan,Ubah')
         ->get('/konfigurasi-penugasan', [KonfigurasiPenugasanController::class, 'index']);
     Route::middleware('privilege:SDM & Siklus Penugasan,Ubah')
@@ -280,9 +287,9 @@ Route::prefix('sdm')->middleware(['auth:sanctum'])->group(function () {
 });
 
 // Admin: daftar siklus untuk dropdown penugasan
-Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('admin')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     // Dashboard stats — accessible to all authenticated admin
-    Route::middleware('auth:sanctum')
+    Route::middleware(['auth:sanctum', 'lembaga'])
         ->get('/dashboard', [DashboardController::class, 'stats']);
 
     // Siklus untuk dropdown penugasan — siklus di tahap 3+ yang belum ada penugasan aktif
@@ -298,7 +305,7 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
 // Modul Verifikasi (FR-4.1 s/d FR-4.6)
 // Privilege: "Verifikasi"
 // =============================================================================
-Route::prefix('verifikasi')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('verifikasi')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     // Admin: tunjuk verifikator & terbitkam Surat Tugas (FR-4.1)
     Route::middleware('privilege:Verifikasi,Tambah')
         ->post('/verifikator', [AdminVerifikasiController::class, 'appointVerifikator']);
@@ -328,7 +335,7 @@ Route::prefix('verifikasi')->middleware(['auth:sanctum'])->group(function () {
 // Rekomendator — approval setelah Verifikator finalize (sebelum AP honor muncul)
 // Privilege: "Rekomendasi" (Setujui = approve/tolak; Lihat = workspace; Ubah = set default)
 // =============================================================================
-Route::prefix('rekomendasi')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('rekomendasi')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:Rekomendasi,Lihat')
         ->get('/', [RekomendasiController::class, 'index']);
     Route::middleware('privilege:Rekomendasi,Lihat')
@@ -340,7 +347,7 @@ Route::prefix('rekomendasi')->middleware(['auth:sanctum'])->group(function () {
 });
 
 // Pengaturan default rekomendator (1 user) — diakses di Pengaturan
-Route::prefix('rekomendator')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('rekomendator')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:Rekomendasi,Lihat')
         ->get('/default', [RekomendasiController::class, 'getDefault']);
     Route::middleware('privilege:Rekomendasi,Lihat')
@@ -353,7 +360,7 @@ Route::prefix('rekomendator')->middleware(['auth:sanctum'])->group(function () {
 // Modul Kontrak, Invoicing & Pembayaran (FR-2.1 s/d FR-2.8)
 // Privilege: "Kontrak & Invoicing"
 // =============================================================================
-Route::prefix('kontrak')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('kontrak')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:Kontrak & Invoicing,Lihat')
         ->get('/', [PksController::class, 'index']);
     // HARUS didefinisikan sebelum '/{pks}' agar '/kontrak/siklus-eligible'
@@ -393,7 +400,7 @@ Route::prefix('kontrak')->middleware(['auth:sanctum'])->group(function () {
 });
 
 Route::prefix('invoice')->group(function () {
-    Route::middleware(['auth:sanctum'])->group(function () {
+    Route::middleware(['auth:sanctum', 'lembaga'])->group(function () {
         Route::middleware('privilege:Kontrak & Invoicing,Lihat')
             ->get('/{invoice}', [InvoiceController::class, 'show']);
         Route::middleware('privilege:Kontrak & Invoicing,Lihat')
@@ -422,7 +429,7 @@ Route::prefix('invoice')->group(function () {
     Route::post('/webhook', [InvoiceController::class, 'webhook']);
 });
 
-Route::prefix('payment-settings')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('payment-settings')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:Kontrak & Invoicing,Ubah')
         ->get('/', [PaymentSettingController::class, 'index']);
     Route::middleware('privilege:Kontrak & Invoicing,Ubah')
@@ -433,7 +440,7 @@ Route::prefix('payment-settings')->middleware(['auth:sanctum'])->group(function 
         ->post('/test-connection', [PaymentSettingController::class, 'testConnection']);
 });
 
-Route::prefix('mail-settings')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('mail-settings')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:Pengaturan Hak Akses,Ubah')
         ->get('/', [MailSettingController::class, 'index']);
     Route::middleware('privilege:Pengaturan Hak Akses,Ubah')
@@ -446,7 +453,7 @@ Route::prefix('mail-settings')->middleware(['auth:sanctum'])->group(function () 
 
 Route::prefix('whatsapp-settings')->group(function () {
     // Settings — authenticated
-    Route::middleware(['auth:sanctum', 'privilege:Pengaturan Hak Akses,Ubah'])->group(function () {
+    Route::middleware(['auth:sanctum', 'lembaga', 'privilege:Pengaturan Hak Akses,Ubah'])->group(function () {
         Route::get('/', [WhatsAppSettingController::class, 'index']);
         Route::put('/', [WhatsAppSettingController::class, 'update']);
         Route::post('/test-connection', [WhatsAppSettingController::class, 'testConnection']);
@@ -458,7 +465,7 @@ Route::prefix('whatsapp-settings')->group(function () {
     Route::get('/webhook', [WhatsAppSettingController::class, 'webhook']);
 });
 
-Route::prefix('bukti')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('bukti')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:Kontrak & Invoicing,Lihat')
         ->get('/antrian', [BuktiPembayaranController::class, 'antrianMenunggu']);
     Route::middleware('privilege:Kontrak & Invoicing,Lihat')
@@ -471,7 +478,7 @@ Route::prefix('bukti')->middleware(['auth:sanctum'])->group(function () {
         ->post('/{bukti}/verifikasi', [BuktiPembayaranController::class, 'verifikasi']);
 });
 
-Route::prefix('refund')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('refund')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:Kontrak & Invoicing,Tambah')
         ->post('/invoice/{invoice}', [RefundController::class, 'store']);
     Route::middleware('privilege:Kontrak & Invoicing,Setujui')
@@ -488,7 +495,7 @@ Route::prefix('refund')->middleware(['auth:sanctum'])->group(function () {
 // Penerbitan Surat Tugas Survei (FR-2.4 v2.2 — tanpa tunggu Invoice Paid)
 // Privilege: "Penugasan"
 // =============================================================================
-Route::prefix('surat-tugas')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('surat-tugas')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:Penugasan,Tambah')
         ->post('/terbit', [SuratTugasIssuanceController::class, 'issue']);
 });
@@ -500,7 +507,7 @@ Route::prefix('surat-tugas')->middleware(['auth:sanctum'])->group(function () {
 // Privilege: "Dasbor Eksekutif" (Direktur/Keuangan) + "Kontrak & Invoicing"
 //            (Admin Lembaga sesuai matriks Bab 5.6)
 // =============================================================================
-Route::prefix('piutang')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('piutang')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:Dasbor Eksekutif,Lihat')
         ->get('/dasbor', [PiutangController::class, 'dasbor']);
     Route::middleware('privilege:Dasbor Eksekutif,Lihat')
@@ -511,7 +518,7 @@ Route::prefix('piutang')->middleware(['auth:sanctum'])->group(function () {
         ->get('/{id}', [PiutangController::class, 'show']);
 });
 
-Route::prefix('master')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('master')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     // Master Data: Lembaga Akreditasi
     Route::middleware('privilege:Master Data,Lihat')
         ->get('/lembaga', [LembagaController::class, 'index']);
@@ -577,16 +584,22 @@ Route::prefix('master')->middleware(['auth:sanctum'])->group(function () {
         ->get('/akun/template', [AkunPenggunaController::class, 'template']);
     Route::middleware('privilege:Master Data,Tambah')
         ->post('/akun/import', [AkunPenggunaController::class, 'import']);
+    // Constrain {akun} ke UUID format agar URL yang mengandung JSON/object
+    // (mis. hasil bug frontend) langsung 404 di routing, tidak sampai controller
     Route::middleware('privilege:Master Data,Lihat')
-        ->get('/akun/{akun}', [AkunPenggunaController::class, 'show']);
+        ->get('/akun/{akun}', [AkunPenggunaController::class, 'show'])
+        ->whereUuid('akun');
     Route::middleware('privilege:Master Data,Tambah')
         ->post('/akun', [AkunPenggunaController::class, 'store']);
     Route::middleware('privilege:Master Data,Ubah')
-        ->put('/akun/{akun}', [AkunPenggunaController::class, 'update']);
+        ->put('/akun/{akun}', [AkunPenggunaController::class, 'update'])
+        ->whereUuid('akun');
     Route::middleware('privilege:Master Data,Hapus')
-        ->delete('/akun/{akun}', [AkunPenggunaController::class, 'destroy']);
+        ->delete('/akun/{akun}', [AkunPenggunaController::class, 'destroy'])
+        ->whereUuid('akun');
     Route::middleware('privilege:Master Data,Ubah')
-        ->post('/akun/{akun}/reset-password', [AkunPenggunaController::class, 'resetPassword']);
+        ->post('/akun/{akun}/reset-password', [AkunPenggunaController::class, 'resetPassword'])
+        ->whereUuid('akun');
 
     // Master Data: PKS Template
     Route::middleware('privilege:Master Data,Lihat')
@@ -623,7 +636,7 @@ Route::prefix('master')->middleware(['auth:sanctum'])->group(function () {
 // Modul Keuangan — Konfigurasi Pajak (FR-5.7), Bukti Potong (FR-5.8/5.9),
 // Dasbor Rekonsiliasi (FR-5.4), PKS Adjustment (FR-5.5)
 // =============================================================================
-Route::prefix('keuangan')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('keuangan')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     // Konfigurasi Pajak (master data PPN & PPh21)
     Route::middleware('privilege:Ledger/Keuangan,Lihat')
         ->get('/konfigurasi-pajak', [KonfigurasiPajakController::class, 'index']);
@@ -706,7 +719,7 @@ Route::prefix('keuangan')->middleware(['auth:sanctum'])->group(function () {
 });
 
 // Dasbor Rekonsiliasi Direktur (FR-5.4)
-Route::prefix('dasbor')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('dasbor')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:Dasbor Eksekutif,Lihat')
         ->get('/rekonsiliasi', [ReconciliationController::class, 'snapshot']);
     Route::middleware('privilege:Dasbor Eksekutif,Lihat')
@@ -716,7 +729,7 @@ Route::prefix('dasbor')->middleware(['auth:sanctum'])->group(function () {
 });
 
 // Ledger Journal — buku besar lengkap (AC-6 traceability)
-Route::prefix('ledger')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('ledger')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:Ledger/Keuangan,Lihat')
         ->get('/journal', [LedgerJournalController::class, 'journal']);
     Route::middleware('privilege:Ledger/Keuangan,Lihat')

@@ -1,25 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useHistory, useParams } from "react-router-dom";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const e = new Error(body.message || `API error: ${res.status}`);
-    e.status = res.status;
-    throw e;
-  }
-  return body;
-}
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -46,8 +28,6 @@ function StatusBadge({ status }) {
 export default function HutangPajakDetail() {
   const history = useHistory();
   const { id } = useParams();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -55,20 +35,12 @@ export default function HutangPajakDetail() {
   const [buktiFile, setBuktiFile] = useState(null);
   const [catatan, setCatatan] = useState("");
 
-  const load = () => {
-    setLoading(true);
-    api(`/keuangan/hutang-pajak/${id}`)
-      .then(d => {
-        setData(d?.data || null);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
-  };
+  const { data: dataObj, isLoading } = useApi(["hutang-pajak-detail", id], "/keuangan/hutang-pajak/" + id);
+  const data = dataObj?.data ?? null;
 
-  useEffect(() => { load(); }, [id]);
+  const mutate = useMutateKeys(["hutang-pajak-detail", id], {
+    onError: (err) => setError(err.message),
+  });
 
   const handleLunas = async (e) => {
     e.preventDefault();
@@ -81,18 +53,15 @@ export default function HutangPajakDetail() {
       fd.append("catatan", catatan || "");
       if (buktiFile) fd.append("bukti_setor", buktiFile);
 
-      await api(`/keuangan/hutang-pajak/${id}/lunas`, {
-        method: "POST",
-        body: fd,
-      });
-      load();
+      await mutate.mutateAsync({ path: "/keuangan/hutang-pajak/" + id + "/lunas", method: "POST", body: fd });
+      setSubmitting(false);
     } catch (err) {
       setError(err.message);
       setSubmitting(false);
     }
   };
 
-  if (loading && !data) {
+  if (isLoading && !data) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat detail hutang pajak...</div>;
   }
   if (error && !data) {

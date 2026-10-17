@@ -1,29 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useHistory } from "react-router-dom";
+import React, { useState } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 import { formatDate, formatDateTime } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  try {
-    const res = await fetch(`/api${path}`, { ...options, headers });
-    if (res.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/auth/login";
-      return null;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `HTTP ${res.status}`);
-    }
-    return res;
-  } catch (err) {
-    console.error("[api]", err);
-    throw err;
-  }
-}
 
 async function fetchBlob(path) {
   const token = localStorage.getItem("token");
@@ -107,14 +84,9 @@ function Modal({ title, onClose, children }) {
 }
 
 export default function PenugasanSaya() {
-  const [items, setItems] = useState([]);
   const [siblingSuratMap, setSiblingSuratMap] = useState({});
-  const [loading, setLoading] = useState(true);
   const [confirmTarget, setConfirmTarget] = useState(null);
-  const [declining, setDeclining] = useState(false);
   const [declReason, setDeclReason] = useState("");
-  const [actionLoading, setActionLoading] = useState(false);
-  const [error, setError] = useState("");
 
   // Selesai modal
   const [selesaiTarget, setSelesaiTarget] = useState(null);
@@ -129,50 +101,49 @@ export default function PenugasanSaya() {
   const [kendalaDeskripsi, setKendalaDeskripsi] = useState("");
   const [kendalaError, setKendalaError] = useState("");
 
-  const load = useCallback(() => {
-    setLoading(true);
-    api("/penugasan/saya")
-      .then(r => r?.json())
-      .then(d => {
-        const data = Array.isArray(d) ? d : d?.data || [];
-        setItems(data);
-        // Build fallback map: siklus_id+jenis -> surat_tugas (from any sibling penugasan)
-        const map = {};
-        for (const p of data) {
-          const key = `${p.siklus_id}|${p.jenis}`;
-          if (p.surat_tugas?.path_pdf && !map[key]) {
-            map[key] = p.surat_tugas;
-          }
-        }
-        setSiblingSuratMap(map);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("[PenugasanSaya]", err);
-        setLoading(false);
-      });
-  }, []);
+  const { data: rawData, isLoading } = useApi("penugasan-saya", "/penugasan/saya");
 
-  useEffect(() => { load(); }, [load]);
+  const items = Array.isArray(rawData) ? rawData : rawData?.data || [];
 
-  async function handleSetuju(p) {
-    if (!confirm(`Konfirmasi kesediaan untuk penugasan ${p.jenis} di siklus ini?`)) return;
-    setActionLoading(true);
-    setError("");
-    try {
-      const res = await api(`/penugasan/${p.id}/konfirmasi`, {
-        method: "PATCH",
-        body: JSON.stringify({ konfirmasi: true }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.message || "Gagal konfirmasi.");
+  // Build siblingSuratMap when items change
+  React.useEffect(() => {
+    if (!items.length) return;
+    const map = {};
+    for (const p of items) {
+      const key = `${p.siklus_id}|${p.jenis}`;
+      if (p.surat_tugas?.path_pdf && !map[key]) {
+        map[key] = p.surat_tugas;
       }
-      load();
-    } catch (err) {
-      alert(err.message);
     }
-    setActionLoading(false);
+    setSiblingSuratMap(map);
+  }, [items]);
+
+  // Mutations
+  const konfirmasiMutate = useMutateKeys(["penugasan-saya"], {
+    onSuccess: () => setConfirmTarget(null),
+  });
+
+  const submitSelesaiMutate = useMutateKeys(["penugasan-saya"], {
+    onSuccess: () => {
+      setSelesaiTarget(null);
+      alert("Penugasan ditandai selesai.");
+    },
+  });
+
+  const submitKendalaMutate = useMutateKeys(["penugasan-saya", "laporan-kendala-saya"], {
+    onSuccess: () => {
+      setKendalaTarget(null);
+      alert("Laporan kendala berhasil dikirim. Admin akan menindaklanjuti.");
+    },
+  });
+
+  function handleSetuju(p) {
+    if (!confirm(`Konfirmasi kesediaan untuk penugasan ${p.jenis} di siklus ini?`)) return;
+    konfirmasiMutate.mutate({
+      path: `/penugasan/${p.id}/konfirmasi`,
+      method: "PATCH",
+      body: { konfirmasi: true },
+    });
   }
 
   function openTolak(p) {
@@ -180,30 +151,13 @@ export default function PenugasanSaya() {
     setDeclReason("");
   }
 
-  async function submitTolak() {
+  function submitTolak() {
     if (!confirmTarget) return;
-    setActionLoading(true);
-    setError("");
-    try {
-      const res = await api(`/penugasan/${confirmTarget.id}/konfirmasi`, {
-        method: "PATCH",
-        body: JSON.stringify({ konfirmasi: false, catatan: declReason || null }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.message || "Gagal menolak.");
-      }
-      const d = await res.json();
-      setConfirmTarget(null);
-      load();
-      // Tampilkan info kandidat pengganti (jika ada)
-      if (d.message) {
-        setTimeout(() => alert(d.message), 100);
-      }
-    } catch (err) {
-      setError(err.message);
-    }
-    setActionLoading(false);
+    konfirmasiMutate.mutate({
+      path: `/penugasan/${confirmTarget.id}/konfirmasi`,
+      method: "PATCH",
+      body: { konfirmasi: false, catatan: declReason || null },
+    });
   }
 
   function openSelesai(p) {
@@ -232,7 +186,7 @@ export default function PenugasanSaya() {
     }
   }
 
-  async function submitSelesai() {
+  function submitSelesai() {
     if (!selesaiTarget) return;
 
     // Jika belum ada laporan di siklus+jenis ini, wajib upload
@@ -241,28 +195,16 @@ export default function PenugasanSaya() {
       return;
     }
 
-    setActionLoading(true);
     setLapError("");
-    try {
-      const fd = new FormData();
-      if (lapFile) fd.append("file_laporan", lapFile);
-      if (lapKeterangan.trim()) fd.append("keterangan", lapKeterangan.trim());
+    const fd = new FormData();
+    if (lapFile) fd.append("file_laporan", lapFile);
+    if (lapKeterangan.trim()) fd.append("keterangan", lapKeterangan.trim());
 
-      const token = localStorage.getItem("token");
-      const res = await fetch(`/api/penugasan/${selesaiTarget.id}/selesai`, {
-        method: "PUT",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: fd,
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.message || "Gagal mengirim laporan.");
-      setSelesaiTarget(null);
-      load();
-      alert("Penugasan ditandai selesai.");
-    } catch (err) {
-      setLapError(err.message);
-    }
-    setActionLoading(false);
+    submitSelesaiMutate.mutate({
+      path: `/penugasan/${selesaiTarget.id}/selesai`,
+      method: "PUT",
+      body: fd,
+    });
   }
 
   function openKendala(p) {
@@ -272,33 +214,25 @@ export default function PenugasanSaya() {
     setKendalaError("");
   }
 
-  async function submitKendala() {
+  function submitKendala() {
     if (!kendalaTarget) return;
     if (!kendalaDeskripsi.trim()) {
       setKendalaError("Deskripsi kendala wajib diisi.");
       return;
     }
-    setActionLoading(true);
     setKendalaError("");
-    try {
-      const res = await api("/penugasan/kendala", {
-        method: "POST",
-        body: JSON.stringify({
-          penugasan_id: kendalaTarget.id,
-          jenis: kendalaJenis,
-          deskripsi: kendalaDeskripsi.trim(),
-        }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.message || "Gagal melaporkan kendala.");
-      setKendalaTarget(null);
-      load();
-      alert("Laporan kendala berhasil dikirim. Admin akan menindaklanjuti.");
-    } catch (err) {
-      setKendalaError(err.message);
-    }
-    setActionLoading(false);
+    submitKendalaMutate.mutate({
+      path: "/penugasan/kendala",
+      method: "POST",
+      body: {
+        penugasan_id: kendalaTarget.id,
+        jenis: kendalaJenis,
+        deskripsi: kendalaDeskripsi.trim(),
+      },
+    });
   }
+
+  const actionLoading = konfirmasiMutate.isPending || submitSelesaiMutate.isPending || submitKendalaMutate.isPending;
 
   return (
     <div>
@@ -311,7 +245,7 @@ export default function PenugasanSaya() {
         </p>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat penugasan...</div>
       ) : items.length === 0 ? (
         <div className="card" style={{ padding: "48px", textAlign: "center" }}>
@@ -587,9 +521,9 @@ export default function PenugasanSaya() {
               placeholder="cth: Konflik kepentingan, tidak dapat dihubungi, dll."
               style={{ resize: "vertical" }}
             />
-            {error && (
+            {konfirmasiMutate.error && (
               <div style={{ marginTop: "12px", padding: "8px 12px", background: "#FEE2E2", color: "#991B1B", borderRadius: "6px", fontSize: "12px" }}>
-                {error}
+                {konfirmasiMutate.error.message}
               </div>
             )}
           </div>

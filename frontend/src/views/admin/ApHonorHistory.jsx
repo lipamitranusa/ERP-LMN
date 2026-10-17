@@ -1,23 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useHistory } from "react-router-dom";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const e = new Error(`API error: ${res.status}`);
-    throw e;
-  }
-  return res;
-}
+import { useApi } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -50,48 +34,32 @@ function StatusBadge({ status }) {
 
 export default function ApHonorHistory() {
   const history = useHistory();
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
   const [filterStatus, setFilterStatus] = useState("");
   const [filterBulan, setFilterBulan] = useState("");
 
-  const load = (status, bulan) => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (status) params.set("status", status);
-    if (bulan) {
-      const [tahun, bulanNum] = bulan.split("-");
-      params.set("tahun", tahun);
-      params.set("bulan", bulanNum);
-    }
-    const qs = params.toString();
-    api(`/keuangan/ap-honor/payments${qs ? "?" + qs : ""}`)
-      .then(r => r?.json())
-      .then(d => {
-        setData(d?.data || []);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
-  };
+  const params = new URLSearchParams();
+  if (filterStatus) params.set("status", filterStatus);
+  if (filterBulan) {
+    const [tahun, bulanNum] = filterBulan.split("-");
+    params.set("tahun", tahun);
+    params.set("bulan", bulanNum);
+  }
+  const qs = params.toString();
 
-  useEffect(() => {
-    load(filterStatus, filterBulan);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterStatus, filterBulan]);
+  const { data, isLoading, error } = useApi(
+    ["ap-honor-history", filterStatus, filterBulan],
+    `/keuangan/ap-honor/payments${qs ? "?" + qs : ""}`
+  );
 
-  const total = data.reduce((s, p) => s + (p.total_nominal || 0), 0);
-  const totalDisetujui = data.filter(p => p.status === "disetujui").reduce((s, p) => s + (p.total_nominal || 0), 0);
+  const payments = data?.data || [];
+  const total = payments.reduce((s, p) => s + (p.total_nominal || 0), 0);
+  const totalDisetujui = payments.filter(p => p.status === "disetujui").reduce((s, p) => s + (p.total_nominal || 0), 0);
 
-  if (loading && !data.length) {
+  if (isLoading && !data) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat riwayat pembayaran...</div>;
   }
   if (error) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#DC2626", fontSize: "13px" }}>{error}</div>;
+    return <div style={{ padding: "40px", textAlign: "center", color: "#DC2626", fontSize: "13px" }}>{error.message}</div>;
   }
 
   return (
@@ -155,13 +123,13 @@ export default function ApHonorHistory() {
         <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "12px 16px" }}>
           <div style={{ fontSize: "11px", color: "#64748B", textTransform: "uppercase" }}>Total semua status</div>
           <div style={{ fontSize: "20px", fontWeight: "700" }}>{formatRp(total)}</div>
-          <div style={{ fontSize: "11px", color: "#64748B" }}>{data.length} pembayaran</div>
+          <div style={{ fontSize: "11px", color: "#64748B" }}>{payments.length} pembayaran</div>
         </div>
         <div style={{ background: "#DCFCE7", border: "1px solid #BBF7D0", borderRadius: "8px", padding: "12px 16px" }}>
           <div style={{ fontSize: "11px", color: "#166534", textTransform: "uppercase" }}>Total disetujui</div>
           <div style={{ fontSize: "20px", fontWeight: "700", color: "#166534" }}>{formatRp(totalDisetujui)}</div>
           <div style={{ fontSize: "11px", color: "#166534" }}>
-            {data.filter(p => p.status === "disetujui").length} pembayaran
+            {payments.filter(p => p.status === "disetujui").length} pembayaran
           </div>
         </div>
       </div>
@@ -182,13 +150,13 @@ export default function ApHonorHistory() {
               </tr>
             </thead>
             <tbody>
-              {data.length === 0 ? (
+              {payments.length === 0 ? (
                 <tr>
                   <td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "32px 16px" }}>
                     Tidak ada pembayaran yang cocok dengan filter.
                   </td>
                 </tr>
-              ) : data.map(p => (
+              ) : payments.map(p => (
                 <tr
                   key={p.id}
                   style={{ cursor: "pointer" }}

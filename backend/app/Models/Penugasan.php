@@ -50,12 +50,14 @@ class Penugasan extends Model
 
     public function siklus(): BelongsTo
     {
-        return $this->belongsTo(SiklusAkreditasi::class, 'siklus_id');
+        return $this->belongsTo(SiklusAkreditasi::class, 'siklus_id')
+            ->withoutGlobalScope('lembaga');
     }
 
     public function tenagaAhli(): BelongsTo
     {
-        return $this->belongsTo(TenagaAhli::class, 'tenaga_ahli_id');
+        return $this->belongsTo(TenagaAhli::class, 'tenaga_ahli_id')
+            ->withoutGlobalScope('lembaga');
     }
 
     public function laporan(): HasOne

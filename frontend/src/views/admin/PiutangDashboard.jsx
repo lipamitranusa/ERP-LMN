@@ -1,22 +1,7 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useHistory } from "react-router-dom";
+import { useApi } from "@/hooks/useApi";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    throw new Error(`API error: ${res.status}`);
-  }
-  return res;
-}
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -135,38 +120,27 @@ const STATUS_FILTER_OPTIONS = [
 
 export default function PiutangDashboard() {
   const history = useHistory();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterJatuhTempo, setFilterJatuhTempo] = useState(false);
   const [search, setSearch] = useState("");
 
-  const loadData = (status, jatuhTempo) => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (status) params.set("status", status);
-    if (jatuhTempo) params.set("jatuh_tempo", "1");
-    const qs = params.toString();
-    api(`/piutang/dasbor${qs ? "?" + qs : ""}`)
-      .then(r => r?.json())
-      .then(d => {
-        setData(d?.data || null);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
-  };
-
-  useEffect(() => {
-    loadData(filterStatus, filterJatuhTempo);
+  const params = useMemo(() => {
+    const p = new URLSearchParams();
+    if (filterStatus) p.set("status", filterStatus);
+    if (filterJatuhTempo) p.set("jatuh_tempo", "1");
+    return p;
   }, [filterStatus, filterJatuhTempo]);
 
+  const { data: apiResult, isLoading } = useApi(
+    ["piutang-dashboard", filterStatus, filterJatuhTempo],
+    "/piutang/dasbor?" + params.toString()
+  );
+
+  const { data: dash } = apiResult || {};
   const filteredInvoices = useMemo(() => {
-    if (!data?.invoice_list) return [];
-    let list = data.invoice_list;
+    if (!dash?.invoice_list) return [];
+    let list = dash.invoice_list;
 
     // Apply status filter — compare against computed status_display
     if (filterStatus) {
@@ -188,17 +162,17 @@ export default function PiutangDashboard() {
     }
 
     return list;
-  }, [data, filterStatus, filterJatuhTempo, search]);
+  }, [dash, filterStatus, filterJatuhTempo, search]);
 
-  if (loading && !data) {
+  if (isLoading && !dash) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat dasbor piutang...</div>;
   }
-  if (error) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#DC2626", fontSize: "13px" }}>{error}</div>;
+  if (apiResult?.error) {
+    return <div style={{ padding: "40px", textAlign: "center", color: "#DC2626", fontSize: "13px" }}>{apiResult.error.message}</div>;
   }
-  if (!data) return null;
+  if (!dash) return null;
 
-  const { kpi, aging, per_faskes } = data;
+  const { kpi, aging, per_faskes } = dash;
 
   return (
     <div>

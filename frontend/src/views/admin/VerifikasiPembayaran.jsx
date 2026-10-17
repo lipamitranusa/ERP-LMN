@@ -1,17 +1,5 @@
-import React, { useState, useEffect } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  return res;
-}
+import React, { useState } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n).toLocaleString("id-ID")}`;
@@ -41,7 +29,7 @@ function BuktiPreviewModal({ bukti, onClose }) {
   const isPdf = ext === "pdf";
   const token = localStorage.getItem("token");
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!bukti) return;
     let cancelled = false;
     setLoading(true);
@@ -170,48 +158,30 @@ function BuktiPreviewModal({ bukti, onClose }) {
 }
 
 export default function VerifikasiPembayaran() {
-  const [bukti, setBukti] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [selectedBukti, setSelectedBukti] = useState(null);
-  const [previewBukti, setPreviewBukti] = useState(null);
   const [alasanTolak, setAlasanTolak] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [previewBukti, setPreviewBukti] = useState(null);
 
-  function reload() {
-    api("/bukti/antrian")
-      .then(r => r?.json())
-      .then(d => {
-        setBukti(d?.data || []);
-        setLoading(false);
-      });
-  }
+  const { data, isLoading } = useApi("verifikasi-pembayaran", "/bukti/antrian");
+  const mutateVerify = useMutateKeys(["verifikasi-pembayaran"], {
+    onSuccess: () => { setSelectedBukti(null); setAlasanTolak(""); },
+  });
 
-  useEffect(() => {
-    reload();
-  }, []);
+  const bukti = data?.data || [];
 
-  async function handleVerifikasi(buktiId, status) {
+  function handleVerifikasi(buktiId, status) {
     if (status === "ditolak" && !alasanTolak.trim()) {
       alert("Alasan penolakan wajib diisi.");
       return;
     }
-    setSubmitting(true);
-    const res = await api(`/bukti/${buktiId}/verifikasi`, {
+    mutateVerify.mutate({
+      path: `/bukti/${buktiId}/verifikasi`,
       method: "POST",
-      body: JSON.stringify({ status, alasan_penolakan: status === "ditolak" ? alasanTolak : null }),
+      body: { status, alasan_penolakan: status === "ditolak" ? alasanTolak : null },
     });
-    if (res.ok) {
-      setSelectedBukti(null);
-      setAlasanTolak("");
-      reload();
-    } else {
-      const data = await res.json();
-      alert(data.message || "Gagal memverifikasi.");
-    }
-    setSubmitting(false);
   }
 
-  if (loading) {
+  if (isLoading) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>;
   }
 
@@ -353,8 +323,8 @@ export default function VerifikasiPembayaran() {
 
             <div style={{ display: "flex", gap: "8px", marginTop: "20px" }}>
               <button className="btn btn-secondary" onClick={() => setSelectedBukti(null)} style={{ flex: 1 }}>Batal</button>
-              <button className="btn btn-danger" onClick={() => handleVerifikasi(selectedBukti.id, "ditolak")} disabled={submitting} style={{ flex: 1 }}>Tolak</button>
-              <button className="btn btn-primary" onClick={() => handleVerifikasi(selectedBukti.id, "diterima")} disabled={submitting} style={{ flex: 1 }}>Terima</button>
+              <button className="btn btn-danger" onClick={() => handleVerifikasi(selectedBukti.id, "ditolak")} disabled={mutateVerify.isPending} style={{ flex: 1 }}>Tolak</button>
+              <button className="btn btn-primary" onClick={() => handleVerifikasi(selectedBukti.id, "diterima")} disabled={mutateVerify.isPending} style={{ flex: 1 }}>Terima</button>
             </div>
           </div>
         </div>

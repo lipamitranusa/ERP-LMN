@@ -1,22 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 import { formatDateTime } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Error ${res.status}`);
-  }
-  return res;
-}
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -90,17 +74,21 @@ function AuditTrailRow({ audit }) {
   );
 }
 
-function EntryDetailModal({ entryId, onClose }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+function InfoCard({ label, value }) {
+  return (
+    <div style={{ background: "#F8FAFC", borderRadius: "8px", padding: "10px 12px" }}>
+      <div style={{ fontSize: "10px", fontWeight: "600", color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>{label}</div>
+      <div style={{ fontSize: "13px", color: "#1E293B" }}>{value}</div>
+    </div>
+  );
+}
 
-  useEffect(() => {
-    api(`/ledger/entry/${entryId}`)
-      .then(r => r.json())
-      .then(d => { setData(d.data); setLoading(false); })
-      .catch(e => { setError(e.message); setLoading(false); });
-  }, [entryId]);
+function EntryDetailModal({ entryId, onClose }) {
+  const { data, isLoading, error } = useApi(
+    ["ledger-entry", entryId],
+    "/ledger/entry/" + entryId,
+    { enabled: !!entryId }
+  );
 
   return (
     <div style={{
@@ -121,10 +109,10 @@ function EntryDetailModal({ entryId, onClose }) {
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "18px", color: "#94A3B8", padding: "4px 8px" }}>✕</button>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>
         ) : error ? (
-          <div style={{ padding: "20px", color: "#991B1B" }}>{error}</div>
+          <div style={{ padding: "20px", color: "#991B1B" }}>{error.message}</div>
         ) : (
           <>
             <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
@@ -240,29 +228,15 @@ function EntryDetailModal({ entryId, onClose }) {
   );
 }
 
-function InfoCard({ label, value }) {
-  return (
-    <div style={{ background: "#F8FAFC", borderRadius: "8px", padding: "10px 12px" }}>
-      <div style={{ fontSize: "10px", fontWeight: "600", color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>{label}</div>
-      <div style={{ fontSize: "13px", color: "#1E293B" }}>{value}</div>
-    </div>
-  );
-}
-
 export default function LedgerJournal() {
-  const [entries, setEntries] = useState([]);
-  const [pagination, setPagination] = useState(null);
-  const [saldoAwal, setSaldoAwal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [selectedEntry, setSelectedEntry] = useState(null);
-
   // Filters
   const [tipeFilter, setTipeFilter] = useState("");
   const [dari, setDari] = useState("");
   const [sampai, setSampai] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [selectedEntry, setSelectedEntry] = useState(null);
 
   const TIPE_OPTIONS = [
     { value: "piutang_lunas", label: "Piutang Lunas" },
@@ -272,30 +246,39 @@ export default function LedgerJournal() {
     { value: "refund", label: "Refund" },
   ];
 
-  const loadData = useCallback(async (page = 1) => {
-    setLoading(true);
-    setError("");
-    try {
-      const params = new URLSearchParams({ page });
-      if (tipeFilter) params.set("tipe", tipeFilter);
-      if (dari) params.set("dari", dari);
-      if (sampai) params.set("sampai", sampai);
-      if (statusFilter) params.set("status", statusFilter);
-      if (q) params.set("q", q);
+  const buildParams = (pg) => {
+    const params = new URLSearchParams({ page: pg });
+    if (tipeFilter) params.set("tipe", tipeFilter);
+    if (dari) params.set("dari", dari);
+    if (sampai) params.set("sampai", sampai);
+    if (statusFilter) params.set("status", statusFilter);
+    if (q) params.set("q", q);
+    return params.toString();
+  };
 
-      const res = await api(`/ledger/journal?${params}`);
-      const data = await res.json();
-      setEntries(data.data?.entries || []);
-      setPagination(data.data?.pagination || null);
-      setSaldoAwal(data.data?.saldo_awal || 0);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [tipeFilter, dari, sampai, statusFilter, q]);
+  const qs = buildParams(page);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  const { data, isLoading, error, refetch } = useApi(
+    ["ledger-journal", tipeFilter, dari, sampai, statusFilter, q, page],
+    "/ledger/journal?" + qs
+  );
+
+  const entries = data?.entries || [];
+  const pagination = data?.pagination || null;
+  const saldoAwal = data?.saldo_awal || 0;
+
+  function handleFilterClick() {
+    setPage(1);
+  }
+
+  function handleReset() {
+    setTipeFilter("");
+    setDari("");
+    setSampai("");
+    setStatusFilter("");
+    setQ("");
+    setPage(1);
+  }
 
   // Running balance
   let runningBalance = saldoAwal;
@@ -356,11 +339,11 @@ export default function LedgerJournal() {
           <label style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", display: "block", marginBottom: "4px" }}>Cari</label>
           <input type="text" className="form-input" value={q} onChange={e => setQ(e.target.value)} placeholder="Nama TA, ID..." style={{ width: "160px" }} />
         </div>
-        <button onClick={() => loadData()} className="btn btn-primary" style={{ height: "38px" }}>
+        <button onClick={handleFilterClick} className="btn btn-primary" style={{ height: "38px" }}>
           Filter
         </button>
         {(tipeFilter || dari || sampai || statusFilter || q) && (
-          <button onClick={() => { setTipeFilter(""); setDari(""); setSampai(""); setStatusFilter(""); setQ(""); }} className="btn btn-ghost" style={{ height: "38px" }}>
+          <button onClick={handleReset} className="btn btn-ghost" style={{ height: "38px" }}>
             Reset
           </button>
         )}
@@ -375,13 +358,13 @@ export default function LedgerJournal() {
 
       {error && (
         <div style={{ padding: "12px 16px", background: "#FEE2E2", color: "#991B1B", borderRadius: "8px", marginBottom: "16px", fontSize: "13px" }}>
-          {error}
+          {error.message}
         </div>
       )}
 
       {/* Table */}
       <div className="card" style={{ padding: 0 }}>
-        {loading ? (
+        {isLoading ? (
           <div style={{ padding: "60px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>
         ) : entries.length === 0 ? (
           <div style={{ padding: "60px", textAlign: "center", color: "#94A3B8", fontSize: "13px" }}>Belum ada data ledger entry.</div>
@@ -449,7 +432,7 @@ export default function LedgerJournal() {
             <button
               className="btn btn-ghost"
               disabled={pagination.current_page <= 1}
-              onClick={() => loadData(pagination.current_page - 1)}
+              onClick={() => setPage(p => p - 1)}
               style={{ height: "32px", fontSize: "12px" }}
             >
               ← Prev
@@ -460,7 +443,7 @@ export default function LedgerJournal() {
             <button
               className="btn btn-ghost"
               disabled={pagination.current_page >= pagination.last_page}
-              onClick={() => loadData(pagination.current_page + 1)}
+              onClick={() => setPage(p => p + 1)}
               style={{ height: "32px", fontSize: "12px" }}
             >
               Next →

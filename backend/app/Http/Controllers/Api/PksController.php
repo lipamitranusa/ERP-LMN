@@ -32,6 +32,7 @@ class PksController extends Controller
 
     public function show(Pks $pks): JsonResponse
     {
+        $this->ensureSameLembaga($pks);
         $pks->load(['siklus.faskes', 'siklus.lembaga', 'invoice', 'dibuatOleh']);
         $pks->estimasi_tagihan = $this->hitungEstimasiTagihan($pks);
         $pks->estimasi_rincian = $this->getRincianBiaya($pks);
@@ -44,6 +45,7 @@ class PksController extends Controller
      */
     public function estimasiBiaya(Pks $pks): JsonResponse
     {
+        $this->ensureSameLembaga($pks);
         $pks->load(['siklus.faskes.jenisFaskes']);
         $items = $this->getRincianBiaya($pks);
         return response()->json([
@@ -94,6 +96,12 @@ class PksController extends Controller
         $user = $request->user();
         $faskesId = $user->faskes_id;
         $query = Pks::with(['siklus.faskes.jenisFaskes', 'siklus.lembaga', 'invoice']);
+
+        // Filter per lembaga aktif (dari session) agar tabel hanya menampilkan
+        // PKS untuk siklus yang berada di lembaga yang sama dengan user login.
+        if ($lembagaId = session('lembaga_id')) {
+            $query->whereHas('siklus', fn ($q) => $q->where('lembaga_id', $lembagaId));
+        }
 
         // Faskes hanya bisa lihat PKS miliknya
         if ($faskesId) {
@@ -191,6 +199,7 @@ class PksController extends Controller
 
     public function download(Pks $pks)
     {
+        $this->ensureSameLembaga($pks);
         $pks->load(['siklus.faskes', 'siklus.lembaga']);
 
         // Prioritaskan lampiran PDF jika ada (file yang diupload admin)
@@ -211,6 +220,7 @@ class PksController extends Controller
 
     public function downloadDocx(Pks $pks)
     {
+        $this->ensureSameLembaga($pks);
         $pks->load(['siklus.faskes', 'siklus.lembaga']);
         if (! $pks->path_docx || ! $this->attachment->exists($pks->path_docx)) {
             $pks->path_docx = $this->docxGen->generate($pks);
@@ -224,6 +234,7 @@ class PksController extends Controller
 
     public function downloadSignedPdf(Pks $pks)
     {
+        $this->ensureSameLembaga($pks);
         if (! $pks->path_signed_pdf || ! $this->attachment->exists($pks->path_signed_pdf)) {
             return response()->json(['message' => 'File signed PDF tidak ditemukan.'], 404);
         }
@@ -287,6 +298,7 @@ class PksController extends Controller
 
     public function updateNomorPks(Request $request, Pks $pks): JsonResponse
     {
+        $this->ensureSameLembaga($pks);
         $data = $request->validate([
             'nomor_pks' => 'required|string|max:50|unique:pks,nomor_pks,' . $pks->id,
         ]);
@@ -312,6 +324,7 @@ class PksController extends Controller
      */
     public function kirim(Request $request, Pks $pks): JsonResponse
     {
+        $this->ensureSameLembaga($pks);
         if ($pks->status !== Pks::STATUS_DRAFT) {
             return response()->json(['message' => 'PKS sudah dikirim atau tidak dalam status draft.'], 422);
         }
@@ -358,6 +371,7 @@ class PksController extends Controller
      */
     public function tandaTangan(Request $request, Pks $pks): JsonResponse
     {
+        $this->ensureSameLembaga($pks);
         if ($pks->status !== Pks::STATUS_DIKIRIM) {
             return response()->json(['message' => 'PKS belum dikirim atau status tidak valid.'], 422);
         }
@@ -400,6 +414,7 @@ class PksController extends Controller
      */
     public function validateSigned(Request $request, Pks $pks): JsonResponse
     {
+        $this->ensureSameLembaga($pks);
         if ($pks->status !== Pks::STATUS_DITANDATANGANI) {
             return response()->json(['message' => 'PKS belum diupload atau sudah divalidasi.'], 422);
         }
@@ -447,6 +462,7 @@ class PksController extends Controller
      */
     public function revisi(Request $request, Pks $pks): JsonResponse
     {
+        $this->ensureSameLembaga($pks);
         if (! in_array($pks->status, [Pks::STATUS_DISETUJUI, 'selesai'], true)) {
             return response()->json([
                 'message' => "PKS dalam status {$pks->status} belum dapat direvisi. Tunggu sampai disetujui.",
@@ -490,6 +506,7 @@ class PksController extends Controller
      */
     public function batalkan(Request $request, Pks $pks): JsonResponse
     {
+        $this->ensureSameLembaga($pks);
         if (! in_array($pks->status, [Pks::STATUS_DISETUJUI, 'selesai'], true)) {
             return response()->json([
                 'message' => "PKS dalam status {$pks->status} belum dapat dibatalkan.",
@@ -532,6 +549,7 @@ class PksController extends Controller
      */
     public function tolakSigned(Request $request, Pks $pks): JsonResponse
     {
+        $this->ensureSameLembaga($pks);
         if ($pks->status !== Pks::STATUS_DITANDATANGANI) {
             return response()->json(['message' => 'PKS tidak dalam status menunggu validasi.'], 422);
         }
@@ -626,5 +644,27 @@ class PksController extends Controller
         ]);
 
         return $invoice;
+    }
+
+    /**
+     * Guard lembaga: PKS hanya bisa diakses dari session lembaga yang sama
+     * dengan lembaga siklus di bawahnya. Pengecekan ini melengkapi trait
+     * BelongsToLembaga pada SiklusAkreditasi (yang tidak otomatis mencakup
+     * PKS karena tabel pks tidak memiliki kolom lembaga_id).
+     */
+    private function ensureSameLembaga(Pks $pks): void
+    {
+        $sessionLembagaId = session('lembaga_id');
+        if ($sessionLembagaId === null) {
+            // Superadmin tanpa pilihan lembaga: skip filter
+            return;
+        }
+
+        $siklusLembagaId = $pks->siklus?->lembaga_id
+            ?? $pks->siklus()->value('lembaga_id');
+
+        if ($siklusLembagaId !== $sessionLembagaId) {
+            abort(response()->json(['message' => 'PKS tidak ditemukan.'], 404));
+        }
     }
 }

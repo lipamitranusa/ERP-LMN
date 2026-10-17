@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { formatDateTime } from "../../utils/dateFormat";
+import { formatDateTime, formatDate } from "../../utils/dateFormat";
+import { useApi, useMutateKeys, useMutate } from "@/hooks/useApi";
 
 /**
  * SearchableSelect — combo box dengan filter teks untuk daftar panjang.
@@ -121,20 +122,6 @@ function SearchableSelect({ options, value, onChange, placeholder = "— Pilih �
   );
 }
 
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  return res;
-}
-
 function StatusBadge({ status }) {
   const map = {
     menunggu: ["Menunggu", "warning"],
@@ -150,8 +137,6 @@ function StatusBadge({ status }) {
 }
 
 function PenugasanList() {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({
     siklus_id: "",
@@ -163,131 +148,146 @@ function PenugasanList() {
     tanggal_selesai_survei: "",
     surat: null,
   });
-  const [siklus, setSiklus] = useState([]);
-  const [surveyorTKPP, setSurveyorTKPP] = useState([]);
-  const [surveyorTKSDU, setSurveyorTKSDU] = useState([]);
-  const [verifikator, setVerifikator] = useState([]);
   const [search, setSearch] = useState("");
+  const [penugasanRefreshKey, setPenugasanRefreshKey] = useState(0);
   const [detailGroup, setDetailGroup] = useState(null);
   const [replaceTarget, setReplaceTarget] = useState(null); // penugasan yang akan diganti
   const [replaceCandidates, setReplaceCandidates] = useState([]);
   const [replaceChoice, setReplaceChoice] = useState("");
   const [replaceReason, setReplaceReason] = useState("");
-  const [replacing, setReplacing] = useState(false);
-  const [histori, setHistori] = useState([]);
 
-  function loadData() {
-    setLoading(true);
-    api("/penugasan")
-      .then(r => r?.json())
-      .then(d => {
-        setData(Array.isArray(d) ? d : d?.data || []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }
+  // React Query data fetching
+  const { data: penugasanData, isLoading } = useApi(["penugasan-list", penugasanRefreshKey], "/penugasan");
+  const { data: siklusData } = useApi(["siklus-list", form.jenis], `/admin/siklus?jenis=${form.jenis}`);
+  const { data: tkppData, isLoading: tkppLoading, error: tkppError } = useApi(
+    ["tkpp-options", form.siklus_id],
+    form.siklus_id ? `/admin/tenaga-ahli?peran=surveior&jenis=TKPP&siklus_id=${form.siklus_id}` : null
+  );
+  const { data: tksduData, isLoading: tksduLoading, error: tksduError } = useApi(
+    ["tksdu-options", form.siklus_id],
+    form.siklus_id ? `/admin/tenaga-ahli?peran=surveior&jenis=TKSDU&siklus_id=${form.siklus_id}` : null
+  );
+  const { data: verifikatorData } = useApi(
+    ["verifikator-options", form.siklus_id],
+    form.siklus_id ? `/admin/tenaga-ahli?peran=verifikator&siklus_id=${form.siklus_id}` : null
+  );
+  const { data: historiData } = useApi(
+    ["penugasan-histori", detailGroup?.siklus_id, detailGroup?.jenis],
+    detailGroup ? `/penugasan/${detailGroup.siklus_id}/histori?jenis=${detailGroup.jenis}` : "",
+    { enabled: !!detailGroup }
+  );
 
-  function loadSiklus(jenis) {
-    const qs = jenis ? `?jenis=${encodeURIComponent(jenis)}` : "";
-    api(`/admin/siklus${qs}`).then(r => r?.json()).then(d => {
-      if (d?.data) setSiklus(d.data);
-    }).catch(() => {});
-  }
+  const histori = historiData?.data || [];
 
-  useEffect(() => {
-    loadData();
-    loadSiklus("survei");
-    // 3 dropdown terpisah: TKPP, TKSDU (surveyor), verifikator
-    api("/admin/tenaga-ahli?peran=surveior&jenis=TKPP").then(r => r?.json()).then(d => {
-      if (d?.data) setSurveyorTKPP(d.data);
-    }).catch(() => {});
-    api("/admin/tenaga-ahli?peran=surveior&jenis=TKSDU").then(r => r?.json()).then(d => {
-      if (d?.data) setSurveyorTKSDU(d.data);
-    }).catch(() => {});
-    api("/admin/tenaga-ahli?peran=verifikator").then(r => r?.json()).then(d => {
-      if (d?.data) setVerifikator(d.data);
-    }).catch(() => {});
-  }, []);
+  const mutatePenugasan = useMutateKeys(["penugasan-list"], {});
+  const [appointLoading, setAppointLoading] = useState(false);
+  const [appointError, setAppointError] = useState("");
+  const mutateReplaceCandidates = useMutate({
+    onSuccess: (d) => setReplaceCandidates(d?.data || []),
+    onError: () => setReplaceCandidates([]),
+  });
+  const mutateReplaceSubmit = useMutate({
+    onSuccess: (d) => {
+      setReplaceTarget(null);
+      setReplaceChoice("");
+      setReplaceReason("");
+      alert(d.message || "Berhasil.");
+    },
+    onError: (err) => alert(err.message),
+  });
 
-  async function handleAppoint(e) {
+  const data = penugasanData?.data || [];
+  const siklus = siklusData?.data || [];
+  const surveyorTKPP = tkppData?.data || [];
+  const surveyorTKSDU = tksduData?.data || [];
+  const verifikator = verifikatorData?.data || [];
+
+  function handleAppoint(e) {
     e.preventDefault();
-    try {
-      const body = new FormData();
-      body.append("siklus_id", form.siklus_id);
-      body.append("jenis", form.jenis);
-      if (form.jenis === "survei") {
-        if (!form.surveyor_tkpp_id || !form.surveyor_tksdu_id) {
-          throw new Error("Pilih kedua surveyor (TKPP dan TKSDU).");
-        }
-        if (form.surveyor_tkpp_id === form.surveyor_tksdu_id) {
-          throw new Error("TKPP dan TKSDU tidak boleh orang yang sama.");
-        }
-        body.append("tenaga_ahli_ids[]", form.surveyor_tkpp_id);
-        body.append("tenaga_ahli_ids[]", form.surveyor_tksdu_id);
-      } else {
-        if (!form.verifikator_id) {
-          throw new Error("Pilih verifikator.");
-        }
-        body.append("tenaga_ahli_id", form.verifikator_id);
-      }
-      if (form.surat) body.append("surat_tugas", form.surat);
-      if (form.tanggal_mulai_survei) body.append("tanggal_mulai_survei", form.tanggal_mulai_survei);
-      if (form.tanggal_selesai_survei) body.append("tanggal_selesai_survei", form.tanggal_selesai_survei);
-      const res = await fetch("/api/penugasan/appoint", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        body,
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.message);
-      setShowModal(false);
-      setForm({
-        siklus_id: "", jenis: "survei",
-        surveyor_tkpp_id: "", surveyor_tksdu_id: "",
-        verifikator_id: "", surat: null,
-        tanggal_mulai_survei: "", tanggal_selesai_survei: "",
-      });
-      loadData();
-    } catch (err) {
-      alert(err.message);
+    if (!form.siklus_id) {
+      alert("Pilih siklus terlebih dahulu.");
+      return;
     }
+    const body = new FormData();
+    body.append("siklus_id", form.siklus_id);
+    body.append("jenis", form.jenis);
+    if (form.jenis === "survei") {
+      if (!form.surveyor_tkpp_id || !form.surveyor_tksdu_id) {
+        alert("Pilih kedua surveyor (TKPP dan TKSDU).");
+        return;
+      }
+      if (form.surveyor_tkpp_id === form.surveyor_tksdu_id) {
+        alert("TKPP dan TKSDU tidak boleh orang yang sama.");
+        return;
+      }
+      body.append("tenaga_ahli_ids[]", form.surveyor_tkpp_id);
+      body.append("tenaga_ahli_ids[]", form.surveyor_tksdu_id);
+    } else {
+      if (!form.verifikator_id) {
+        alert("Pilih verifikator.");
+        return;
+      }
+      body.append("tenaga_ahli_id", form.verifikator_id);
+    }
+    if (form.surat) body.append("surat_tugas", form.surat);
+    if (form.tanggal_mulai_survei) body.append("tanggal_mulai_survei", form.tanggal_mulai_survei);
+    if (form.tanggal_selesai_survei) body.append("tanggal_selesai_survei", form.tanggal_selesai_survei);
+
+    // Direct fetch — avoids useMutate/useMutateKeys FormData ambiguity
+    setAppointLoading(true);
+    setAppointError("");
+    const token = localStorage.getItem("token");
+    // Penting: sertakan lembaga_id di URL — endpoint ini lookup siklus
+    // dengan BelongsToLembaga trait, dan middleware sync session dari
+    // query param ini. Tanpa lembaga_id, session bisa nyangkut di
+    // lembaga default user saat API dipanggil.
+    const lembagaId = localStorage.getItem("lembaga_id");
+    const url = lembagaId
+      ? `/api/penugasan/appoint?lembaga_id=${encodeURIComponent(lembagaId)}`
+      : "/api/penugasan/appoint";
+    fetch(url, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body,
+    })
+      .then(async res => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.message || `HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(() => {
+        setShowModal(false);
+        setForm({
+          siklus_id: "", jenis: "survei",
+          surveyor_tkpp_id: "", surveyor_tksdu_id: "",
+          verifikator_id: "", surat: null,
+          tanggal_mulai_survei: "", tanggal_selesai_survei: "",
+        });
+        setPenugasanRefreshKey(k => k + 1);
+      })
+      .catch(err => {
+        setAppointError(err.message);
+      })
+      .finally(() => setAppointLoading(false));
   }
 
-  async function handleBatal(penugasanIds) {
+  function handleBatal(penugasanIds) {
     if (!Array.isArray(penugasanIds) || penugasanIds.length === 0) return;
     if (!confirm(`Batalkan ${penugasanIds.length} penugasan ini? Penugasan akan dihapus dan siklus dapat ditugaskan ulang.`)) return;
-    try {
-      const idSet = new Set(penugasanIds);
-      // Optimistic: hapus langsung dari state
-      setData(prev => (prev || []).filter(p => !idSet.has(p.id)));
-
-      // Panggil endpoint batal untuk masing-masing
-      for (const id of penugasanIds) {
-        try {
-          const res = await api(`/penugasan/${id}/batal`, { method: "POST" });
-          if (!res.ok) {
-            const errMsg = (await res.json())?.message;
-            alert(`Gagal membatalkan penugasan ${id}: ${errMsg}`);
-            // Rollback state dengan reload
-            loadData();
-            return;
-          }
-        } catch (err) {
-          alert(`Gagal membatalkan penugasan ${id}: ${err.message}`);
-          loadData();
-          return;
-        }
-      }
-
-      // Refresh siklus dropdown
-      loadSiklus(form.jenis);
-    } catch (err) {
-      alert(err.message);
-    }
+    // Call batal for each penugasan
+    penugasanIds.forEach(id => {
+      mutatePenugasan.mutate({
+        path: `/penugasan/${id}/batal`,
+        method: "POST",
+        onError: (err) => alert(`Gagal membatalkan penugasan ${id}: ${err.message}`),
+      });
+    });
   }
 
   // Buka modal replace: load kandidat TA sejenis yang tidak sedang bertugas
-  async function openReplace(penugasan) {
+  function openReplace(penugasan) {
     setReplaceTarget(penugasan);
     setReplaceChoice("");
     setReplaceReason("");
@@ -300,56 +300,19 @@ function PenugasanList() {
     const qs = new URLSearchParams({ peran, exclude_bertugas: "0" });
     if (isSurvei && jenis) qs.set("jenis", jenis);
 
-    try {
-      const r = await api(`/admin/tenaga-ahli?${qs.toString()}`);
-      const d = await r?.json();
-      setReplaceCandidates(d?.data || []);
-    } catch {
-      setReplaceCandidates([]);
-    }
+    mutateReplaceCandidates.mutate({
+      path: `/admin/tenaga-ahli?${qs.toString()}`,
+      method: "GET",
+    });
   }
 
-  async function submitReplace() {
+  function submitReplace() {
     if (!replaceTarget || !replaceChoice) return;
-    setReplacing(true);
-    try {
-      const body = new FormData();
-      body.append("tenaga_ahli_baru_id", replaceChoice);
-      if (replaceReason.trim()) body.append("alasan", replaceReason.trim());
-      const res = await fetch(`/api/penugasan/${replaceTarget.id}/replace`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        body,
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.message);
-      setReplaceTarget(null);
-      setReplaceChoice("");
-      setReplaceReason("");
-      loadData();
-      // Refresh detail modal histori jika terbuka
-      if (detailGroup) {
-        api(`/penugasan/${detailGroup.siklus_id}/histori?jenis=${detailGroup.jenis}`).then(r => r?.json()).then(d => {
-          if (d?.data) setHistori(d.data);
-        }).catch(() => {});
-      }
-      alert(d.message);
-    } catch (err) {
-      alert(err.message);
-    }
-    setReplacing(false);
+    const body = new FormData();
+    body.append("tenaga_ahli_baru_id", replaceChoice);
+    if (replaceReason.trim()) body.append("alasan", replaceReason.trim());
+    mutateReplaceSubmit.mutate({ path: `/penugasan/${replaceTarget.id}/replace`, method: "POST", body });
   }
-
-  // Load history saat detail modal dibuka
-  useEffect(() => {
-    if (!detailGroup) {
-      setHistori([]);
-      return;
-    }
-    api(`/penugasan/${detailGroup.siklus_id}/histori?jenis=${detailGroup.jenis}`).then(r => r?.json()).then(d => {
-      if (d?.data) setHistori(d.data);
-    }).catch(() => setHistori([]));
-  }, [detailGroup]);
 
   const filtered = (() => {
     // Group penugasan per (siklus_id, jenis) → 1 baris dengan multiple surveyor
@@ -400,20 +363,7 @@ function PenugasanList() {
             {data.length} entri penugasan ({filtered.length} grup)
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => {
-          setShowModal(true);
-          // Refresh TA list setiap buka modal — agar status terbaru (sudah ditugas)
-          // ter-reflect di dropdown
-          api("/admin/tenaga-ahli?peran=surveior&jenis=TKPP").then(r => r?.json()).then(d => {
-            if (d?.data) setSurveyorTKPP(d.data);
-          }).catch(() => {});
-          api("/admin/tenaga-ahli?peran=surveior&jenis=TKSDU").then(r => r?.json()).then(d => {
-            if (d?.data) setSurveyorTKSDU(d.data);
-          }).catch(() => {});
-          api("/admin/tenaga-ahli?peran=verifikator").then(r => r?.json()).then(d => {
-            if (d?.data) setVerifikator(d.data);
-          }).catch(() => {});
-        }}>
+        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
@@ -454,7 +404,7 @@ function PenugasanList() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {isLoading ? (
                 <tr><td colSpan="6" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>Memuat...</td></tr>
               ) : filtered.length === 0 ? (
                 <tr><td colSpan="6" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>
@@ -568,7 +518,6 @@ function PenugasanList() {
                   <select className="form-input" value={form.jenis} onChange={e => {
                     const newJenis = e.target.value;
                     setForm({ ...form, jenis: newJenis, siklus_id: "" });
-                    loadSiklus(newJenis);
                   }}>
                     <option value="survei">Survei</option>
                     <option value="verifikasi">Verifikasi</option>
@@ -583,7 +532,7 @@ function PenugasanList() {
                       options={surveyorTKPP}
                       value={form.surveyor_tkpp_id}
                       onChange={v => setForm({ ...form, surveyor_tkpp_id: v })}
-                      placeholder={surveyorTKPP.length === 0 ? "Tidak ada surveyor TKPP tersedia" : "Cari & pilih surveyor TKPP…"}
+                      placeholder={tkppLoading ? "Memuat…" : tkppError ? `Error: ${tkppError.message}` : surveyorTKPP.length === 0 ? "Tidak ada surveyor TKPP tersedia" : "Cari & pilih surveyor TKPP…"}
                       required
                       disabledHint="Tidak ada surveyor TKPP yang cocok"
                     />
@@ -594,7 +543,7 @@ function PenugasanList() {
                       options={surveyorTKSDU}
                       value={form.surveyor_tksdu_id}
                       onChange={v => setForm({ ...form, surveyor_tksdu_id: v })}
-                      placeholder={surveyorTKSDU.length === 0 ? "Tidak ada surveyor TKSDU tersedia" : "Cari & pilih surveyor TKSDU…"}
+                      placeholder={tksduLoading ? "Memuat…" : tksduError ? `Error: ${tksduError.message}` : surveyorTKSDU.length === 0 ? "Tidak ada surveyor TKSDU tersedia" : "Cari & pilih surveyor TKSDU…"}
                       required
                       disabledHint="Tidak ada surveyor TKSDU yang cocok"
                     />
@@ -639,9 +588,16 @@ function PenugasanList() {
                   </div>
                 </div>
               )}
+              {appointError && (
+                <div style={{ marginTop: "12px", padding: "8px 12px", background: "#FEE2E2", color: "#991B1B", borderRadius: "6px", fontSize: "13px" }}>
+                  {appointError}
+                </div>
+              )}
               <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "24px" }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
-                <button type="submit" className="btn btn-primary">Tunjuk</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} disabled={appointLoading}>Batal</button>
+                <button type="submit" className="btn btn-primary" disabled={appointLoading}>
+                  {appointLoading ? "Memproses…" : "Tunjuk"}
+                </button>
               </div>
             </form>
           </div>
@@ -652,7 +608,7 @@ function PenugasanList() {
       {replaceTarget && (
         <div
           style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
-          onClick={() => !replacing && setReplaceTarget(null)}
+          onClick={() => !mutateReplaceSubmit.isPending && setReplaceTarget(null)}
         >
           <div
             style={{ background: "#fff", borderRadius: "12px", width: "100%", maxWidth: "480px", boxShadow: "0 20px 60px rgba(0,0,0,0.15)", overflow: "hidden" }}
@@ -662,7 +618,7 @@ function PenugasanList() {
               <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600", color: "#1E293B" }}>
                 Ganti Tenaga Ahli
               </h3>
-              <button className="btn btn-ghost" style={{ padding: "4px", color: "#94A3B8" }} onClick={() => setReplaceTarget(null)} disabled={replacing}>
+              <button className="btn btn-ghost" style={{ padding: "4px", color: "#94A3B8" }} onClick={() => setReplaceTarget(null)} disabled={mutateReplaceSubmit.isPending}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
@@ -696,7 +652,7 @@ function PenugasanList() {
                 value={replaceChoice}
                 onChange={e => setReplaceChoice(e.target.value)}
                 required
-                disabled={replacing}
+                disabled={mutateReplaceSubmit.isPending}
               >
                 <option value="">— Pilih —</option>
                 {replaceCandidates.length === 0 ? (
@@ -723,19 +679,19 @@ function PenugasanList() {
                   value={replaceReason}
                   onChange={e => setReplaceReason(e.target.value)}
                   placeholder="cth: Konflik kepentingan, tidak dapat dihubungi, dll."
-                  disabled={replacing}
+                  disabled={mutateReplaceSubmit.isPending}
                   style={{ resize: "vertical", minHeight: "50px" }}
                 />
               </div>
             </div>
             <div style={{ padding: "12px 24px", borderTop: "1px solid #F1F5F9", display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-              <button className="btn btn-secondary" onClick={() => setReplaceTarget(null)} disabled={replacing}>Batal</button>
+              <button className="btn btn-secondary" onClick={() => setReplaceTarget(null)} disabled={mutateReplaceSubmit.isPending}>Batal</button>
               <button
                 className="btn btn-primary"
                 onClick={submitReplace}
-                disabled={!replaceChoice || replacing}
+                disabled={!replaceChoice || mutateReplaceSubmit.isPending}
               >
-                {replacing ? "Mengganti..." : "Ganti"}
+                {mutateReplaceSubmit.isPending ? "Mengganti..." : "Ganti"}
               </button>
             </div>
           </div>
@@ -913,7 +869,7 @@ function PenugasanList() {
                         style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "3px 10px", background: "#DCFCE7", color: "#166534", borderRadius: "6px", fontSize: "12px", fontWeight: "500", textDecoration: "none" }}
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                         </svg>
                         Unduh
                       </a>

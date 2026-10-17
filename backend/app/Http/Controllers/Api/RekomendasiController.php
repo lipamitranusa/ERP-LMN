@@ -101,14 +101,25 @@ class RekomendasiController extends Controller
     /**
      * GET /api/rekomendator/candidates
      * Daftar user dengan role Rekomendator (untuk dropdown edit).
+     * Di-scope ke lembaga aktif session agar admin hanya bisa pilih
+     * rekomendator dari lembaganya sendiri.
      * Privilege: Rekomendasi, Lihat
      */
     public function getCandidates(Request $request): JsonResponse
     {
         $roleId = \App\Models\Role::where('nama_role', 'Rekomendator')->value('id');
-        $users = AkunPengguna::with(['tenagaAhli'])
+        $query = AkunPengguna::with(['tenagaAhli'])
             ->where('role_id', $roleId)
-            ->where('status_akun', 'Aktif')
+            ->where('status_akun', 'Aktif');
+
+        // Filter per-lembaga: kandidat rekomendator hanya dari lembaga yang sama
+        // dengan session user (kecuali superadmin tanpa lembaga session)
+        $sessionLembagaId = session('lembaga_id');
+        if ($sessionLembagaId !== null) {
+            $query->where('lembaga_id', $sessionLembagaId);
+        }
+
+        $users = $query
             ->orderBy('nama')
             ->get()
             ->map(fn ($u) => [
@@ -130,9 +141,9 @@ class RekomendasiController extends Controller
 
     /**
      * PUT /api/rekomendator/default
-     * Set user default rekomendator. Otorisasi lewat privilege
-     * `Rekomendasi,Ubah` (route middleware). Bisa disetel oleh Administrator
-     * atau Rekomendator.
+     * Set user default rekomendator untuk lembaga aktif. Otorisasi lewat
+     * privilege `Rekomendasi,Ubah` (route middleware). Bisa disetel oleh
+     * Administrator atau Rekomendator.
      */
     public function setDefault(Request $request): JsonResponse
     {
@@ -147,17 +158,21 @@ class RekomendasiController extends Controller
             ], 422);
         }
 
-        // Upsert
-        $row = KonfigurasiPenugasan::where('kunci', self::KUNCI_DEFAULT_REKOMENDATOR)->first();
-        if ($row) {
-            $row->forceFill(['nilai' => $data['user_id']])->save();
-        } else {
-            KonfigurasiPenugasan::create([
-                'kunci' => self::KUNCI_DEFAULT_REKOMENDATOR,
-                'nilai' => $data['user_id'],
-                'deskripsi' => 'User default yang menjadi rekomendator (auto-muncul di menu Rekomendasi setelah verifikator finalize).',
-            ]);
+        // Verifikasi user Rekomendator harus di lembaga yang sama dengan session
+        $sessionLembagaId = session('lembaga_id');
+        if ($sessionLembagaId !== null && $target->lembaga_id !== $sessionLembagaId) {
+            return response()->json([
+                'message' => 'User Rekomendator yang dipilih bukan milik lembaga Anda saat ini.',
+            ], 422);
         }
+
+        // Upsert per-lembaga: setiap lembaga punya 1 default rekomendator sendiri
+        KonfigurasiPenugasan::set(
+            self::KUNCI_DEFAULT_REKOMENDATOR,
+            $data['user_id'],
+            $sessionLembagaId,
+            "Default rekomendator untuk lembaga aktif (auto-muncul di menu Rekomendasi setelah verifikator finalize)."
+        );
 
         $this->audit->record(
             'rekomendator.default.set',
@@ -184,11 +199,13 @@ class RekomendasiController extends Controller
         $lv = $laporanVerifikasi;
         $user = $request->user();
 
-        // Otorisasi: hanya default rekomendator
+        // Otorisasi: hanya default rekomendator untuk LEMBAGA AKTIF SESSION
+        // (tiap lembaga punya rekomendator sendiri, lookup via session lembaga_id)
         $defaultUserId = KonfigurasiPenugasan::value(self::KUNCI_DEFAULT_REKOMENDATOR);
         if (! $defaultUserId || $user->id !== $defaultUserId) {
+            $lembagaName = session('lembaga_id') ? (\App\Models\Lembaga::find(session('lembaga_id'))?->nama ?? 'lembaga ini') : 'lembaga ini';
             return response()->json([
-                'message' => 'Hanya default rekomendator yang dapat menyetujui.',
+                'message' => "Hanya default rekomendator untuk lembaga {$lembagaName} yang dapat menyetujui.",
             ], 403);
         }
 
@@ -253,8 +270,9 @@ class RekomendasiController extends Controller
 
         $defaultUserId = KonfigurasiPenugasan::value(self::KUNCI_DEFAULT_REKOMENDATOR);
         if (! $defaultUserId || $user->id !== $defaultUserId) {
+            $lembagaName = session('lembaga_id') ? (\App\Models\Lembaga::find(session('lembaga_id'))?->nama ?? 'lembaga ini') : 'lembaga ini';
             return response()->json([
-                'message' => 'Hanya default rekomendator yang dapat menolak.',
+                'message' => "Hanya default rekomendator untuk lembaga {$lembagaName} yang dapat menolak.",
             ], 403);
         }
 
@@ -285,8 +303,10 @@ class RekomendasiController extends Controller
     }
 
     /**
-     * Ambil profil default rekomendator dari konfigurasi_penugasan.
-     * Return null jika belum disetel.
+     * Ambil profil default rekomendator untuk lembaga aktif session.
+     * Lookup KonfigurasiPenugasan otomatis memfilter by session lembaga
+     * (tiap lembaga punya rekomendator sendiri). Return null jika belum
+     * disetel untuk lembaga tersebut.
      */
     private function getDefaultRekomendator(): ?array
     {

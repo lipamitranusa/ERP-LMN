@@ -20,8 +20,8 @@ async function apiLogin(path, options = {}) {
 
 function Login() {
   const history = useHistory();
-  const [login, setLogin] = useState("admin@erp.local");
-  const [password, setPassword] = useState("password");
+  const [login, setLogin] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -30,10 +30,17 @@ function Login() {
     setLoading(true);
     setError("");
     try {
+      // Ambil lembaga_id terakhir dipilih dari localStorage agar posisi persist
+      const lastLembagaId = localStorage.getItem("lembaga_id");
+
       const res = await apiLogin("/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ login, password }),
+        body: JSON.stringify({
+          login,
+          password,
+          ...(lastLembagaId ? { lembaga_id: lastLembagaId } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Login gagal");
@@ -43,6 +50,15 @@ function Login() {
       if (data.menu_actions) {
         localStorage.setItem("menu_actions", JSON.stringify(data.menu_actions));
       }
+      // Simpan lembaga_id dari response (backend bisa mengembalikan last selected)
+      if (data.lembaga_id) {
+        localStorage.setItem("lembaga_id", data.lembaga_id);
+      }
+      // Simpan tipe_faskes agar langsung tersedia tanpa harus fetch auth/me
+      const tipeFaskes = data.user?.faskes?.jenis_faskes?.nama
+        || data.user?.faskes?.tipe_faskes
+        || "";
+      localStorage.setItem("tipe_faskes", tipeFaskes);
 
       // Role-based redirect after login
       const role = data.user?.role;
@@ -152,29 +168,6 @@ function Login() {
               ) : "Masuk"}
             </button>
           </form>
-
-          {/* Demo accounts */}
-          <div style={{ marginTop: "24px", padding: "16px", background: "#F8FAFC", borderRadius: "8px", border: "1px solid #E2E8F0" }}>
-            <div style={{ fontSize: "12px", fontWeight: "600", color: "#64748B", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Akun demo
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-              {[
-                { label: "Admin", email: "admin@erp.local" },
-                { label: "Admin Lembaga", email: "admin@lembaga.local" },
-                { label: "Klinik", email: "klinik-sejahtera@faskes.local" },
-                { label: "Puskesmas", email: "puskesmastns@faskes.local" },
-                { label: "SDM", email: "sdm@lembaga.local" },
-                { label: "Rekomendator", email: "ns-0008@surveyor.local" },
-                { label: "Password", email: "password" },
-              ].map(({ label, email }) => (
-                <div key={label} style={{ fontSize: "11px", color: "#94A3B8" }}>
-                  <span style={{ color: "#64748B", fontWeight: "500" }}>{label}:</span>{" "}
-                  <span style={{ color: "#334155", fontFamily: "monospace", fontSize: "11px" }}>{email}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>

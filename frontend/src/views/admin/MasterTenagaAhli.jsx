@@ -1,32 +1,13 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import ImportModal from "@/components/ImportModal";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  try {
-    const res = await fetch(`/api${path}`, { ...options, headers });
-    if (res.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/auth/login";
-      return null;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `HTTP ${res.status}`);
-    }
-    return res;
-  } catch (err) {
-    console.error("[api]", err);
-    throw err;
-  }
-}
+import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { useLembaga } from "@/contexts/LembagaContext";
 
 const EMPTY = {
   nomor_induk_surveior: "",
   nama: "",
+  no_wa: "",
   peran: "surveior",
   jenis: "TKPP",
   status_aktif: "Aktif",
@@ -40,6 +21,7 @@ const EMPTY = {
   no_rekening: "",
   nama_bank: "",
   atas_nama_rekening: "",
+  lembaga_id: "",
   buat_akun: false,
   username: "",
   email: "",
@@ -161,65 +143,59 @@ const STATUS_PENUGASAN_BADGE = {
 const EXCLUDED_ROLES = ['Admin', 'Faskes'];
 
 export default function MasterTenagaAhli() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [form, setForm] = useState(EMPTY);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [filterPeran, setFilterPeran] = useState("");
   const [filterJenis, setFilterJenis] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [roles, setRoles] = useState([]);
-  const [generatedPassword, setGeneratedPassword] = useState(null);
-  const [createdAkun, setCreatedAkun] = useState(null);
+  const queryClient = useQueryClient();
   const [showImport, setShowImport] = useState(false);
+  const [filterLembaga, setFilterLembaga] = useState("");
+  const { lembagaId: activeLembagaId } = useLembaga();
 
-  const loadRoles = useCallback(async () => {
-    try {
-      const res = await api("/admin/roles");
-      if (!res) return;
-      const data = await res.json();
-      setRoles((data?.data || []).filter(r => !EXCLUDED_ROLES.includes(r.nama_role)));
-    } catch {}
-  }, []);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    const qs = new URLSearchParams();
-    if (search) qs.set("q", search);
-    if (filterPeran) qs.set("peran", filterPeran);
-    if (filterJenis) qs.set("jenis", filterJenis);
-    if (filterStatus) qs.set("status_aktif", filterStatus);
-    api("/master/tenaga-ahli?" + qs.toString())
-      .then(r => r?.json())
-      .then(d => {
-        setItems(d?.data || []);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("[MasterTenagaAhli]", err);
-        setLoading(false);
-      });
-  }, [search, filterPeran, filterJenis, filterStatus]);
+  // Debounced search for query key
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   useEffect(() => {
-    const t = setTimeout(load, 250);
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(t);
-  }, [load]);
+  }, [search]);
 
-  useEffect(() => {
-    if (showModal) loadRoles();
-  }, [showModal, loadRoles]);
+  // Fetch daftar lembaga untuk filter
+  const { data: lembagaList } = useApi("lembaga-list-filter", "/master/lembaga?per_page=100");
+
+  // Active filter: jika user belum pilih di dropdown, default ke lembaga aktif dari session
+  const effectiveLembagaId = filterLembaga || activeLembagaId;
+
+  const qs = new URLSearchParams();
+  if (debouncedSearch) qs.set("q", debouncedSearch);
+  if (filterPeran) qs.set("peran", filterPeran);
+  if (filterJenis) qs.set("jenis", filterJenis);
+  if (filterStatus) qs.set("status_aktif", filterStatus);
+  if (effectiveLembagaId) qs.set("lembaga_id", effectiveLembagaId);
+
+  const { data: listData, isLoading } = useApi(
+    ["tenaga-ahli", debouncedSearch, filterPeran, filterJenis, filterStatus, effectiveLembagaId],
+    `/master/tenaga-ahli?${qs.toString()}`
+  );
+
+  const { data: rolesData } = useApi("roles-tenaga-ahli", "/admin/roles");
+  const items = listData?.data ?? [];
+  const roles = (rolesData?.data ?? []).filter(r => !EXCLUDED_ROLES.includes(r.nama_role));
+
+  const mutateSubmit = useMutateKeys([["tenaga-ahli"], ["roles-tenaga-ahli"]], {
+    onSuccess: () => setShowModal(false),
+    onError: (err) => setError(err.message),
+  });
+  const mutateDelete = useMutateKeys(["tenaga-ahli"]);
 
   function openAdd() {
     setEditTarget(null);
-    setForm(EMPTY);
+    setForm({ ...EMPTY, lembaga_id: activeLembagaId || "" });
     setError("");
-    setGeneratedPassword(null);
-    setCreatedAkun(null);
     setShowModal(true);
   }
 
@@ -228,6 +204,7 @@ export default function MasterTenagaAhli() {
     setForm({
       nomor_induk_surveior: item.nomor_induk_surveior || "",
       nama: item.nama || "",
+      no_wa: item.no_wa || "",
       peran: item.peran || "surveior",
       jenis: item.jenis || "TKPP",
       status_aktif: item.status_aktif || "Aktif",
@@ -241,6 +218,7 @@ export default function MasterTenagaAhli() {
       no_rekening: item.no_rekening || "",
       nama_bank: item.nama_bank || "",
       atas_nama_rekening: item.atas_nama_rekening || "",
+      lembaga_id: item.lembaga_id || activeLembagaId || "",
       buat_akun: false,
       username: "",
       email: "",
@@ -248,91 +226,55 @@ export default function MasterTenagaAhli() {
       role_id: "",
     });
     setError("");
-    setGeneratedPassword(null);
-    setCreatedAkun(null);
     setShowModal(true);
   }
 
   function closeModal() {
-    if (saving) return;
+    if (mutateSubmit.isPending) return;
     setShowModal(false);
-    setGeneratedPassword(null);
-    setCreatedAkun(null);
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    setSaving(true);
-    try {
-      const payload = { ...form };
-      if (payload.peran === "verifikator") payload.jenis = null;
-      if (payload.batas_penugasan_per_periode === "") {
-        payload.batas_penugasan_per_periode = null;
-      } else {
-        payload.batas_penugasan_per_periode = parseInt(payload.batas_penugasan_per_periode, 10);
-      }
-
-      // Normalize buat_akun to boolean
-      payload.buat_akun = !!payload.buat_akun;
-      if (!payload.buat_akun) {
-        delete payload.email;
-        delete payload.password;
-        delete payload.role_id;
-        delete payload.username;
-      } else {
-        // role_id wajib jika buat_akun
-        if (!payload.role_id) {
-          setError("Role akun wajib dipilih.");
-          setSaving(false);
-          return;
-        }
-        // username optional, delete if empty
-        if (!payload.username) delete payload.username;
-      }
-
-      const body = JSON.stringify(payload);
-      const res = editTarget
-        ? await api(`/master/tenaga-ahli/${editTarget.id}`, { method: "PUT", body })
-        : await api("/master/tenaga-ahli", { method: "POST", body });
-      const data = await res.json();
-      if (!res.ok) {
-        const msg = data.errors
-          ? Object.values(data.errors).flat().join(". ")
-          : (data.message || "Gagal menyimpan.");
-        throw new Error(msg);
-      }
-
-      // Tangkap data akun yang dibuat
-      if (data.akun) {
-        setCreatedAkun(data.akun);
-      }
-      if (data.generated_password) {
-        setGeneratedPassword(data.generated_password);
-      }
-
-      // Tutup modal hanya setelah password ditampilkan
-      if (!data.generated_password) {
-        setShowModal(false);
-      }
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
+    const payload = { ...form };
+    if (payload.peran === "verifikator") payload.jenis = null;
+    if (payload.batas_penugasan_per_periode === "") {
+      payload.batas_penugasan_per_periode = null;
+    } else {
+      payload.batas_penugasan_per_periode = parseInt(payload.batas_penugasan_per_periode, 10);
     }
+
+    // Normalize buat_akun to boolean
+    payload.buat_akun = !!payload.buat_akun;
+    if (!payload.buat_akun) {
+      delete payload.email;
+      delete payload.password;
+      delete payload.role_id;
+      delete payload.username;
+    } else {
+      // role_id wajib jika buat_akun
+      if (!payload.role_id) {
+        setError("Role akun wajib dipilih.");
+        return;
+      }
+      // username optional, delete if empty
+      if (!payload.username) delete payload.username;
+    }
+
+    mutateSubmit.mutate({
+      path: editTarget ? `/master/tenaga-ahli/${editTarget.id}` : "/master/tenaga-ahli",
+      method: editTarget ? "PUT" : "POST",
+      body: payload,
+    });
   }
 
-  async function handleDelete(item) {
+  function handleDelete(item) {
     if (!confirm(`Hapus tenaga ahli "${item.nama}"?`)) return;
-    try {
-      const res = await api(`/master/tenaga-ahli/${item.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menghapus.");
-      load();
-    } catch (err) {
-      alert(err.message);
-    }
+    mutateDelete.mutate(
+      { path: `/master/tenaga-ahli/${item.id}`, method: "DELETE" },
+      { onError: (err) => alert(err.message) }
+    );
   }
 
   function set(key, value) {
@@ -399,8 +341,22 @@ export default function MasterTenagaAhli() {
           <option value="Cuti">Cuti</option>
           <option value="Resign">Resign</option>
         </select>
-        {(filterPeran || filterJenis || filterStatus || search) && (
-          <button className="btn btn-ghost btn-sm" onClick={() => { setFilterPeran(""); setFilterJenis(""); setFilterStatus(""); setSearch(""); }}>
+        <select
+          className="form-input"
+          value={filterLembaga}
+          onChange={e => setFilterLembaga(e.target.value)}
+          style={{ flex: "0 0 220px" }}
+          title="Filter Lembaga"
+        >
+          <option value="">— Semua Lembaga / Lembaga Aktif —</option>
+          {(lembagaList?.data || []).map(l => (
+            <option key={l.id} value={l.id}>
+              {l.nama}{l.id === activeLembagaId ? " (Aktif)" : ""}
+            </option>
+          ))}
+        </select>
+        {(filterPeran || filterJenis || filterStatus || search || filterLembaga) && (
+          <button className="btn btn-ghost btn-sm" onClick={() => { setFilterPeran(""); setFilterJenis(""); setFilterStatus(""); setSearch(""); setFilterLembaga(""); }}>
             Reset
           </button>
         )}
@@ -411,8 +367,9 @@ export default function MasterTenagaAhli() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>NIK</th>
+                <th>No. Induk</th>
                 <th>Nama</th>
+                <th>No. WA</th>
                 <th>Peran</th>
                 <th>Jenis</th>
                 <th>No. Rekening</th>
@@ -422,10 +379,10 @@ export default function MasterTenagaAhli() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr><td colSpan="8" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
+              {isLoading ? (
+                <tr><td colSpan="9" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan="8" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>
+                <tr><td colSpan="9" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>
                   {search || filterPeran || filterJenis || filterStatus ? "Tidak ada hasil" : "Belum ada data."}
                 </td></tr>
               ) : items.map(item => {
@@ -438,6 +395,13 @@ export default function MasterTenagaAhli() {
                   <tr key={item.id}>
                     <td style={{ color: "#64748B", fontSize: "12px", fontFamily: "monospace" }}>{item.nomor_induk_surveior}</td>
                     <td style={{ fontWeight: "500", color: "#1E293B" }}>{item.nama}</td>
+                    <td style={{ color: "#64748B", fontSize: "12px" }}>
+                      {item.no_wa ? (
+                        <a href={`https://wa.me/${item.no_wa.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer" style={{ color: "#16A34A", textDecoration: "none" }}>
+                          {item.no_wa}
+                        </a>
+                      ) : <span style={{ color: "#94A3B8" }}>—</span>}
+                    </td>
                     <td style={{ color: "#64748B", fontSize: "13px" }}>{PERAN_LABEL[item.peran] || item.peran}</td>
                     <td>
                       {jb ? (
@@ -508,50 +472,6 @@ export default function MasterTenagaAhli() {
 
       {showModal && (
         <Modal title={editTarget ? "Ubah Tenaga Ahli" : "Tambah Tenaga Ahli Baru"} onClose={closeModal}>
-          {/* Password berhasil dibuat */}
-          {generatedPassword && (
-            <div style={{
-              margin: "20px 24px 0",
-              padding: "14px 16px",
-              background: "#DCFCE7",
-              border: "1px solid #BBF7D0",
-              borderRadius: "8px",
-              display: "flex",
-              alignItems: "flex-start",
-              gap: "10px",
-            }}>
-              <div style={{ flexShrink: 0 }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2" width="20" height="20">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-                </svg>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: "13px", fontWeight: "700", color: "#166534", marginBottom: "6px" }}>
-                  {editTarget ? "Akun berhasil dibuat!" : "Tenaga ahli & akun login berhasil dibuat!"}
-                </div>
-                <div style={{ fontSize: "12px", color: "#15803D", marginBottom: "6px" }}>
-                  Simpan password sementara di bawah ini. <strong>Password ini tidak akan ditampilkan lagi.</strong>
-                </div>
-                <div style={{
-                  padding: "8px 12px",
-                  background: "#fff",
-                  border: "1px solid #BBF7D0",
-                  borderRadius: "6px",
-                  fontFamily: "monospace",
-                  fontSize: "14px",
-                  fontWeight: "700",
-                  color: "#1E293B",
-                  letterSpacing: "1px",
-                }}>
-                  {generatedPassword}
-                </div>
-                <div style={{ fontSize: "11px", color: "#15803D", marginTop: "4px" }}>
-                  Kirimkan password ini ke tenaga ahli melalui email/WhatsApp yang aman.
-                </div>
-              </div>
-            </div>
-          )}
-
           <form onSubmit={handleSubmit} style={{ padding: "24px" }}>
             {error && (
               <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: "6px", color: "#991B1B", fontSize: "13px" }}>{error}</div>
@@ -565,9 +485,9 @@ export default function MasterTenagaAhli() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
                 <div style={{ marginBottom: "14px" }}>
                   <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    Nomor Induk Surveior <span style={{ color: "#DC2626" }}>*</span>
+                    Nomor Induk Karyawan <span style={{ color: "#DC2626" }}>*</span>
                   </label>
-                  <input className="form-input" value={form.nomor_induk_surveior} onChange={e => set("nomor_induk_surveior", e.target.value)} required placeholder="cth: NS-0001" />
+                  <input className="form-input" value={form.nomor_induk_surveior} onChange={e => set("nomor_induk_surveior", e.target.value)} required placeholder="cth: KRY-0001" />
                 </div>
 
                 <div style={{ marginBottom: "14px" }}>
@@ -575,6 +495,13 @@ export default function MasterTenagaAhli() {
                     Nama Lengkap <span style={{ color: "#DC2626" }}>*</span>
                   </label>
                   <input className="form-input" value={form.nama} onChange={e => set("nama", e.target.value)} required placeholder="cth: Dr. Nama Lengkap" />
+                </div>
+
+                <div style={{ marginBottom: "14px" }}>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
+                    No. WhatsApp
+                  </label>
+                  <input className="form-input" value={form.no_wa} onChange={e => set("no_wa", e.target.value)} placeholder="cth: 081234567890" />
                 </div>
 
                 <div style={{ marginBottom: "14px" }}>
@@ -597,8 +524,8 @@ export default function MasterTenagaAhli() {
                     required={form.peran !== "verifikator"}
                     disabled={form.peran === "verifikator"}
                   >
-                    <option value="TKPP">TKPP (Tenaga Kredensial Penilai Puncak)</option>
-                    <option value="TKSDU">TKSDU (Domain Umum)</option>
+                    <option value="TKPP">TKPP</option>
+                    <option value="TKSDU">TKSDU</option>
                   </select>
                   {form.peran === "verifikator" && (
                     <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>Jenis hanya berlaku untuk surveior.</div>
@@ -612,6 +539,25 @@ export default function MasterTenagaAhli() {
                     <option value="Nonaktif">Nonaktif</option>
                     <option value="Cuti">Cuti</option>
                     <option value="Resign">Resign</option>
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: "14px" }}>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
+                    Lembaga <span style={{ color: "#DC2626" }}>*</span>
+                  </label>
+                  <select
+                    className="form-input"
+                    value={form.lembaga_id}
+                    onChange={e => set("lembaga_id", e.target.value)}
+                    required
+                  >
+                    <option value="">— Pilih Lembaga —</option>
+                    {(lembagaList?.data || []).map(l => (
+                      <option key={l.id} value={l.id}>
+                        {l.nama}{l.id === activeLembagaId ? " (Aktif)" : ""}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -814,16 +760,9 @@ export default function MasterTenagaAhli() {
                       style={{ fontSize: "13px" }}
                     />
                     <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>
-                      Email harus unik. Jika kosong, password akan di-generate otomatis.
+                      Email harus unik. Password akan di-generate otomatis dan ditampilkan setelah tenaga ahli dibuat.
                     </div>
                   </div>
-
-                  <PasswordField
-                    label="Password"
-                    value={form.password}
-                    placeholder="Minimal 8 karakter (kosongkan untuk auto-generate)"
-                    onChange={v => set("password", v)}
-                  />
 
                   <div style={{ marginBottom: "14px" }}>
                     <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
@@ -869,15 +808,13 @@ export default function MasterTenagaAhli() {
                 type="button"
                 className="btn btn-secondary"
                 onClick={closeModal}
-                disabled={saving}
+                disabled={mutateSubmit.isPending}
               >
-                {generatedPassword ? "Tutup" : "Batal"}
+                Batal
               </button>
-              {!generatedPassword && (
-                <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? "Menyimpan..." : editTarget ? "Simpan" : "Tambah"}
-                </button>
-              )}
+              <button type="submit" className="btn btn-primary" disabled={mutateSubmit.isPending}>
+                {mutateSubmit.isPending ? "Menyimpan..." : editTarget ? "Simpan" : "Tambah"}
+              </button>
             </div>
           </form>
         </Modal>
@@ -886,7 +823,7 @@ export default function MasterTenagaAhli() {
       <ImportModal
         open={showImport}
         onClose={() => setShowImport(false)}
-        onSuccess={load}
+        onSuccess={() => {}}
         title="Import Tenaga Ahli dari CSV"
         downloadUrl="/master/tenaga-ahli/template"
         downloadName="template_tenaga_ahli.csv"

@@ -1,29 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { useLembaga } from "@/contexts/LembagaContext";
 
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  try {
-    const res = await fetch(`/api${path}`, { ...options, headers });
-    if (res.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/auth/login";
-      return null;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `HTTP ${res.status}`);
-    }
-    return res;
-  } catch (err) {
-    console.error("[api]", err);
-    throw err;
-  }
-}
-
-const EMPTY = { nama: "", kode: "", deskripsi: "", status: "aktif" };
+const EMPTY = { nama: "", kode: "", deskripsi: "", status: "aktif", lembaga_id: "" };
 
 function Modal({ title, onClose, children }) {
   return (
@@ -52,41 +31,50 @@ function Modal({ title, onClose, children }) {
 }
 
 export default function MasterJenisFaskes() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [filterLembaga, setFilterLembaga] = useState("");
+  const { lembagaId: activeLembagaId } = useLembaga();
 
-  const load = useCallback(() => {
-    setLoading(true);
-    api("/master/jenis-faskes?q=" + encodeURIComponent(search))
-      .then(r => r?.json())
-      .then(d => {
-        setItems(d?.data || []);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("[MasterJenisFaskes]", err);
-        setLoading(false);
-      });
-  }, [search]);
+  // Fetch daftar lembaga untuk filter
+  const { data: lembagaList } = useApi("lembaga-list-filter", "/master/lembaga?per_page=100");
 
-  useEffect(() => { load(); }, [load]);
+  // Active filter: jika user belum pilih di dropdown, default ke lembaga aktif dari session
+  const effectiveLembagaId = filterLembaga || activeLembagaId;
+
+  const qs = new URLSearchParams();
+  if (search) qs.set("q", search);
+  if (effectiveLembagaId) qs.set("lembaga_id", effectiveLembagaId);
+
+  const { data, isLoading } = useApi(
+    ["jenis-faskes", search, effectiveLembagaId],
+    `/master/jenis-faskes?${qs.toString()}`
+  );
+  const items = data?.data || [];
+  const mutate = useMutateKeys(["jenis-faskes"]);
+
+  const selectedLembaga = lembagaList?.data?.find(l => l.id === effectiveLembagaId);
 
   function openAdd() {
     setEditTarget(null);
-    setForm(EMPTY);
+    setForm({ ...EMPTY, lembaga_id: activeLembagaId || "" });
     setError("");
     setShowModal(true);
   }
 
   function openEdit(item) {
     setEditTarget(item);
-    setForm({ nama: item.nama || "", kode: item.kode || "", deskripsi: item.deskripsi || "", status: item.status || "aktif" });
+    setForm({
+      nama: item.nama || "",
+      kode: item.kode || "",
+      deskripsi: item.deskripsi || "",
+      status: item.status || "aktif",
+      lembaga_id: item.lembaga_id || activeLembagaId || "",
+    });
     setError("");
     setShowModal(true);
   }
@@ -96,14 +84,12 @@ export default function MasterJenisFaskes() {
     setError("");
     setSaving(true);
     try {
-      const body = JSON.stringify(form);
-      const res = editTarget
-        ? await api(`/master/jenis-faskes/${editTarget.id}`, { method: "PUT", body })
-        : await api("/master/jenis-faskes", { method: "POST", body });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menyimpan.");
+      await mutate.mutateAsync({
+        path: editTarget ? `/master/jenis-faskes/${editTarget.id}` : "/master/jenis-faskes",
+        method: editTarget ? "PUT" : "POST",
+        body: form,
+      });
       setShowModal(false);
-      load();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -114,10 +100,7 @@ export default function MasterJenisFaskes() {
   async function handleDelete(item) {
     if (!confirm(`Hapus jenis faskes "${item.nama}"?`)) return;
     try {
-      const res = await api(`/master/jenis-faskes/${item.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menghapus.");
-      load();
+      await mutate.mutateAsync({ path: `/master/jenis-faskes/${item.id}`, method: "DELETE" });
     } catch (err) {
       alert(err.message);
     }
@@ -139,13 +122,34 @@ export default function MasterJenisFaskes() {
       </div>
 
       <div style={{ marginBottom: "16px" }}>
-        <div style={{ position: "relative", maxWidth: "320px" }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16"
-            style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}>
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input type="text" className="form-input" placeholder="Cari nama atau kode..."
-            value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: "38px" }} />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
+          <div style={{ position: "relative", maxWidth: "320px" }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16"
+              style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}>
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" className="form-input" placeholder="Cari nama atau kode..."
+              value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: "38px" }} />
+          </div>
+          <select
+            className="form-input"
+            value={filterLembaga}
+            onChange={e => setFilterLembaga(e.target.value)}
+            style={{ flex: "0 0 220px" }}
+            title="Filter Lembaga"
+          >
+            <option value="">— Semua Lembaga / Lembaga Aktif —</option>
+            {(lembagaList?.data || []).map(l => (
+              <option key={l.id} value={l.id}>
+                {l.nama}{l.id === activeLembagaId ? " (Aktif)" : ""}
+              </option>
+            ))}
+          </select>
+          {selectedLembaga && (
+            <span style={{ fontSize: "12px", color: "#64748B" }}>
+              Menampilkan: <strong style={{ color: "#1E293B" }}>{selectedLembaga.nama}</strong>
+            </span>
+          )}
         </div>
       </div>
 
@@ -156,22 +160,24 @@ export default function MasterJenisFaskes() {
               <tr>
                 <th>Kode</th>
                 <th>Nama Jenis</th>
+                <th>Lembaga</th>
                 <th>Deskripsi</th>
                 <th>Status</th>
                 <th style={{ width: "100px" }}>Aksi</th>
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr><td colSpan="5" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
+              {isLoading ? (
+                <tr><td colSpan="6" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan="5" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>
+                <tr><td colSpan="6" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>
                   {search ? "Tidak ada hasil" : "Belum ada data. Klik 'Tambah Jenis' untuk memulai."}
                 </td></tr>
               ) : items.map(item => (
                 <tr key={item.id}>
                   <td><code style={{ fontSize: "12px", background: "#F1F5F9", padding: "2px 6px", borderRadius: "4px" }}>{item.kode || "—"}</code></td>
                   <td style={{ fontWeight: "500", color: "#1E293B" }}>{item.nama}</td>
+                  <td style={{ color: "#475569", fontSize: "13px" }}>{item.lembaga?.nama || "—"}</td>
                   <td style={{ color: "#64748B", fontSize: "13px", maxWidth: "280px" }}>{item.deskripsi || "—"}</td>
                   <td>
                     <span style={{
@@ -214,6 +220,24 @@ export default function MasterJenisFaskes() {
               <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Deskripsi</label>
                 <textarea className="form-input" rows={2} value={form.deskripsi} onChange={e => setForm(f => ({ ...f, deskripsi: e.target.value }))} placeholder="Deskripsi singkat..." style={{ resize: "vertical" }} />
+              </div>
+              <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
+                  Lembaga <span style={{ color: "#DC2626" }}>*</span>
+                </label>
+                <select
+                  className="form-input"
+                  value={form.lembaga_id}
+                  onChange={e => setForm(f => ({ ...f, lembaga_id: e.target.value }))}
+                  required
+                >
+                  <option value="">— Pilih Lembaga —</option>
+                  {(lembagaList?.data || []).map(l => (
+                    <option key={l.id} value={l.id}>
+                      {l.nama}{l.id === activeLembagaId ? " (Aktif)" : ""}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Status</label>

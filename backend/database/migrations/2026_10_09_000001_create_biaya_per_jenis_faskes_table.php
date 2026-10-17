@@ -11,7 +11,7 @@ return new class extends Migration
     {
         Schema::create('biaya_per_jenis_faskes', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->uuid('jenis_faskes_id');
+            $table->string('jenis_faskes_id', 30);
             $table->string('nama_biaya', 100);
             $table->text('deskripsi')->nullable();
             $table->decimal('jumlah', 14, 2)->default(0);

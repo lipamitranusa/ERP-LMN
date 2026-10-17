@@ -1,22 +1,5 @@
-import React, { useState, useEffect } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { ...options.headers };
-  if (!(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Error ${res.status}`);
-  }
-  return res;
-}
+import React, { useState } from "react";
+import { useApi } from "@/hooks/useApi";
 
 async function apiBlob(path, options = {}) {
   const token = localStorage.getItem("token");
@@ -62,39 +45,25 @@ const MASALAH_LABEL = {
 export default function BuktiPotong() {
   const [tahun, setTahun] = useState(TAHUN_DEFAULT);
   const [bulan, setBulan] = useState(new Date().getMonth() + 1);
-  const [ringkasan, setRingkasan] = useState(null);
-  const [rekap, setRekap] = useState([]);
-  const [gap, setGap] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
   const [activeTab, setActiveTab] = useState("rekap"); // "rekap" | "gap"
   const [expandedTa, setExpandedTa] = useState(null);
 
-  const periodeLabel = `${bulanIndo(bulan)} ${tahun}`;
+  const periode = `${tahun}-${String(bulan).padStart(2, "0")}`;
 
-  async function loadData() {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await api(`/keuangan/bukti-potong?periode=${tahun}-${String(bulan).padStart(2, "0")}`);
-      const data = await res.json();
-      setRingkasan(data.data?.ringkasan);
-      setRekap(data.data?.rekap || []);
-      setGap(data.data?.gap_npwp || []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data, isLoading, error } = useApi(
+    ["bukti-potong", tahun, bulan],
+    "/keuangan/bukti-potong?periode=" + periode
+  );
 
-  useEffect(() => { loadData(); }, [tahun, bulan]);
+  const ringkasan = data?.ringkasan;
+  const rekap = data?.rekap || [];
+  const gap = data?.gap_npwp || [];
 
   async function handleExportXml() {
     setExporting(true);
     try {
-      const res = await apiBlob(`/keuangan/bukti-potong/export-xml?periode=${tahun}-${String(bulan).padStart(2, "0")}`);
+      const res = await apiBlob(`/keuangan/bukti-potong/export-xml?periode=${periode}`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -141,18 +110,15 @@ export default function BuktiPotong() {
             ))}
           </select>
         </div>
-        <button onClick={loadData} className="btn btn-primary" style={{ height: "38px" }}>
-          Lihat Data
-        </button>
       </div>
 
       {error && (
         <div style={{ padding: "12px 16px", background: "#FEE2E2", color: "#991B1B", borderRadius: "8px", marginBottom: "16px", fontSize: "13px" }}>
-          {error}
+          {error.message}
         </div>
       )}
 
-      {loading ? (
+      {isLoading ? (
         <div style={{ padding: "60px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>
       ) : (
         <>

@@ -32,6 +32,7 @@ class LembagaController extends Controller
             $q = $request->string('q');
             $query->where(fn($sq) => $sq
                 ->where('nama', 'like', "%{$q}%")
+                ->orWhere('nama_pt', 'like', "%{$q}%")
                 ->orWhere('kota', 'like', "%{$q}%")
                 ->orWhere('email', 'like', "%{$q}%")
             );
@@ -140,6 +141,7 @@ class LembagaController extends Controller
     {
         return $request->validate([
             'nama' => 'required|string|max:255',
+            'nama_pt' => 'nullable|string|max:255',
             'alamat' => 'nullable|string|max:500',
             'kota' => 'nullable|string|max:100',
             'telepon' => 'nullable|string|max:30',

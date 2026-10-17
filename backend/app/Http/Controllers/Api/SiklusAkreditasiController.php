@@ -236,8 +236,12 @@ class SiklusAkreditasiController extends Controller
             $siklusDenganPenugasanAktif = $query->pluck('siklus_id');
         }
 
-        $items = SiklusAkreditasi::with(['faskes.jenisFaskes', 'lembaga:id,nama'])
-            ->whereHas('faskes')
+        $items = SiklusAkreditasi::with([
+            'faskes' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'faskes.jenisFaskes' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'lembaga:id,nama',
+        ])
+            ->whereHas('faskes', fn($q) => $q->withoutGlobalScope('lembaga'))
             ->whereNotIn('id', $siklusDenganPenugasanAktif)
             ->where(function ($q) {
                 $q->where('tahapan', '>=', 3)

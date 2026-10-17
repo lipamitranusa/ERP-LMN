@@ -44,10 +44,12 @@ class AdminVerifikasiController extends Controller
     public function appointVerifikator(Request $request, AuditService $audit): JsonResponse
     {
         $data = $request->validate([
-            'siklus_id' => 'required|uuid|exists:siklus_akreditasi,id',
+            'siklus_id' => 'required|uuid',
         ]);
 
-        $siklus = SiklusAkreditasi::findOrFail($data['siklus_id']);
+        // findWithLembagaCheck() memberikan error 403 yang informatif jika
+        // siklus ada di lembaga lain dari session user, bukan 404 generik.
+        $siklus = SiklusAkreditasi::findWithLembagaCheck($data['siklus_id']);
 
         // Cek apakah sudah ada laporan survei untuk siklus ini
         $laporanSurvei = Laporan::whereHas('penugasan', function ($q) use ($siklus) {

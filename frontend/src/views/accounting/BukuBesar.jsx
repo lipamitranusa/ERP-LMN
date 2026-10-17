@@ -1,15 +1,5 @@
-import React, { useState, useEffect } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) { localStorage.removeItem("token"); window.location.href = "/auth/login"; return null; }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.message || `API error: ${res.status}`);
-  return body;
-}
+import React, { useState } from "react";
+import { useApi } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -46,28 +36,19 @@ const KELOMPOK_LABEL = { debit: "Debit", kredit: "Kredit", debit_kredit: "Debit 
 export default function AccountingBukuBesar() {
   const now = new Date();
   const [filter, setFilter] = useState({ tahun: now.getFullYear(), bulan: String(now.getMonth() + 1).padStart(2, "0") });
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [selectedAkun, setSelectedAkun] = useState(null);
-  const [detailData, setDetailData] = useState(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState({});
 
-  const load = () => {
-    setLoading(true);
-    api(`/keuangan/accounting/buku-besar?tahun=${filter.tahun}&bulan=${filter.bulan}`)
-      .then(d => { setData(d?.data || []); setLoading(false); })
-      .catch(() => setLoading(false));
-  };
-  useEffect(() => { load(); }, [filter]);
+  const qs = `/keuangan/accounting/buku-besar?tahun=${filter.tahun}&bulan=${filter.bulan}`;
+  const { data: bbData, isLoading: loading } = useApi(["buku-besar", filter.tahun, filter.bulan], qs);
+  const data = bbData?.data || [];
 
-  const openDetail = async (akun) => {
-    setSelectedAkun(akun);
-    setLoadingDetail(true);
-    const d = await api(`/keuangan/accounting/buku-besar/${akun.id}?tahun=${filter.tahun}&bulan=${filter.bulan}`);
-    setDetailData(d?.data || null);
-    setLoadingDetail(false);
-  };
+  const detailQs = selectedAkun ? `/keuangan/accounting/buku-besar/${selectedAkun.id}?tahun=${filter.tahun}&bulan=${filter.bulan}` : null;
+  const { data: detailData, isLoading: loadingDetail } = useApi(
+    selectedAkun ? ["buku-besar-detail", selectedAkun.id, filter.tahun, filter.bulan] : ["buku-besar-detail"],
+    detailQs,
+    { enabled: !!selectedAkun }
+  );
 
   const toggleGroup = (key) => {
     setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
@@ -112,7 +93,7 @@ export default function AccountingBukuBesar() {
               {BULAN.map((b, i) => <option key={i+1} value={String(i+1).padStart(2,"0")}>{b}</option>)}
             </select>
           </div>
-          <button className="btn btn-primary" onClick={load} style={{ background: "#2563EB" }}>Tampilkan</button>
+          <button className="btn btn-primary" style={{ background: "#2563EB" }}>Tampilkan</button>
         </div>
       </div>
 
@@ -157,7 +138,7 @@ export default function AccountingBukuBesar() {
                             {formatRp(akun.saldo_akhir)}
                           </td>
                           <td style={{ textAlign: "center" }}>
-                            <button className="btn btn-ghost" style={{ fontSize: "11px", padding: "2px 8px", color: "#2563EB" }} onClick={() => openDetail(akun)}>Detail</button>
+                            <button className="btn btn-ghost" style={{ fontSize: "11px", padding: "2px 8px", color: "#2563EB" }} onClick={() => setSelectedAkun(akun)}>Detail</button>
                           </td>
                         </tr>
                       ))}
@@ -171,17 +152,20 @@ export default function AccountingBukuBesar() {
       )}
 
       {selectedAkun && (
-        <Modal title={`Buku Besar — ${selectedAkun.kode} ${selectedAkun.nama}`} onClose={() => { setSelectedAkun(null); setDetailData(null); }} wide>
+        <Modal title={`Buku Besar — ${selectedAkun.kode} ${selectedAkun.nama}`} onClose={() => setSelectedAkun(null)} wide>
           {loadingDetail ? (
             <div style={{ padding: "32px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>
           ) : detailData ? (
+            (() => {
+              const dd = detailData?.data || detailData;
+              return (
             <>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "16px" }}>
                 {[
-                  { label: "Saldo Awal", value: formatRp(detailData.saldo_awal) },
-                  { label: "Total Debit", value: formatRp(detailData.mutasi_debit), color: "#166534" },
-                  { label: "Total Kredit", value: formatRp(detailData.mutasi_kredit), color: "#991B1B" },
-                  { label: "Saldo Akhir", value: formatRp(detailData.saldo_akhir), fontWeight: "700", color: "#1E293B" },
+                  { label: "Saldo Awal", value: formatRp(dd.saldo_awal) },
+                  { label: "Total Debit", value: formatRp(dd.mutasi_debit), color: "#166534" },
+                  { label: "Total Kredit", value: formatRp(dd.mutasi_kredit), color: "#991B1B" },
+                  { label: "Saldo Akhir", value: formatRp(dd.saldo_akhir), fontWeight: "700", color: "#1E293B" },
                 ].map((item, i) => (
                   <div key={i} style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "6px", padding: "10px 14px" }}>
                     <div style={{ fontSize: "11px", color: "#64748B", fontWeight: "600", textTransform: "uppercase" }}>{item.label}</div>
@@ -202,7 +186,7 @@ export default function AccountingBukuBesar() {
                   </tr>
                 </thead>
                 <tbody>
-                  {detailData.details?.length === 0 ? (
+                  {dd.details?.length === 0 ? (
                     <tr><td colSpan="6" style={{ textAlign: "center", color: "#94A3B8", padding: "24px", fontSize: "13px" }}>Tidak ada transaksi pada periode ini.</td></tr>
                   ) : (
                     <>
@@ -210,9 +194,9 @@ export default function AccountingBukuBesar() {
                         <td colSpan="3" style={{ padding: "6px 8px", fontSize: "12px", fontStyle: "italic", color: "#475569" }}>Saldo Awal</td>
                         <td style={{ padding: "6px 8px" }}></td>
                         <td style={{ padding: "6px 8px" }}></td>
-                        <td style={{ padding: "6px 8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace", fontWeight: "600", color: "#475569" }}>{formatRp(detailData.saldo_awal)}</td>
+                        <td style={{ padding: "6px 8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace", fontWeight: "600", color: "#475569" }}>{formatRp(dd.saldo_awal)}</td>
                       </tr>
-                      {detailData.details?.map((d, i) => (
+                      {dd.details?.map((d, i) => (
                         <tr key={d.id ?? i} style={{ borderBottom: "1px solid #F1F5F9" }}>
                           <td style={{ padding: "6px 8px", fontSize: "12px", color: "#64748B" }}>{formatDate(d.tanggal)}</td>
                           <td style={{ padding: "6px 8px", fontSize: "12px", fontFamily: "ui-monospace" }}>{d.nomor}</td>
@@ -224,15 +208,17 @@ export default function AccountingBukuBesar() {
                       ))}
                       <tr key="saldo-akhir" style={{ background: "#F0FDF4", fontWeight: "600" }}>
                         <td colSpan="3" style={{ padding: "8px", fontSize: "12px" }}>Saldo Akhir</td>
-                        <td style={{ padding: "8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{formatRp(detailData.mutasi_debit)}</td>
-                        <td style={{ padding: "8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{formatRp(detailData.mutasi_kredit)}</td>
-                        <td style={{ padding: "8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{formatRp(detailData.saldo_akhir)}</td>
+                        <td style={{ padding: "8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{formatRp(dd.mutasi_debit)}</td>
+                        <td style={{ padding: "8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{formatRp(dd.mutasi_kredit)}</td>
+                        <td style={{ padding: "8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{formatRp(dd.saldo_akhir)}</td>
                       </tr>
                     </>
                   )}
                 </tbody>
               </table>
             </>
+              );
+            })()
           ) : null}
         </Modal>
       )}

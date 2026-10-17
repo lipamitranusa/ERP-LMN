@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToLembaga;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class KategoriJurnal extends Model
 {
-    use HasUuids;
+    use HasUuids, BelongsToLembaga;
 
     public $incrementing = false;
     protected $keyType = 'string';
@@ -51,6 +52,7 @@ class KategoriJurnal extends Model
         'jenis',
         'urutan',
         'is_aktif',
+        'lembaga_id',
     ];
 
     protected $casts = [

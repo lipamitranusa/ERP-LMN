@@ -1,27 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  try {
-    const res = await fetch(`/api${path}`, { ...options, headers });
-    if (res.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/auth/login";
-      return null;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `HTTP ${res.status}`);
-    }
-    return res;
-  } catch (err) {
-    console.error("[api]", err);
-    throw err;
-  }
-}
+import React, { useState } from "react";
+import { useApi, useMutate } from "@/hooks/useApi";
+import { useLembaga } from "@/contexts/LembagaContext";
 
 function formatRupiah(num) {
   return new Intl.NumberFormat("id-ID", {
@@ -84,38 +63,35 @@ function Modal({ title, onClose, children }) {
 }
 
 export default function MasterBiaya() {
-  const [grouped, setGrouped] = useState([]);
-  const [jenisFaskesOptions, setJenisFaskesOptions] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [form, setForm] = useState(EMPTY);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState(null);
+  // Increment this after a successful create so the query re-fetches fresh data
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [biayaRes, jfRes] = await Promise.all([
-        api("/master/biaya/by-jenis"),
-        api("/master/biaya/jenis-faskes"),
-      ]);
-      const biayaData = await biayaRes.json();
-      const jfData = await jfRes.json();
-      setGrouped(biayaData.data || []);
-      setJenisFaskesOptions(jfData.data || []);
-      if (biayaData.data?.length > 0 && !activeTab) {
-        setActiveTab(biayaData.data[0].jenis_faskes.id);
-      }
-    } catch (err) {
-      console.error("[MasterBiaya]", err);
-    } finally {
-      setLoading(false);
+  const { data: biayaData, isLoading: biayaLoading } = useApi(
+    ["master-biaya", refreshKey],
+    "/master/biaya/by-jenis"
+  );
+  const { data: jfData, isLoading: jfLoading } = useApi("jenis-faskes-options", "/master/biaya/jenis-faskes");
+  const { lembagaId: activeLembagaId, lembagaName: activeLembagaName } = useLembaga();
+
+  const mutateCrud = useMutate({
+    onSuccess: () => { setRefreshKey(k => k + 1); },
+  });
+
+  const grouped = biayaData?.data || [];
+  const jenisFaskesOptions = jfData?.data || [];
+  const selectedJenis = jenisFaskesOptions.find(j => j.id === form.jenis_faskes_id) || null;
+
+  // Initialize activeTab from first grouped item
+  React.useEffect(() => {
+    if (grouped.length > 0 && !activeTab) {
+      setActiveTab(grouped[0].jenis_faskes.id);
     }
-  }, [activeTab]);
-
-  useEffect(() => { load(); }, [load]);
+  }, [grouped, activeTab]);
 
   const activeGroup = grouped.find(g => g.jenis_faskes.id === activeTab);
   const biayaList = activeGroup?.biaya || [];
@@ -146,33 +122,29 @@ export default function MasterBiaya() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    setSaving(true);
     try {
-      const body = JSON.stringify({
+      const body = {
         ...form,
         jumlah: parseFloat(form.jumlah),
+      };
+      await mutateCrud.mutateAsync({
+        path: editTarget ? `/master/biaya/${editTarget.id}` : "/master/biaya",
+        method: editTarget ? "PUT" : "POST",
+        body,
       });
-      const res = editTarget
-        ? await api(`/master/biaya/${editTarget.id}`, { method: "PUT", body })
-        : await api("/master/biaya", { method: "POST", body });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menyimpan.");
       setShowModal(false);
-      load();
     } catch (err) {
       setError(err.message);
-    } finally {
-      setSaving(false);
     }
   }
 
   async function handleDelete(item) {
     if (!confirm(`Hapus biaya "${item.nama_biaya}" untuk ${item.jenis_faskes?.nama || ""}?`)) return;
     try {
-      const res = await api(`/master/biaya/${item.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menghapus.");
-      load();
+      await mutateCrud.mutateAsync({
+        path: `/master/biaya/${item.id}`,
+        method: "DELETE",
+      });
     } catch (err) {
       alert(err.message);
     }
@@ -183,8 +155,20 @@ export default function MasterBiaya() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px" }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Master Biaya per Jenis Faskes</h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
+            <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Master Biaya per Jenis Faskes</h1>
+            {activeLembagaName && (
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: "4px",
+                padding: "2px 10px", borderRadius: "9999px",
+                fontSize: "11px", fontWeight: "600",
+                background: "#E0F2FE", color: "#075985",
+              }}>
+                Lembaga: {activeLembagaName}
+              </span>
+            )}
+          </div>
+          <p style={{ margin: 0, fontSize: "13px", color: "#64748B" }}>
             {grouped.length} jenis faskes, {grouped.reduce((s, g) => s + g.biaya.length, 0)} komponen biaya
           </p>
         </div>
@@ -196,41 +180,55 @@ export default function MasterBiaya() {
         </button>
       </div>
 
-      {loading ? (
+      {biayaLoading || jfLoading ? (
         <div style={{ textAlign: "center", padding: "48px", color: "#94A3B8" }}>Memuat...</div>
       ) : (
         <>
           {/* Tab bar */}
           <div style={{ display: "flex", gap: "4px", marginBottom: "20px", flexWrap: "wrap", borderBottom: "1px solid #E2E8F0", paddingBottom: "0" }}>
-            {grouped.map(g => (
-              <button
-                key={g.jenis_faskes.id}
-                onClick={() => setActiveTab(g.jenis_faskes.id)}
-                style={{
-                  padding: "8px 16px",
-                  border: "none",
-                  borderBottom: activeTab === g.jenis_faskes.id ? "2px solid #4CAF50" : "2px solid transparent",
-                  background: "none",
-                  cursor: "pointer",
-                  fontSize: "13px",
-                  fontWeight: activeTab === g.jenis_faskes.id ? "600" : "400",
-                  color: activeTab === g.jenis_faskes.id ? "#4CAF50" : "#64748B",
-                  marginBottom: "-1px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                }}
-              >
-                <span style={{
-                  display: "inline-block", padding: "1px 6px",
-                  borderRadius: "10px", fontSize: "11px", fontWeight: "600",
-                  background: "rgba(76,175,80,0.1)", color: "#4CAF50",
-                }}>
-                  {g.biaya.length}
-                </span>
-                {g.jenis_faskes.kode} — {g.jenis_faskes.nama}
-              </button>
-            ))}
+            {grouped.map(g => {
+              const lembagaName = g.jenis_faskes.lembaga?.nama;
+              const showLembaga = !!lembagaName && (!activeLembagaId || g.jenis_faskes.lembaga_id !== activeLembagaId);
+              return (
+                <button
+                  key={g.jenis_faskes.id}
+                  onClick={() => setActiveTab(g.jenis_faskes.id)}
+                  style={{
+                    padding: "8px 16px",
+                    border: "none",
+                    borderBottom: activeTab === g.jenis_faskes.id ? "2px solid #4CAF50" : "2px solid transparent",
+                    background: "none",
+                    cursor: "pointer",
+                    fontSize: "13px",
+                    fontWeight: activeTab === g.jenis_faskes.id ? "600" : "400",
+                    color: activeTab === g.jenis_faskes.id ? "#4CAF50" : "#64748B",
+                    marginBottom: "-1px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <span style={{
+                    display: "inline-block", padding: "1px 6px",
+                    borderRadius: "10px", fontSize: "11px", fontWeight: "600",
+                    background: "rgba(76,175,80,0.1)", color: "#4CAF50",
+                  }}>
+                    {g.biaya.length}
+                  </span>
+                  {g.jenis_faskes.kode} — {g.jenis_faskes.nama}
+                  {showLembaga && (
+                    <span style={{
+                      display: "inline-block", padding: "1px 6px",
+                      borderRadius: "4px", fontSize: "10px", fontWeight: "500",
+                      background: "#F1F5F9", color: "#475569",
+                      marginLeft: "4px",
+                    }}>
+                      {lembagaName}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* Active group summary */}
@@ -350,10 +348,20 @@ export default function MasterBiaya() {
                   required
                 >
                   <option value="">— Pilih Jenis Faskes —</option>
-                  {jenisFaskesOptions.map(jf => (
-                    <option key={jf.id} value={jf.id}>{jf.kode} — {jf.nama}</option>
-                  ))}
+                  {jenisFaskesOptions.map(jf => {
+                    const showLembaga = jf.lembaga?.nama && (!activeLembagaId || jf.lembaga_id !== activeLembagaId);
+                    return (
+                      <option key={jf.id} value={jf.id}>
+                        {jf.kode} — {jf.nama}{showLembaga ? ` (${jf.lembaga.nama})` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
+                {selectedJenis?.lembaga?.nama && (
+                  <div style={{ fontSize: "11px", color: "#64748B", marginTop: "4px" }}>
+                    Lembaga otomatis terikat: <strong>{selectedJenis.lembaga.nama}</strong> (mengikuti pemilik jenis faskes).
+                  </div>
+                )}
               </div>
             )}
 
@@ -415,8 +423,8 @@ export default function MasterBiaya() {
 
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "20px", borderTop: "1px solid #F1F5F9", paddingTop: "20px" }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>
-                {saving ? "Menyimpan..." : editTarget ? "Simpan" : "Tambah"}
+              <button type="submit" className="btn btn-primary" disabled={mutateCrud.isPending}>
+                {mutateCrud.isPending ? "Menyimpan..." : editTarget ? "Simpan" : "Tambah"}
               </button>
             </div>
           </form>

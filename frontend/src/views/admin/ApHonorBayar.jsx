@@ -1,26 +1,7 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const e = new Error(body.message || `API error: ${res.status}`);
-    e.status = res.status;
-    e.body = body;
-    throw e;
-  }
-  return body;
-}
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -42,59 +23,58 @@ export default function ApHonorBayar() {
   const location = useLocation();
   const idsParam = getQueryParam(location.search, "ids") || "";
 
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  // Fetch outstanding entries — all entries, then filter client-side by selected ids
+  const { data: allEntriesData, isLoading, error: fetchError } = useApi(
+    ["ap-honor-outstanding", idsParam],
+    "/keuangan/ap-honor/outstanding",
+    { enabled: !!idsParam }
+  );
+
+  // Filter to selected ids from URL param
+  const data = (() => {
+    if (!allEntriesData?.data?.entries) return null;
+    const allEntries = allEntriesData.data.entries;
+    const ids = new Set(idsParam.split(",").filter(Boolean));
+    const selected = allEntries.filter(e => ids.has(e.id));
+    if (selected.length === 0) return null;
+    return { entries: selected };
+  })();
+
+  // Auto-fill bank info from single recipient
+  const [bankPengirim, setBankPengirim] = useState("");
+  const [nomorRekening, setNomorRekening] = useState("");
+  const [atasNama, setAtasNama] = useState("");
+
+  // Auto-fill bank info when data first becomes available (single recipient)
+  useMemo(() => {
+    if (!data) return;
+    const uniquePenerima = {};
+    for (const e of data.entries) {
+      const taId = e.penerima?.tenaga_ahli_id;
+      if (taId && !uniquePenerima[taId]) {
+        uniquePenerima[taId] = e.penerima;
+      }
+    }
+    const penerimaList = Object.values(uniquePenerima);
+    if (penerimaList.length === 1) {
+      const p = penerimaList[0];
+      if (p?.nama_bank) setBankPengirim(p.nama_bank);
+      if (p?.no_rekening) setNomorRekening(p.no_rekening);
+      if (p?.atas_nama_rekening) setAtasNama(p.atas_nama_rekening);
+    }
+  }, [data]);
 
   // Payment form state
   const [tanggal, setTanggal] = useState(() => new Date().toISOString().slice(0, 10));
   const [metode, setMetode] = useState("transfer_bank");
-  const [bankPengirim, setBankPengirim] = useState("");
-  const [nomorRekening, setNomorRekening] = useState("");
-  const [atasNama, setAtasNama] = useState("");
   const [catatan, setCatatan] = useState("");
   const [buktiFile, setBuktiFile] = useState(null);
 
-  useEffect(() => {
-    if (!idsParam) {
-      setError("Tidak ada honor yang dipilih. Kembali ke daftar honor.");
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    api("/keuangan/ap-honor/outstanding")
-      .then(d => {
-        const allEntries = d?.data?.entries || [];
-        const ids = new Set(idsParam.split(",").filter(Boolean));
-        const selected = allEntries.filter(e => ids.has(e.id));
-        if (selected.length === 0) {
-          setError("Honor yang dipilih tidak ditemukan atau sudah dibayar. Kembali ke daftar.");
-        } else {
-          setData({ entries: selected });
-          // Auto-fill bank info dari penerima (jika hanya 1 penerima)
-          const uniquePenerima = {};
-          for (const e of selected) {
-            const taId = e.penerima?.tenaga_ahli_id;
-            if (taId && !uniquePenerima[taId]) {
-              uniquePenerima[taId] = e.penerima;
-            }
-          }
-          const penerimaList = Object.values(uniquePenerima);
-          if (penerimaList.length === 1) {
-            const p = penerimaList[0];
-            if (p?.nama_bank) setBankPengirim(p.nama_bank);
-            if (p?.no_rekening) setNomorRekening(p.no_rekening);
-            if (p?.atas_nama_rekening) setAtasNama(p.atas_nama_rekening);
-          }
-        }
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
-  }, [idsParam]);
+  // Effective error from either URL param check or fetch
+  const effectiveError = error || (!idsParam ? "Tidak ada honor yang dipilih. Kembali ke daftar honor." : "") || (fetchError ? fetchError.message : (!fetchError && data === null && !isLoading ? "Honor yang dipilih tidak ditemukan atau sudah dibayar. Kembali ke daftar." : ""));
 
   const total = useMemo(() => {
     if (!data) return 0;
@@ -119,6 +99,8 @@ export default function ApHonorBayar() {
     return Object.values(groups);
   }, [data]);
 
+  const mutate = useMutateKeys(["ap-honor-outstanding"]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (submitting) return;
@@ -137,10 +119,7 @@ export default function ApHonorBayar() {
       data.entries.forEach(e => fd.append("ledger_entry_ids[]", e.id));
       if (buktiFile) fd.append("bukti_transfer", buktiFile);
 
-      const res = await api("/keuangan/ap-honor/payments", {
-        method: "POST",
-        body: fd,
-      });
+      const res = await mutate.mutateAsync({ path: "/keuangan/ap-honor/payments", method: "POST", body: fd });
       const paymentId = res?.data?.id;
       if (paymentId) {
         history.push(`/admin/ap-honor/payment/${paymentId}`);
@@ -153,13 +132,13 @@ export default function ApHonorBayar() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat data honor...</div>;
   }
-  if (error && !data) {
+  if (effectiveError && !data) {
     return (
       <div style={{ padding: "40px", textAlign: "center" }}>
-        <div style={{ color: "#DC2626", fontSize: "13px", marginBottom: "16px" }}>{error}</div>
+        <div style={{ color: "#DC2626", fontSize: "13px", marginBottom: "16px" }}>{effectiveError}</div>
         <button className="btn btn-primary" onClick={() => history.push("/admin/ap-honor/list")}>
           ← Kembali ke daftar honor
         </button>

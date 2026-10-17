@@ -1,27 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  try {
-    const res = await fetch(`/api${path}`, { ...options, headers });
-    if (res.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/auth/login";
-      return null;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `HTTP ${res.status}`);
-    }
-    return res;
-  } catch (err) {
-    console.error("[api]", err);
-    throw err;
-  }
-}
+import React, { useState, useMemo } from "react";
+import { useApi, useMutate } from "@/hooks/useApi";
 
 function PasswordField({ value, onChange, label, placeholder = "••••••••" }) {
   const [show, setShow] = useState(false);
@@ -157,9 +135,6 @@ const TABS = [
 ];
 
 export default function PengaturanWhatsApp() {
-  const [settings, setSettings] = useState([]);
-  const [grouped, setGrouped] = useState({});
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [activeTab, setActiveTab] = useState("umum");
@@ -173,28 +148,19 @@ export default function PengaturanWhatsApp() {
   const [sendingTest, setSendingTest] = useState(false);
   const [testSendResult, setTestSendResult] = useState(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api("/whatsapp-settings");
-      if (!res) { setLoading(false); return; }
-      const json = await res.json();
-      const all = Array.isArray(json) ? json : (json.data || []);
-      setSettings(all);
-      const grp = {};
-      all.forEach(s => {
-        if (!grp[s.kategori]) grp[s.kategori] = {};
-        grp[s.kategori][s.kunci] = s;
-      });
-      setGrouped(grp);
-    } catch (err) {
-      showToast("Gagal memuat pengaturan: " + err.message, "error");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data, isLoading } = useApi("wa-settings", "/whatsapp-settings");
+  const mutateSave = useMutate({});
 
-  useEffect(() => { load(); }, [load]);
+  const settings = data?.data || [];
+
+  const grouped = useMemo(() => {
+    const grp = {};
+    settings.forEach(s => {
+      if (!grp[s.kategori]) grp[s.kategori] = {};
+      grp[s.kategori][s.kunci] = s;
+    });
+    return grp;
+  }, [settings]);
 
   const getVal = (kat, kunci) => {
     const key = `${kat}:${kunci}`;
@@ -222,16 +188,14 @@ export default function PengaturanWhatsApp() {
         setSaving(false);
         return;
       }
-      const res = await api("/whatsapp-settings", {
+      await mutateSave.mutateAsync({
+        path: "/whatsapp-settings",
         method: "PUT",
-        body: JSON.stringify({ values: payload }),
+        body: { values: payload },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
       setTempValues({});
       setDirty({});
-      await load();
-      showToast(data.message || "Berhasil disimpan.", "success");
+      showToast("Berhasil disimpan.", "success");
     } catch (err) {
       showToast(err.message || "Gagal menyimpan.", "error");
     } finally {
@@ -243,11 +207,12 @@ export default function PengaturanWhatsApp() {
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await api("/whatsapp-settings/test-connection", {
+      const { api } = await import("@/lib/api");
+      // api() sudah parse JSON & throw on non-ok — langsung dapat response body
+      const data = await api("/whatsapp-settings/test-connection", {
         method: "POST",
         body: JSON.stringify({}),
       });
-      const data = await res.json();
       setTestResult(data);
       showToast(data.message, data.success ? "success" : "error");
     } catch (err) {
@@ -268,11 +233,12 @@ export default function PengaturanWhatsApp() {
     setSendingTest(true);
     setTestSendResult(null);
     try {
-      const res = await api("/whatsapp-settings/test-send", {
+      const { api } = await import("@/lib/api");
+      // api() sudah parse JSON & throw on non-ok — langsung dapat response body
+      const data = await api("/whatsapp-settings/test-send", {
         method: "POST",
         body: JSON.stringify({ phone, message }),
       });
-      const data = await res.json();
       setTestSendResult(data);
       showToast(data.message, data.success ? "success" : "error");
     } catch (err) {
@@ -394,7 +360,7 @@ export default function PengaturanWhatsApp() {
     ));
   };
 
-  if (loading) return <LoadingSpinner />;
+  if (isLoading) return <LoadingSpinner />;
 
   const webhookUrl = getVal("whatsapp_cloud", "webhook_url") || "/api/webhooks/whatsapp";
 

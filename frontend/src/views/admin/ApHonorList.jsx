@@ -1,26 +1,7 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useHistory } from "react-router-dom";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const errBody = await res.json().catch(() => ({}));
-    const e = new Error(errBody.message || `API error: ${res.status}`);
-    e.status = res.status;
-    e.body = errBody;
-    throw e;
-  }
-  return res;
-}
+import { useApi } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -34,10 +15,6 @@ const PERAN_LABEL = {
 
 export default function ApHonorList() {
   const history = useHistory();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
   const [filterPeran, setFilterPeran] = useState("");
   const [filterPenerima, setFilterPenerima] = useState("");
   const [filterBulan, setFilterBulan] = useState("");
@@ -46,38 +23,24 @@ export default function ApHonorList() {
   // Selected entries (by ledger entry id)
   const [selectedIds, setSelectedIds] = useState(new Set());
 
-  const loadData = (peran, penerima) => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (peran) params.set("peran", peran);
-    if (penerima) params.set("penerima_id", penerima);
-    if (filterBulan) {
-      const [tahun, bulan] = filterBulan.split("-");
-      params.set("tahun", tahun);
-      params.set("bulan", bulan);
-    }
-    const qs = params.toString();
-    api(`/keuangan/ap-honor/outstanding${qs ? "?" + qs : ""}`)
-      .then(r => r?.json())
-      .then(d => {
-        setData(d?.data || null);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
-  };
+  const params = new URLSearchParams();
+  if (filterPeran) params.set("peran", filterPeran);
+  if (filterPenerima) params.set("penerima_id", filterPenerima);
+  if (filterBulan) {
+    const [tahun, bulan] = filterBulan.split("-");
+    params.set("tahun", tahun);
+    params.set("bulan", bulan);
+  }
+  const qs = params.toString();
 
-  useEffect(() => {
-    loadData(filterPeran, filterPenerima);
-    setSelectedIds(new Set());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterPeran, filterPenerima, filterBulan]);
+  const { data, isLoading, error } = useApi(
+    ["ap-honor-outstanding", filterPeran, filterPenerima, filterBulan],
+    `/keuangan/ap-honor/outstanding${qs ? "?" + qs : ""}`
+  );
 
   const filteredEntries = useMemo(() => {
-    if (!data?.entries) return [];
-    let list = data.entries;
+    if (!data?.data?.entries) return [];
+    let list = data.data.entries;
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(e =>
@@ -116,15 +79,15 @@ export default function ApHonorList() {
     history.push(`/admin/ap-honor/bayar?ids=${ids}`);
   };
 
-  if (loading && !data) {
+  if (isLoading && !data) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat data honor outstanding...</div>;
   }
   if (error) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#DC2626", fontSize: "13px" }}>{error}</div>;
+    return <div style={{ padding: "40px", textAlign: "center", color: "#DC2626", fontSize: "13px" }}>{error.message}</div>;
   }
   if (!data) return null;
 
-  const { ringkasan, per_penerima } = data;
+  const { ringkasan, per_penerima } = data.data;
   const allChecked = filteredEntries.length > 0 && selectedIds.size === filteredEntries.length;
   const selectedTotal = selectedEntries.reduce((s, e) => s + (e.nominal_neto || 0), 0);
 

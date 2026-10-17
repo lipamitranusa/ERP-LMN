@@ -1,25 +1,7 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
 import { useHistory } from "react-router-dom";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    console.error(`[SiklusList] HTTP ${res.status}:`, body);
-    throw new Error(body.message || `HTTP ${res.status}`);
-  }
-  return res;
-}
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 function StatusBadge({ status }) {
   const map = {
@@ -46,48 +28,31 @@ function StatusBadge({ status }) {
 
 function SiklusList() {
   const history = useHistory();
-  const [siklus, setSiklus] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [lembaga, setLembaga] = useState([]);
   const [formData, setFormData] = useState({ lembaga_id: "", tanggal_permohonan_survei: "" });
   const [search, setSearch] = useState("");
 
-  const load = useCallback(() => {
-    api("/pendaftaran/siklus").then(r => r?.json()).then(d => {
-      console.debug("[SiklusList] API response:", d);
-      if (d?.data) setSiklus(d.data);
-      else if (d?.message) console.warn("[SiklusList] API error:", d.message);
-      setLoading(false);
-    }).catch(err => {
-      console.error("[SiklusList] Fetch error:", err);
-      setLoading(false);
-    });
+  // React Query auto-caches, dedupes, and refetches on window focus
+  const { data: siklusData, isLoading } = useApi(
+    ["siklus", search],
+    `/pendaftaran/siklus?q=${encodeURIComponent(search)}`
+  );
+  const { data: lembagaData } = useApi("lembaga", "/pendaftaran/lembaga");
 
-    api("/pendaftaran/lembaga").then(r => r?.json()).then(d => {
-      if (d?.data) setLembaga(d.data);
-    }).catch(() => {});
-  }, []);
+  const siklus = siklusData?.data ?? [];
+  const lembaga = lembagaData?.data ?? [];
 
-  useEffect(() => {
-    load();
-    const onFocus = () => load();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [load]);
+  const mutate = useMutateKeys([["siklus"], ["lembaga"]]);
 
   async function handleCreate(e) {
     e.preventDefault();
     try {
-      const res = await api("/pendaftaran/siklus", {
+      await mutate.mutateAsync({
+        path: "/pendaftaran/siklus",
         method: "POST",
-        body: JSON.stringify(formData),
+        body: formData,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
       setShowForm(false);
-      const updated = await api("/pendaftaran/siklus").then(r => r.json());
-      setSiklus(updated.data || []);
     } catch (err) {
       alert(err.message);
     }
@@ -159,7 +124,7 @@ function SiklusList() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {isLoading ? (
                 <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>Memuat...</td></tr>
               ) : filtered.length === 0 ? (
                 <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>

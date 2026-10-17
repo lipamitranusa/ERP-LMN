@@ -1,15 +1,5 @@
-import React, { useState, useEffect } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) { localStorage.removeItem("token"); window.location.href = "/auth/login"; return null; }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.message || `API error: ${res.status}`);
-  return body;
-}
+import React, { useState } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -109,10 +99,6 @@ function JournalRow({ row, index, coaOptions, onChange, onRemove, errors }) {
 }
 
 export default function AccountingJurnal() {
-  const [jurnals, setJurnals] = useState([]);
-  const [coaOptions, setCoaOptions] = useState([]);
-  const [kategoriOptions, setKategoriOptions] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
   const [filter, setFilter] = useState({ tahun: new Date().getFullYear(), bulan: "" });
@@ -120,20 +106,23 @@ export default function AccountingJurnal() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
-  const load = async () => {
-    setLoading(true);
-    const [jData, cData, kData] = await Promise.all([
-      api(`/keuangan/accounting/jurnal?tahun=${filter.tahun}${filter.bulan ? "&bulan=" + filter.bulan : ""}`),
-      api("/keuangan/accounting/coa"),
-      api("/keuangan/accounting/kategori"),
-    ]);
-    setJurnals(jData?.data || []);
-    setCoaOptions(cData?.data || []);
-    setKategoriOptions(kData?.data || []);
-    setLoading(false);
-  };
-  useEffect(() => { load(); }, [filter]);
+  const qs = `/keuangan/accounting/jurnal?tahun=${filter.tahun}${filter.bulan ? "&bulan=" + filter.bulan : ""}`;
+  const { data: jurnalData, isLoading: loading } = useApi(["jurnal", filter.tahun, filter.bulan], qs);
+  const jurnals = jurnalData?.data || [];
 
+  const { data: coaData } = useApi("coa-options", "/keuangan/accounting/coa");
+  const coaOptions = coaData?.data || [];
+
+  const { data: kategoriData } = useApi("kategori-options", "/keuangan/accounting/kategori");
+  const kategoriOptions = kategoriData?.data || [];
+
+  const submitMutation = useMutateKeys(["jurnal", filter.tahun, filter.bulan], {
+    onSuccess: () => setShowForm(false),
+    onError: (err) => { setFormError(err.message); setSaving(false); },
+  });
+  const deleteMutation = useMutateKeys(["jurnal", filter.tahun, filter.bulan], {
+    onError: (err) => alert(err.message),
+  });
   const totalDebit = () => form.details.reduce((s, r) => s + (parseFloat(r.debit) || 0), 0);
   const totalKredit = () => form.details.reduce((s, r) => s + (parseFloat(r.kredit) || 0), 0);
   const isBalanced = () => Math.abs(totalDebit() - totalKredit()) < 0.01;
@@ -164,39 +153,22 @@ export default function AccountingJurnal() {
     if (!isBalanced()) { setFormError("Total Debit harus sama dengan Total Kredit."); return; }
 
     setSaving(true);
-    try {
-      const fd = new FormData();
-      fd.append("tanggal", form.tanggal);
-      fd.append("kategori_id", form.kategori_id);
-      fd.append("keterangan", form.keterangan);
-      rows.forEach((r, i) => {
-        fd.append(`details[${i}][coa_id]`, r.coa_id);
-        fd.append(`details[${i}][debit]`, r.debit || "0");
-        fd.append(`details[${i}][kredit]`, r.kredit || "0");
-        fd.append(`details[${i}][keterangan]`, r.keterangan || "");
-      });
-
-      const res = await fetch("/api/keuangan/accounting/jurnal", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        body: fd,
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.message || "Gagal menyimpan");
-      setShowForm(false);
-      load();
-    } catch (err) {
-      setFormError(err.message);
-      setSaving(false);
-    }
+    const fd = new FormData();
+    fd.append("tanggal", form.tanggal);
+    fd.append("kategori_id", form.kategori_id);
+    fd.append("keterangan", form.keterangan);
+    rows.forEach((r, i) => {
+      fd.append(`details[${i}][coa_id]`, r.coa_id);
+      fd.append(`details[${i}][debit]`, r.debit || "0");
+      fd.append(`details[${i}][kredit]`, r.kredit || "0");
+      fd.append(`details[${i}][keterangan]`, r.keterangan || "");
+    });
+    submitMutation.mutate({ path: "/keuangan/accounting/jurnal", method: "POST", body: fd });
   };
 
   const handleDelete = async (j) => {
     if (!window.confirm(`Hapus jurnal ${j.nomor}?`)) return;
-    try {
-      await api(`/keuangan/accounting/jurnal/${j.id}`, { method: "DELETE" });
-      load();
-    } catch (err) { alert(err.message); }
+    deleteMutation.mutate({ path: `/keuangan/accounting/jurnal/${j.id}`, method: "DELETE" });
   };
 
   const BULAN = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];

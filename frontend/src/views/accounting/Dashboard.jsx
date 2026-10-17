@@ -1,39 +1,18 @@
-import React, { useState, useEffect } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.message || `API error: ${res.status}`);
-  return body;
-}
+import React from "react";
+import { useApi } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
 }
 
 export default function AccountingDashboard() {
-  const [dash, setDash] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api("/keuangan/accounting/dashboard")
-      .then(d => { setDash(d?.data || null); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
-
-  if (loading) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat dasbor akuntansi...</div>;
-  }
+  const { data: dash } = useApi("accounting-dashboard", "/keuangan/accounting/dashboard");
 
   const b = dash?.bulan_ini || {};
+
+  if (!dash) {
+    return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat dasbor akuntansi...</div>;
+  }
 
   return (
     <div>

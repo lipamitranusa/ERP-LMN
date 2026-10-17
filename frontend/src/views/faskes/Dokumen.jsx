@@ -1,24 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { useHistory } from "react-router-dom";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {};
-  if (!(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `HTTP ${res.status}`);
-  }
-  return res;
-}
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 // Jenis dokumen yang wajib diunggah Faskes
 const JENIS_DOKUMEN = [
@@ -404,22 +387,13 @@ function RevisiModal({ jenisDok, currentVersion, onConfirm, onCancel, loading })
 
 // ── Modal: Riwayat Versi ──────────────────────────────────────────────────────
 function RiwayatModal({ dokumenId, jenisLabel, onClose }) {
-  const [versions, setVersions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { data: versionsData, isLoading: loading, error } = useApi(
+    ["dokumen-versi", dokumenId],
+    `/pendaftaran/dokumen/${dokumenId}/versions`,
+    { enabled: !!dokumenId }
+  );
 
-  useEffect(() => {
-    api(`/pendaftaran/dokumen/${dokumenId}/versions`)
-      .then(r => r?.json())
-      .then(d => {
-        if (d?.data) setVersions(d.data);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("Gagal memuat riwayat versi.");
-        setLoading(false);
-      });
-  }, [dokumenId]);
+  const versions = versionsData?.data || [];
 
   return (
     <Modal title={`Riwayat Versi — ${jenisLabel}`} onClose={onClose} maxWidth="600px">
@@ -433,7 +407,7 @@ function RiwayatModal({ dokumenId, jenisLabel, onClose }) {
         </div>
       ) : error ? (
         <div style={{ textAlign: "center", padding: "24px", color: "#DC2626", fontSize: "13px" }}>
-          {error}
+          {error.message}
         </div>
       ) : versions.length === 0 ? (
         <div style={{ textAlign: "center", padding: "24px", color: "#94A3B8", fontSize: "13px" }}>
@@ -741,13 +715,12 @@ function ProgressHeader({ uploaded, total }) {
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function FaskesDokumen() {
   const history = useHistory();
+  const [refreshKey, setRefreshKey] = useState(0);
   const [siklus, setSiklus] = useState(null);
   const [dokumenMap, setDokumenMap] = useState({});
   const [catatan, setCatatan] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [uploadingFor, setUploadingFor] = useState(null);
   const [uploadError, setUploadError] = useState({});
-  const [refreshKey, setRefreshKey] = useState(0);
 
   // Revisi modal state
   const [revisiModal, setRevisiModal] = useState(null); // { currentDok, pendingFile }
@@ -759,67 +732,75 @@ export default function FaskesDokumen() {
   const totalWajib = wajibList.length;
   const uploadedWajib = wajibList.filter(d => dokumenMap[d.key]).length;
 
-  const load = useCallback(() => {
-    api("/pendaftaran/siklus?per_page=1")
-      .then(r => r?.json())
-      .then(d => {
-        const list = d?.data || [];
-        if (!list[0]) {
-          setSiklus(null);
-          setLoading(false);
-          return;
-        }
-        const sik = list[0];
-        setSiklus(sik);
+  // First: fetch siklus list to get active siklus id
+  const { data: siklusListData, isLoading: siklusListLoading } = useApi(
+    ["siklus-list", refreshKey],
+    "/pendaftaran/siklus?per_page=1"
+  );
 
-        return api(`/pendaftaran/siklus/${sik.id}`);
-      })
-      .then(r => r?.json())
-      .then(d => {
-        if (d?.data) {
-          const docs = d.data.dokumen || [];
-          const docMap = {};
-          docs.forEach(doc => {
-            const key = doc.jenis_dokumen;
-            if (!docMap[key] || doc.versi > docMap[key].versi) {
-              docMap[key] = doc;
-            }
-          });
-          setDokumenMap(docMap);
-          setCatatan(d.data.catatan_revisi || []);
-        }
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [refreshKey]);
+  const siklusId = siklusListData?.data?.[0]?.id || null;
 
-  useEffect(() => { load(); }, [load]);
+  // Second: fetch siklus detail
+  const { data: siklusDetailData, isLoading: siklusDetailLoading } = useApi(
+    ["siklus-detail", siklusId, refreshKey],
+    siklusId ? `/pendaftaran/siklus/${siklusId}` : "/pendaftaran/siklus?per_page=1",
+    { enabled: true }
+  );
+
+  const loading = siklusListLoading || siklusDetailLoading;
+
+  // Sync siklus detail into local state
+  React.useEffect(() => {
+    if (!siklusDetailData?.data) {
+      if (!siklusListLoading && !siklusId) {
+        setSiklus(null);
+        setDokumenMap({});
+        setCatatan([]);
+      }
+      return;
+    }
+    const s = siklusListData?.data?.[0];
+    if (s) setSiklus(s);
+    const docs = siklusDetailData.data.dokumen || [];
+    const docMap = {};
+    docs.forEach(doc => {
+      const key = doc.jenis_dokumen;
+      if (!docMap[key] || doc.versi > docMap[key].versi) {
+        docMap[key] = doc;
+      }
+    });
+    setDokumenMap(docMap);
+    setCatatan(siklusDetailData.data.catatan_revisi || []);
+  }, [siklusDetailData, siklusListData, siklusId, siklusListLoading]);
 
   // Initial upload (no existing document)
-  async function handleUpload(jenis, file) {
+  const uploadMutation = useMutateKeys(["siklus-detail", siklusId], {
+    onSuccess: (data) => {
+      setRefreshKey(k => k + 1);
+      if (data?.status_kelengkapan === "lengkap") {
+        setSiklus(s => s ? { ...s, status_kelengkapan: "lengkap" } : s);
+      }
+    },
+    onError: (err) => {
+      setUploadError(prev => ({ ...prev, [uploadMutation._uploadJenis]: err.message }));
+    },
+  });
+
+  function handleUpload(jenis, file) {
     if (!siklus) return;
     setUploadingFor(jenis);
     setUploadError(prev => ({ ...prev, [jenis]: null }));
+    uploadMutation._uploadJenis = jenis;
     const fd = new FormData();
     fd.append("jenis_dokumen", jenis);
     fd.append("file", file);
-    try {
-      const res = await api(`/pendaftaran/siklus/${siklus.id}/dokumen`, {
-        method: "POST",
-        body: fd,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal unggah.");
-      setRefreshKey(k => k + 1);
-      // Jika backend auto-update status_kelengkapan, refresh siklus agar Dashboard juga update
-      if (data.status_kelengkapan === "lengkap") {
-        setSiklus(s => s ? { ...s, status_kelengkapan: "lengkap" } : s);
-      }
-    } catch (err) {
-      setUploadError(prev => ({ ...prev, [jenis]: err.message }));
-    } finally {
-      setUploadingFor(null);
-    }
+    uploadMutation.mutate({
+      path: `/pendaftaran/siklus/${siklus.id}/dokumen`,
+      method: "POST",
+      body: fd,
+    });
+    // Reset uploading state after mutation settles
+    setTimeout(() => setUploadingFor(null), 100);
   }
 
   // Replace existing document — show alasan revisi modal
@@ -828,7 +809,22 @@ export default function FaskesDokumen() {
   }
 
   // Confirm revision with alasan
-  async function handleRevisiConfirm(alasan, file) {
+  const revisiMutation = useMutateKeys(["siklus-detail", siklusId], {
+    onSuccess: (data) => {
+      setRevisiModal(null);
+      setRefreshKey(k => k + 1);
+      if (data?.status_kelengkapan === "lengkap") {
+        setSiklus(s => s ? { ...s, status_kelengkapan: "lengkap" } : s);
+      }
+    },
+    onError: (err) => {
+      if (revisiModal) {
+        setUploadError(prev => ({ ...prev, [revisiModal.currentDok.jenis_dokumen]: err.message }));
+      }
+    },
+  });
+
+  function handleRevisiConfirm(alasan, file) {
     if (!siklus || !revisiModal) return;
     const currentDok = revisiModal.currentDok;
     setUploadingFor(currentDok.jenis_dokumen);
@@ -839,23 +835,12 @@ export default function FaskesDokumen() {
     fd.append("file", file);
     fd.append("alasan_revisi", alasan);
 
-    try {
-      const res = await api(`/pendaftaran/siklus/${siklus.id}/dokumen`, {
-        method: "POST",
-        body: fd,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal unggah.");
-      setRevisiModal(null);
-      setRefreshKey(k => k + 1);
-      if (data.status_kelengkapan === "lengkap") {
-        setSiklus(s => s ? { ...s, status_kelengkapan: "lengkap" } : s);
-      }
-    } catch (err) {
-      setUploadError(prev => ({ ...prev, [currentDok.jenis_dokumen]: err.message }));
-    } finally {
-      setUploadingFor(null);
-    }
+    revisiMutation.mutate({
+      path: `/pendaftaran/siklus/${siklus.id}/dokumen`,
+      method: "POST",
+      body: fd,
+    });
+    setTimeout(() => setUploadingFor(null), 100);
   }
 
   if (loading) {

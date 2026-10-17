@@ -1,18 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  return res;
-}
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n).toLocaleString("id-ID")}`;
@@ -26,50 +14,50 @@ const STATUS_MAP = {
 };
 
 export default function RefundApproval() {
-  const [refunds, setRefunds] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [catatan, setCatatan] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
-  function reload() {
-    api("/refund/pending")
-      .then(r => r?.json())
-      .then(d => {
-        setRefunds(d?.data || []);
-        setLoading(false);
-      });
-  }
+  const { data, isLoading } = useApi("refund-pending", "/refund/pending");
 
-  useEffect(() => { reload(); }, []);
+  const refunds = data?.data || [];
 
-  async function handleAction(refundId, action) {
-    setSubmitting(true);
-    let res;
-    if (action === "approve") {
-      res = await api(`/refund/${refundId}/approve`, { method: "POST", body: JSON.stringify({ catatan }) });
-    } else if (action === "reject") {
-      if (!catatan.trim()) { alert("Alasan penolakan wajib diisi."); setSubmitting(false); return; }
-      res = await api(`/refund/${refundId}/reject`, { method: "POST", body: JSON.stringify({ alasan: catatan }) });
-    } else if (action === "execute") {
-      if (!confirm("Eksekusi refund ini? Tindakan ini akan membuat Ledger Entry dan tidak dapat dibatalkan.")) {
-        setSubmitting(false);
-        return;
-      }
-      res = await api(`/refund/${refundId}/execute`, { method: "POST" });
-    }
-    if (res.ok) {
+  const actionMutation = useMutateKeys(["refund-pending"], {
+    onSuccess: () => {
       setSelected(null);
       setCatatan("");
-      reload();
-    } else {
-      const data = await res.json();
-      alert(data.message || "Gagal.");
+    },
+    onError: (err) => {
+      alert(err.message || "Gagal.");
+    },
+  });
+
+  function handleAction(refundId, action) {
+    if (action === "reject" && !catatan.trim()) {
+      alert("Alasan penolakan wajib diisi.");
+      return;
     }
-    setSubmitting(false);
+    if (action === "execute") {
+      if (!confirm("Eksekusi refund ini? Tindakan ini akan membuat Ledger Entry dan tidak dapat dibatalkan.")) {
+        return;
+      }
+    }
+
+    let path, body;
+    if (action === "approve") {
+      path = `/refund/${refundId}/approve`;
+      body = { catatan };
+    } else if (action === "reject") {
+      path = `/refund/${refundId}/reject`;
+      body = { alasan: catatan };
+    } else if (action === "execute") {
+      path = `/refund/${refundId}/execute`;
+      body = undefined;
+    }
+
+    actionMutation.mutate({ path, method: "POST", body });
   }
 
-  if (loading) {
+  if (isLoading) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>;
   }
 
@@ -147,12 +135,12 @@ export default function RefundApproval() {
               <button className="btn btn-secondary" onClick={() => setSelected(null)} style={{ flex: 1 }}>Batal</button>
               {selected.status === "requested" && (
                 <>
-                  <button className="btn btn-danger" onClick={() => handleAction(selected.id, "reject")} disabled={submitting}>Tolak</button>
-                  <button className="btn btn-primary" onClick={() => handleAction(selected.id, "approve")} disabled={submitting}>Setujui</button>
+                  <button className="btn btn-danger" onClick={() => handleAction(selected.id, "reject")} disabled={actionMutation.isPending}>Tolak</button>
+                  <button className="btn btn-primary" onClick={() => handleAction(selected.id, "approve")} disabled={actionMutation.isPending}>Setujui</button>
                 </>
               )}
               {selected.status === "approved" && (
-                <button className="btn btn-primary" onClick={() => handleAction(selected.id, "execute")} disabled={submitting}>Eksekusi Sekarang</button>
+                <button className="btn btn-primary" onClick={() => handleAction(selected.id, "execute")} disabled={actionMutation.isPending}>Eksekusi Sekarang</button>
               )}
             </div>
           </div>

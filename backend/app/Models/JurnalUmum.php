@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToLembaga;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class JurnalUmum extends Model
 {
-    use HasUuids;
+    use HasUuids, BelongsToLembaga;
 
     public $incrementing = false;
     protected $keyType = 'string';
@@ -26,6 +27,7 @@ class JurnalUmum extends Model
         'total_kredit',
         'path_lampiran',
         'dibuat_oleh',
+        'lembaga_id',
     ];
 
     protected $casts = [

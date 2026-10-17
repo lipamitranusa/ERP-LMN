@@ -1,22 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `HTTP ${res.status}`);
-  }
-  return res;
-}
+import React, { useState, useEffect } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 const ACTION_COLORS = {
   Lihat: { bg: "#DBEAFE", text: "#1E40AF" },
@@ -43,32 +26,23 @@ function ActionBadge({ action }) {
 }
 
 export default function Privileges() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   // Local edits: { [roleId]: { [actionId]: true|false } }
   const [edits, setEdits] = useState({});
   const [dirtyRoles, setDirtyRoles] = useState(new Set());
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setError("");
-    api("/admin/privilege-matrix")
-      .then(r => r?.json())
-      .then(d => {
-        setData(d?.data || d);
-        setEdits({});
-        setDirtyRoles(new Set());
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
-  }, []);
+  const { data, isLoading, error, refetch } = useApi("privilege-matrix", "/admin/privilege-matrix");
+  const mutate = useMutateKeys(["privilege-matrix"]);
 
-  useEffect(() => { load(); }, [load]);
+  // Reset edits when data refetches after mutation
+  useEffect(() => {
+    if (data) {
+      setEdits({});
+      setDirtyRoles(new Set());
+    }
+  }, [data]);
+
+  const errMsg = error ? error.message : "";
 
   function hasPrivilege(roleId, actionId) {
     if (edits[roleId] && Object.prototype.hasOwnProperty.call(edits[roleId], actionId)) {
@@ -99,15 +73,16 @@ export default function Privileges() {
           diizinkan: hasPrivilege(roleId, a.id),
         }));
 
-      const res = await api(`/admin/roles/${roleId}/privileges`, {
+      await mutate.mutateAsync({
+        path: `/admin/roles/${roleId}/privileges`,
         method: "PUT",
-        body: JSON.stringify({ privileges: rolePrivileges }),
+        body: { privileges: rolePrivileges },
       });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.message || "Gagal menyimpan.");
-
-      // Reload data
-      load();
+      setDirtyRoles(prev => {
+        const next = new Set(prev);
+        next.delete(roleId);
+        return next;
+      });
     } catch (err) {
       alert(err.message);
     } finally {
@@ -127,16 +102,13 @@ export default function Privileges() {
             diizinkan: hasPrivilege(roleId, a.id),
           }));
 
-        const res = await api(`/admin/roles/${roleId}/privileges`, {
+        await mutate.mutateAsync({
+          path: `/admin/roles/${roleId}/privileges`,
           method: "PUT",
-          body: JSON.stringify({ privileges: rolePrivileges }),
+          body: { privileges: rolePrivileges },
         });
-        if (!res.ok) {
-          const body = await res.json();
-          throw new Error(`Gagal menyimpan privilege untuk role tertentu: ${body.message}`);
-        }
       }
-      load();
+      setDirtyRoles(new Set());
     } catch (err) {
       alert(err.message);
     } finally {
@@ -144,14 +116,14 @@ export default function Privileges() {
     }
   }
 
-  if (loading) {
+  if (isLoading) {
     return <div style={{ textAlign: "center", color: "#94A3B8", padding: "64px 16px" }}>Memuat matriks privilege...</div>;
   }
-  if (error) {
+  if (errMsg) {
     return (
       <div style={{ textAlign: "center", padding: "64px 16px" }}>
-        <div style={{ color: "#DC2626", fontSize: "13px", marginBottom: "16px" }}>{error}</div>
-        <button className="btn btn-secondary" onClick={load}>Coba lagi</button>
+        <div style={{ color: "#DC2626", fontSize: "13px", marginBottom: "16px" }}>{errMsg}</div>
+        <button className="btn btn-secondary" onClick={() => refetch()}>Coba lagi</button>
       </div>
     );
   }

@@ -2,16 +2,18 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToLembaga;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class JenisFaskes extends Model
 {
+    use BelongsToLembaga;
     protected $table = 'jenis_faskes';
     public $incrementing = false;
     protected $keyType = 'string';
 
-    protected $fillable = ['id', 'nama', 'kode', 'deskripsi', 'status'];
+    protected $fillable = ['id', 'nama', 'kode', 'deskripsi', 'status', 'lembaga_id'];
 
     public function faskes(): HasMany
     {

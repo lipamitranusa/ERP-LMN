@@ -11,7 +11,7 @@ return new class extends Migration
     {
         if (!Schema::hasTable('jenis_faskes')) {
             Schema::create('jenis_faskes', function (Blueprint $table) {
-                $table->uuid('id')->primary();
+                $table->string('id', 30)->primary();
                 $table->string('nama', 100);
                 $table->string('kode', 30)->nullable();
                 $table->text('deskripsi')->nullable();

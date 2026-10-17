@@ -1,25 +1,7 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useHistory } from "react-router-dom";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const e = new Error(body.message || `API error: ${res.status}`);
-    e.status = res.status;
-    throw e;
-  }
-  return body;
-}
+import { useApi } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -45,48 +27,30 @@ function StatusBadge({ status }) {
 
 export default function HutangPajakList() {
   const history = useHistory();
-  const [data, setData] = useState(null);
-  const [dashboard, setDashboard] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error] = useState("");
 
   const [filterStatus, setFilterStatus] = useState("");
   const [filterBulan, setFilterBulan] = useState("");
   const [search, setSearch] = useState("");
 
-  const loadDashboard = () => {
-    api("/keuangan/hutang-pajak/dashboard")
-      .then(d => setDashboard(d?.data || null))
-      .catch(() => {});
-  };
+  const { data: dashboardData } = useApi("hutang-pajak-dashboard", "/keuangan/hutang-pajak/dashboard");
 
-  const loadData = () => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (filterStatus) params.set("status", filterStatus);
-    if (filterBulan) {
-      const [tahun, bulan] = filterBulan.split("-");
-      params.set("tahun", tahun);
-      params.set("bulan", bulan);
-    }
-    if (search.trim()) params.set("q", search);
-    const qs = params.toString();
-    api(`/keuangan/hutang-pajak${qs ? "?" + qs : ""}`)
-      .then(d => {
-        setData(d?.data || null);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
-  };
+  const params = new URLSearchParams();
+  if (filterStatus) params.set("status", filterStatus);
+  if (filterBulan) {
+    const [tahun, bulan] = filterBulan.split("-");
+    params.set("tahun", tahun);
+    params.set("bulan", bulan);
+  }
+  if (search.trim()) params.set("q", search);
+  const qs = params.toString();
+  const { data: listData, isLoading } = useApi(
+    ["hutang-pajak-list", filterStatus, filterBulan],
+    "/keuangan/hutang-pajak" + (qs ? "?" + qs : "")
+  );
 
-  useEffect(() => {
-    loadDashboard();
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterStatus, filterBulan]);
+  const dashboard = dashboardData?.data ?? null;
+  const data = listData?.data ?? null;
 
   const filteredEntries = useMemo(() => {
     if (!data?.entries) return [];
@@ -99,7 +63,7 @@ export default function HutangPajakList() {
     );
   }, [data, search]);
 
-  if (loading && !data) {
+  if (isLoading && !data) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat data hutang pajak...</div>;
   }
   if (error && !data) {
@@ -107,7 +71,6 @@ export default function HutangPajakList() {
   }
   if (!data) return null;
 
-  const { ringkasan } = data;
   const belum = filteredEntries.filter(e => e.status === "belum_dibayar");
   const sudah = filteredEntries.filter(e => e.status === "dibayar");
 

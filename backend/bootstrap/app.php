@@ -15,6 +15,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'privilege' => \App\Http\Middleware\EnsurePrivilege::class,
+            'lembaga' => \App\Http\Middleware\SetLembagaSession::class,
+        ]);
+
+        // Enable session untuk API routes (Sanctum token auth but fit for session-based scoping).
+        $middleware->api(prepend: [
+            \Illuminate\Session\Middleware\StartSession::class,
         ]);
 
         $middleware->redirectGuestsTo(fn () => response()->json([

@@ -1,46 +1,29 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { useHistory } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import SiklusStepper from "@/components/SiklusStepper";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  try {
-    const res = await fetch(`/api${path}`, { ...options, headers });
-    if (res.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/auth/login";
-      return null;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `HTTP ${res.status}`);
-    }
-    return res;
-  } catch (err) {
-    console.error("[api] Fetch error:", err);
-    throw err;
-  }
-}
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 const STAGE_LABELS = {
   1: "Pendaftaran", 2: "Validasi", 3: "Kontrak", 4: "Pembayaran",
   5: "Survei", 6: "Verifikasi", 7: "Selesai",
 };
 
-function AjukanForm({ onSuccess }) {
+function AjukanForm({ onSuccess, authData }) {
   const [lembagaList, setLembagaList] = useState([]);
   const [lembagaLoading, setLembagaLoading] = useState(true);
   const [lembagaError, setLembagaError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [lembagaLocked, setLembagaLocked] = useState(false);
 
+  // Ambil data user dari parent (sudah di-fetch sekali oleh FaskesDashboard)
   const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const faskes = user.faskes || {};
-  const tipeFaskes = faskes.jenis_faskes?.nama || faskes.tipe_faskes || "";
+  const freshUser = authData?.user || user;
+  const faskes = freshUser.faskes || {};
+  const faskesLembagaId = faskes.lembaga_id || localStorage.getItem("lembaga_id") || null;
+  // Prioritas: jenis_faskes.nama > tipe_faskes > localStorage
+  const tipeFaskes = faskes.jenis_faskes?.nama || faskes.tipe_faskes || localStorage.getItem("tipe_faskes") || "";
 
   const [form, setForm] = useState({
     lembaga_id: "",
@@ -51,64 +34,93 @@ function AjukanForm({ onSuccess }) {
     kontak: "",
   });
 
-  // Load lembaga list
-  useEffect(() => {
-    setLembagaLoading(true);
-    api("/pendaftaran/lembaga")
-      .then(r => r?.json())
-      .then(d => {
-        const list = d?.data || [];
-        setLembagaList(list);
-        if (list.length === 1) {
-          setForm(f => ({ ...f, lembaga_id: list[0].id }));
+  const { data: lembagaData, isLoading: lembagaLoadingHook } = useApi(
+    "lembaga-list",
+    "/pendaftaran/lembaga"
+  );
+
+  // Sync hook state into component state
+  React.useEffect(() => {
+    setLembagaLoading(lembagaLoadingHook);
+  }, [lembagaLoadingHook]);
+
+  React.useEffect(() => {
+    if (lembagaData?.data) {
+      const list = lembagaData.data;
+      setLembagaList(list);
+      if (list.length === 1) {
+        setForm(f => ({ ...f, lembaga_id: list[0].id }));
+        setLembagaLocked(true);
+      } else if (faskesLembagaId) {
+        const match = list.find(l => l.id === faskesLembagaId);
+        if (match) {
+          setForm(f => ({ ...f, lembaga_id: match.id }));
+          setLembagaLocked(true);
         }
-      })
-      .catch(err => {
-        console.error("[AjukanForm] Gagal memuat daftar lembaga:", err);
-        setLembagaError("Tidak dapat memuat daftar lembaga. Pastikan Anda memiliki koneksi internet dan coba refresh halaman.");
-      })
-      .finally(() => setLembagaLoading(false));
-  }, []);
+      }
+    }
+    if (lembagaData && !lembagaData.data) {
+      setLembagaError("Tidak dapat memuat daftar lembaga.");
+    }
+  }, [lembagaData, faskesLembagaId]);
+
+  // Sync tipe_faskes ke form saat authData arrives (async — form sudah mount duluan)
+  React.useEffect(() => {
+    if (tipeFaskes && form.tipe_faskes !== tipeFaskes) {
+      setForm(f => ({ ...f, tipe_faskes: tipeFaskes }));
+    }
+  }, [tipeFaskes]);
+
+  // Sync error from query failure
+  React.useEffect(() => {
+    if (lembagaData === null || (lembagaData && !lembagaData.data && !lembagaLoadingHook)) {
+      setLembagaError("Tidak dapat memuat daftar lembaga. Pastikan Anda memiliki koneksi internet dan coba refresh halaman.");
+    }
+  }, [lembagaData, lembagaLoadingHook]);
+
+  const mutate = useMutateKeys(["siklus-list-faskes"], {
+    onSuccess: (data) => {
+      if (data?.data) {
+        onSuccess(data.data);
+      }
+    },
+    onError: (err) => {
+      setError(err.message);
+    },
+  });
 
   function set(key, value) {
     setForm(f => ({ ...f, [key]: value }));
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault();
     if (!form.lembaga_id || !form.tanggal_permohonan_survei) {
       setError("Lembaga dan tanggal permohonan wajib diisi.");
       return;
     }
-    setLoading(true);
     setError("");
-    try {
-      const payload = {
-        lembaga_id: form.lembaga_id,
-        tanggal_permohonan_survei: form.tanggal_permohonan_survei,
-        dfo_data: {
-          tipe_faskes: form.tipe_faskes || null,
-          nama_penganggung_jawab: form.nama_penganggung_jawab || null,
-          jabatan: form.jabatan || null,
-          kontak: form.kontak || null,
-        },
-      };
-      const res = await api("/pendaftaran/siklus", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal mengajukan.");
-      onSuccess(data.data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    const payload = {
+      lembaga_id: form.lembaga_id,
+      tanggal_permohonan_survei: form.tanggal_permohonan_survei,
+      dfo_data: {
+        tipe_faskes: form.tipe_faskes || null,
+        nama_penganggung_jawab: form.nama_penganggung_jawab || null,
+        jabatan: form.jabatan || null,
+        kontak: form.kontak || null,
+      },
+    };
+    mutate.mutate({
+      path: "/pendaftaran/siklus",
+      method: "POST",
+      body: payload,
+    });
   }
 
   // Min date = today
   const today = new Date().toISOString().split("T")[0];
+
+  const loading = mutate.isPending;
 
   return (
     <div>
@@ -136,9 +148,9 @@ function AjukanForm({ onSuccess }) {
                   id="lembaga_id"
                   className="form-input"
                   value={form.lembaga_id}
-                  onChange={e => set("lembaga_id", e.target.value)}
+                  onChange={e => !lembagaLocked && set("lembaga_id", e.target.value)}
                   required
-                  disabled={lembagaLoading}
+                  disabled={lembagaLoading || lembagaLocked}
                 >
                   <option value="">{
                     lembagaLoading ? "Memuat..." :
@@ -152,6 +164,11 @@ function AjukanForm({ onSuccess }) {
                 </select>
                 {lembagaError && (
                   <div style={{ fontSize: "11px", color: "#DC2626", marginTop: "4px" }}>{lembagaError}</div>
+                )}
+                {lembagaLocked && (
+                  <div style={{ fontSize: "11px", color: "#64748B", marginTop: "4px" }}>
+                    Terpilih otomatis dari data faskes Anda — tidak dapat diubah.
+                  </div>
                 )}
               </div>
               <div>
@@ -298,18 +315,17 @@ function StatusView({ siklus }) {
   const subTahap = siklus.sub_tahapan_survei || 0;
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
-  const [invoiceStatus, setInvoiceStatus] = React.useState(null);
+  const { data: invoiceData } = useApi(
+    ["invoice-status", siklus?.id],
+    siklus?.id ? `/invoice/by-siklus/${siklus.id}` : "/pendaftaran/siklus?per_page=1",
+    { enabled: !!siklus?.id }
+  );
 
-  React.useEffect(() => {
-    if (!siklus?.id) return;
-    api(`/invoice/by-siklus/${siklus.id}`)
-      .then(r => r?.json())
-      .then(d => {
-        const inv = d?.data?.[0];
-        setInvoiceStatus(inv ? { lunas: inv.status === "lunas", total: inv.total_tagihan } : null);
-      })
-      .catch(() => setInvoiceStatus(null));
-  }, [siklus?.id]);
+  const invoiceStatus = React.useMemo(() => {
+    if (!invoiceData?.data?.[0]) return null;
+    const inv = invoiceData.data[0];
+    return { lunas: inv.status === "lunas", total: inv.total_tagihan };
+  }, [invoiceData]);
 
   const surveiSelesai = siklus?.survei_selesai === true;
   const invoiceBelumLunas = invoiceStatus && !invoiceStatus.lunas;
@@ -460,61 +476,35 @@ function StatusView({ siklus }) {
 }
 
 export default function FaskesDashboard() {
-  const [siklus, setSiklus] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const { data: authData, isLoading: authLoading } = useApi("auth-me", "/auth/me");
 
-    // Run both requests in parallel — auth/me failure won't block siklus load
-    Promise.all([
-      api("/auth/me")
-        .then(async (r) => {
-          if (!r || r.status === 401) return null;
-          const d = await r.json();
-          if (d?.user) {
-            localStorage.setItem("user", JSON.stringify(d.user));
-          }
-          return d;
-        })
-        .catch(() => null),
-      api("/pendaftaran/siklus?per_page=1")
-        .then((r) => r?.json())
-        .catch(() => null),
-    ])
-      .then(([authData, siklusData]) => {
-        console.debug("[FaskesDashboard] siklusData:", siklusData);
-        const list = siklusData?.data || [];
-        setSiklus(list[0] || null);
-      })
-      .catch((err) => {
-        console.error("[FaskesDashboard] Fetch error:", err);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+  const {
+    data: siklusData,
+    isLoading: siklusLoading,
+  } = useApi(
+    "siklus-list",
+    "/pendaftaran/siklus?per_page=1",
+    {
+      refetchInterval: 30000,
+    }
+  );
 
-  useEffect(() => { load(); }, [load]);
+  const siklus = siklusData?.data?.[0] || null;
+  const loading = authLoading || siklusLoading;
 
-  // Auto-refresh setiap 30 detik jika ada siklus aktif
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    if (!siklus?.id) return;
-    const interval = setInterval(() => {
-      setTick(t => t + 1);
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [siklus?.id]);
-
-  useEffect(() => {
-    if (!siklus?.id) return;
-    api("/pendaftaran/siklus?per_page=1")
-      .then(r => r?.json())
-      .then(d => {
-        const list = d?.data || [];
-        if (list[0]) setSiklus(list[0]);
-      })
-      .catch(() => {});
-  }, [tick, siklus?.id]);
+  // Keep user data in localStorage when auth/me returns
+  React.useEffect(() => {
+    if (authData?.user) {
+      localStorage.setItem("user", JSON.stringify(authData.user));
+      const tipeFaskes = authData.user.faskes?.jenis_faskes?.nama
+        || authData.user.faskes?.tipe_faskes
+        || "";
+      if (tipeFaskes) localStorage.setItem("tipe_faskes", tipeFaskes);
+      if (authData.lembaga_id) localStorage.setItem("lembaga_id", authData.lembaga_id);
+    }
+  }, [authData]);
 
   if (loading) {
     return (
@@ -530,7 +520,9 @@ export default function FaskesDashboard() {
   }
 
   if (!siklus) {
-    return <AjukanForm onSuccess={sik => setSiklus(sik)} />;
+    return <AjukanForm authData={authData} onSuccess={(newSiklus) => {
+      queryClient.invalidateQueries({ queryKey: ["siklus-list"] });
+    }} />;
   }
 
   return <StatusView siklus={siklus} />;

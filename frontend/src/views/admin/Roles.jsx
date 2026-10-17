@@ -1,22 +1,5 @@
-import React, { useState, useEffect } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `HTTP ${res.status}`);
-  }
-  return res;
-}
+import React, { useState } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 const ACTION_COLORS = {
   Lihat: { bg: "#DBEAFE", text: "#1E40AF" },
@@ -43,30 +26,14 @@ function PrivBadge({ text }) {
 }
 
 function Roles() {
-  const [roles, setRoles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editData, setEditData] = useState(null);
   const [form, setForm] = useState({ nama_role: "" });
   const [saving, setSaving] = useState(false);
 
-  function load() {
-    setLoading(true);
-    setError("");
-    api("/admin/roles")
-      .then(r => r?.json())
-      .then(d => {
-        setRoles(d?.data || []);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
-  }
-
-  useEffect(() => { load(); }, []);
+  const { data, isLoading, error } = useApi("roles", "/admin/roles");
+  const roles = data?.data || [];
+  const mutate = useMutateKeys(["roles"]);
 
   function openCreate() {
     setEditData(null);
@@ -85,13 +52,12 @@ function Roles() {
     if (!form.nama_role.trim()) return;
     setSaving(true);
     try {
-      const method = editData ? "PUT" : "POST";
-      const url = editData ? `/admin/roles/${editData.id}` : "/admin/roles";
-      const res = await api(url, { method, body: JSON.stringify(form) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menyimpan.");
+      await mutate.mutateAsync({
+        path: editData ? `/admin/roles/${editData.id}` : "/admin/roles",
+        method: editData ? "PUT" : "POST",
+        body: form,
+      });
       setShowModal(false);
-      load();
     } catch (err) {
       alert(err.message);
     } finally {
@@ -102,10 +68,7 @@ function Roles() {
   async function handleDelete(role) {
     if (!confirm(`Hapus role "${role.nama_role}"? Tindakan ini tidak bisa dibatalkan.`)) return;
     try {
-      const res = await api(`/admin/roles/${role.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menghapus.");
-      load();
+      await mutate.mutateAsync({ path: `/admin/roles/${role.id}`, method: "DELETE" });
     } catch (err) {
       alert(err.message);
     }
@@ -143,10 +106,10 @@ function Roles() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {isLoading ? (
                 <tr><td colSpan="5" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>Memuat...</td></tr>
               ) : error ? (
-                <tr><td colSpan="5" style={{ textAlign: "center", color: "#DC2626", padding: "32px 16px", fontSize: "13px" }}>{error}</td></tr>
+                <tr><td colSpan="5" style={{ textAlign: "center", color: "#DC2626", padding: "32px 16px", fontSize: "13px" }}>{error?.message || "Terjadi kesalahan"}</td></tr>
               ) : roles.length === 0 ? (
                 <tr><td colSpan="5" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>Belum ada role.</td></tr>
               ) : roles.map((r, i) => (

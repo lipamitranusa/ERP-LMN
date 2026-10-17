@@ -38,7 +38,7 @@ class SuratTugasIssuanceController extends Controller
             'path_pdf' => 'nullable|string',
         ]);
 
-        $siklus = \App\Models\SiklusAkreditasi::findOrFail($data['siklus_id']);
+        $siklus = \App\Models\SiklusAkreditasi::findWithLembagaCheck($data['siklus_id']);
         $tenagaAhli = TenagaAhli::findOrFail($data['tenaga_ahli_id']);
 
         $errors = $this->gatekeeper->canIssue($siklus);

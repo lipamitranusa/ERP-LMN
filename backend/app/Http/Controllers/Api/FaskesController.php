@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Faskes;
 use App\Models\JenisFaskes;
+use App\Models\Lembaga;
 use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,10 +25,18 @@ class FaskesController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Faskes::with('jenisFaskes:id,kode,nama');
+        $query = Faskes::with([
+            // Bypass global scope 'lembaga' agar jenis_faskes selalu ter-load
+            // walaupun user sedang session di lembaga lain (display only).
+            'jenisFaskes' => fn($q) => $q->withoutGlobalScope('lembaga')->select('id', 'kode', 'nama'),
+            'lembaga:id,nama',
+        ]);
 
         if ($request->filled('jenis_faskes_id')) {
             $query->where('jenis_faskes_id', $request->string('jenis_faskes_id'));
+        }
+        if ($request->filled('lembaga_id')) {
+            $query->where('lembaga_id', $request->string('lembaga_id'));
         }
         if ($request->filled('status')) {
             $query->where('status', $request->string('status'));
@@ -52,7 +61,10 @@ class FaskesController extends Controller
      */
     public function show(Faskes $faskes): JsonResponse
     {
-        $faskes->load('jenisFaskes:id,kode,nama');
+        $faskes->load([
+            'jenisFaskes' => fn($q) => $q->withoutGlobalScope('lembaga')->select('id', 'kode', 'nama'),
+            'lembaga:id,nama',
+        ]);
         return response()->json(['data' => $faskes]);
     }
 
@@ -67,6 +79,13 @@ class FaskesController extends Controller
                 Rule::when(
                     fn($r) => filled($r->input('jenis_faskes_id')),
                     'exists:jenis_faskes,id',
+                ),
+            ],
+            'lembaga_id' => [
+                'nullable',
+                Rule::when(
+                    fn($r) => filled($r->input('lembaga_id')),
+                    'exists:lembaga,id',
                 ),
             ],
             'nama' => 'required|string|max:200',
@@ -89,6 +108,12 @@ class FaskesController extends Controller
         if (isset($data['jenis_faskes_id']) && $data['jenis_faskes_id'] === '') {
             $data['jenis_faskes_id'] = null;
         }
+        if (isset($data['lembaga_id']) && $data['lembaga_id'] === '') {
+            $data['lembaga_id'] = null;
+        }
+
+        // Corelasi: lembaga harus cocok dengan lembaga pemilik jenis faskes
+        $this->assertLembagaMatchesJenis($data['jenis_faskes_id'] ?? null, $data['lembaga_id'] ?? null);
 
         $faskes = Faskes::create([
             'id' => (string) Str::uuid(),
@@ -98,9 +123,13 @@ class FaskesController extends Controller
 
         $this->audit->log('faskes.create', 'faskes', $faskes->id, [
             'nama' => $faskes->nama,
+            'lembaga_id' => $faskes->lembaga_id,
         ]);
 
-        return response()->json(['data' => $faskes->load('jenisFaskes:id,kode,nama')], 201);
+        return response()->json(['data' => $faskes->load([
+            'jenisFaskes' => fn($q) => $q->withoutGlobalScope('lembaga')->select('id', 'kode', 'nama'),
+            'lembaga:id,nama',
+        ])], 201);
     }
 
     /**
@@ -114,6 +143,13 @@ class FaskesController extends Controller
                 Rule::when(
                     fn($r) => filled($r->input('jenis_faskes_id')),
                     'exists:jenis_faskes,id',
+                ),
+            ],
+            'lembaga_id' => [
+                'nullable',
+                Rule::when(
+                    fn($r) => filled($r->input('lembaga_id')),
+                    'exists:lembaga,id',
                 ),
             ],
             'nama' => 'required|string|max:200',
@@ -136,6 +172,12 @@ class FaskesController extends Controller
         if (isset($data['jenis_faskes_id']) && $data['jenis_faskes_id'] === '') {
             $data['jenis_faskes_id'] = null;
         }
+        if (isset($data['lembaga_id']) && $data['lembaga_id'] === '') {
+            $data['lembaga_id'] = null;
+        }
+
+        // Corelasi: lembaga harus cocok dengan lembaga pemilik jenis faskes
+        $this->assertLembagaMatchesJenis($data['jenis_faskes_id'] ?? null, $data['lembaga_id'] ?? null);
 
         $before = $faskes->replicate();
         $faskes->update($data);
@@ -145,7 +187,10 @@ class FaskesController extends Controller
             'after' => $faskes->toArray(),
         ]);
 
-        return response()->json(['data' => $faskes->fresh()->load('jenisFaskes:id,kode,nama')]);
+        return response()->json(['data' => $faskes->fresh()->load([
+            'jenisFaskes' => fn($q) => $q->withoutGlobalScope('lembaga')->select('id', 'kode', 'nama'),
+            'lembaga:id,nama',
+        ])]);
     }
 
     /**
@@ -159,7 +204,11 @@ class FaskesController extends Controller
             ], 422);
         }
 
-        if ($faskes->siklusAkreditasis()->exists()) {
+        // Bypass global scope lembaga: cek SELURUH siklus faskes, bukan hanya
+        // yang ada di lembaga aktif. Trait BelongsToLembaga pada SiklusAkreditasi
+        // akan mem-filter ke lembaga aktif, padahal kita butuh cek lintas-lembaga
+        // untuk mencegah hapus faskes yang masih punya siklus di mana pun.
+        if ($faskes->siklusAkreditasis()->withoutGlobalScope('lembaga')->exists()) {
             return response()->json([
                 'message' => 'Faskes tidak dapat dihapus karena sudah terkait dengan siklus akreditasi.',
             ], 422);
@@ -177,19 +226,57 @@ class FaskesController extends Controller
     }
 
     /**
+     * Validate that lembaga_id matches the lembaga that owns the given jenis_faskes.
+     * If only one of the two is filled, the other is auto-inferred.
+     * Throws ValidationException on mismatch.
+     */
+    private function assertLembagaMatchesJenis(?string $jenisFaskesId, ?string $lembagaId): void
+    {
+        if (! $jenisFaskesId) {
+            return;
+        }
+
+        $jenis = JenisFaskes::find($jenisFaskesId);
+        if (! $jenis) {
+            return;
+        }
+
+        $ownerLembagaId = $jenis->lembaga_id;
+
+        // Jenis tanpa lembaga_id (legacy/global) — tidak bisa enforce korelasi
+        if (! $ownerLembagaId) {
+            return;
+        }
+
+        // Lembaga harus sama dengan lembaga pemilik jenis
+        if ($lembagaId && $lembagaId !== $ownerLembagaId) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'lembaga_id' => "Lembaga tidak sesuai dengan lembaga pemilik jenis faskes '{$jenis->nama}'.",
+            ]);
+        }
+    }
+
+
+    /**
      * GET /api/master/faskes/dropdown
      */
     public function dropdown(Request $request): JsonResponse
     {
         $query = Faskes::where('status', 'aktif')
-            ->with('jenisFaskes:id,kode,nama')
+            ->with([
+                'jenisFaskes' => fn($q) => $q->withoutGlobalScope('lembaga')->select('id', 'kode', 'nama'),
+                'lembaga:id,nama',
+            ])
             ->orderBy('nama');
 
         if ($request->filled('jenis_faskes_id')) {
             $query->where('jenis_faskes_id', $request->string('jenis_faskes_id'));
         }
+        if ($request->filled('lembaga_id')) {
+            $query->where('lembaga_id', $request->string('lembaga_id'));
+        }
 
-        return response()->json(['data' => $query->get(['id', 'jenis_faskes_id', 'nama', 'kota'])]);
+        return response()->json(['data' => $query->get(['id', 'jenis_faskes_id', 'lembaga_id', 'nama', 'kota'])]);
     }
 
     /**
@@ -204,7 +291,7 @@ class FaskesController extends Controller
         ];
 
         $columns = [
-            'nama', 'jenis_faskes_nama', 'no_sertifikat', 'nomor_surat_faskes',
+            'nama', 'jenis_faskes_nama', 'lembaga_nama', 'no_sertifikat', 'nomor_surat_faskes',
             'alamat', 'kota', 'provinsi', 'kode_pos',
             'telepon', 'email', 'website',
             'nama_pimpinan', 'telepon_pimpinan', 'deskripsi', 'status',
@@ -214,7 +301,7 @@ class FaskesController extends Controller
             $handle = fopen('php://output', 'w');
             fputcsv($handle, $columns);
             fputcsv($handle, [
-                'RSUD Dr. Soetomo', 'Rumah Sakit',
+                'RSUD Dr. Soetomo', 'Rumah Sakit', '',
                 '', '', 'Jl. Utama No.1', 'Surabaya', 'Jawa Timur', '60112',
                 '(031) 5501234', 'info@rsud-soetomo.id', '',
                 'dr. John Doe', '081234567890', '', 'aktif',
@@ -262,6 +349,7 @@ class FaskesController extends Controller
             $errors = [];
             $nama = trim($data['nama'] ?? '');
             $jenisNama = trim($data['jenis_faskes_nama'] ?? '');
+            $lembagaNama = trim($data['lembaga_nama'] ?? '');
             $email = trim($data['email'] ?? '');
             $website = trim($data['website'] ?? '');
             $status = strtolower(trim($data['status'] ?? 'aktif'));
@@ -303,6 +391,24 @@ class FaskesController extends Controller
                 $jenisFaskesId = $jenis->id;
             }
 
+            // Resolve lembaga_id: dari CSV jika ada, fallback ke session
+            $lembagaId = null;
+            if (! empty($lembagaNama)) {
+                $lembaga = Lembaga::where('nama', 'like', "%{$lembagaNama}%")->first();
+                if (! $lembaga) {
+                    $results['rows'][] = [
+                        'row' => $rowNumber, 'status' => 'failed',
+                        'nama' => $nama,
+                        'message' => "Lembaga '$lembagaNama' tidak ditemukan di master lembaga.",
+                    ];
+                    $results['failed']++;
+                    continue;
+                }
+                $lembagaId = $lembaga->id;
+            } else {
+                $lembagaId = session('lembaga_id') ?: null;
+            }
+
             // Check duplicate nama (case-insensitive)
             $exists = Faskes::whereRaw('LOWER(nama) = ?', [strtolower($nama)])->exists();
             if ($exists) {
@@ -319,6 +425,7 @@ class FaskesController extends Controller
                 $faskes = Faskes::create([
                     'id' => (string) Str::uuid(),
                     'jenis_faskes_id' => $jenisFaskesId,
+                    'lembaga_id' => $lembagaId,
                     'nama' => $nama,
                     'no_sertifikat' => trim($data['no_sertifikat'] ?? '') ?: null,
                     'nomor_surat_faskes' => trim($data['nomor_surat_faskes'] ?? '') ?: null,

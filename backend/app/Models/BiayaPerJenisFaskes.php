@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToLembaga;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BiayaPerJenisFaskes extends Model
 {
+    use BelongsToLembaga;
     protected $table = 'biaya_per_jenis_faskes';
     public $incrementing = false;
     protected $keyType = 'string';
@@ -21,6 +23,7 @@ class BiayaPerJenisFaskes extends Model
         'tipe',
         'wajib',
         'status',
+        'lembaga_id',
     ];
 
     protected $casts = [

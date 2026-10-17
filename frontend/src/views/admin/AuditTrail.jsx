@@ -1,19 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
+import { useApi } from "@/hooks/useApi";
 import { formatDateTime } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  return res;
-}
 
 const actionColors = {
   create:   { bg: "#E8F5E9", color: "#166534", label: "Tambah" },
@@ -26,21 +13,12 @@ const actionColors = {
 };
 
 function AuditTrail() {
-  const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const perPage = 20;
 
-  useEffect(() => {
-    api("/admin/audit-trail")
-      .then(r => r?.json())
-      .then(d => {
-        setLogs(d?.data || d || []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+  const { data, isLoading } = useApi("audit-trail", "/admin/audit-trail");
+  const logs = Array.isArray(data) ? data : data?.data || [];
 
   const filtered = logs.filter(l => {
     const q = search.toLowerCase();
@@ -113,7 +91,7 @@ function AuditTrail() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {isLoading ? (
                 <tr><td colSpan="5" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>Memuat...</td></tr>
               ) : paginated.length === 0 ? (
                 <tr><td colSpan="5" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>

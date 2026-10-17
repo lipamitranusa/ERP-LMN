@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToLembaga;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -18,7 +19,7 @@ use Illuminate\Support\Carbon;
  */
 class KonfigurasiPajak extends Model
 {
-    use HasUuids;
+    use HasUuids, BelongsToLembaga;
 
     public $incrementing = false;
     protected $keyType = 'string';
@@ -35,6 +36,7 @@ class KonfigurasiPajak extends Model
         'berlaku_sejak',
         'keterangan',
         'dibuat_oleh',
+        'lembaga_id',
     ];
 
     protected $casts = [

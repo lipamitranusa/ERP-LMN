@@ -1,31 +1,10 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
 import ImportModal from "@/components/ImportModal";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  try {
-    const res = await fetch(`/api${path}`, { ...options, headers });
-    if (res.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/auth/login";
-      return null;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `HTTP ${res.status}`);
-    }
-    return res;
-  } catch (err) {
-    console.error("[api]", err);
-    throw err;
-  }
-}
+import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { useLembaga } from "@/contexts/LembagaContext";
 
 const EMPTY = {
-  jenis_faskes_id: "", nama: "", no_sertifikat: "",
+  jenis_faskes_id: "", lembaga_id: "", nama: "", no_sertifikat: "",
   nomor_surat_faskes: "",
   alamat: "", kota: "", provinsi: "", kode_pos: "",
   telepon: "", email: "", website: "",
@@ -60,44 +39,47 @@ function Modal({ title, onClose, children }) {
 }
 
 export default function MasterFaskes() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [jenisList, setJenisList] = useState([]);
   const [showImport, setShowImport] = useState(false);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    api("/master/faskes?q=" + encodeURIComponent(search))
-      .then(r => r?.json())
-      .then(d => {
-        setItems(d?.data || []);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("[MasterFaskes]", err);
-        setLoading(false);
-      });
-  }, [search]);
+  // React Query handles caching, deduplication, and auto-refetch
+  const { data: faskesData, isLoading } = useApi(
+    ["master-faskes", search],
+    `/master/faskes?q=${encodeURIComponent(search)}`
+  );
+  const { data: jenisData } = useApi(["jenis-faskes"], "/master/jenis-faskes?per_page=100");
+  const { data: lembagaData } = useApi("lembaga-list-filter", "/master/lembaga?per_page=100");
+  const { lembagaId: activeLembagaId } = useLembaga();
 
-  const loadJenis = useCallback(() => {
-    return api("/master/jenis-faskes?per_page=100")
-      .then(r => r?.json())
-      .then(d => setJenisList(d?.data || []))
-      .catch(console.error);
-  }, []);
+  const items = faskesData?.data ?? [];
+  const jenisList = jenisData?.data ?? [];
+  const lembagaList = lembagaData?.data ?? [];
 
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => { loadJenis(); }, [loadJenis]);
+  const selectedJenis = jenisList.find(j => j.id === form.jenis_faskes_id) || null;
+  const filteredLembagaList = selectedJenis?.lembaga_id
+    ? lembagaList.filter(l => l.id === selectedJenis.lembaga_id)
+    : lembagaList;
+
+  const mutate = useMutateKeys([["master-faskes"], ["jenis-faskes"]]);
+
+  function handleJenisChange(id) {
+    const jenis = jenisList.find(j => j.id === id);
+    setForm(f => ({
+      ...f,
+      jenis_faskes_id: id,
+      // Auto-cascade lembaga to the jenis's owning lembaga
+      lembaga_id: jenis?.lembaga_id || f.lembaga_id,
+    }));
+  }
 
   function openAdd() {
     setEditTarget(null);
-    setForm(EMPTY);
+    setForm({ ...EMPTY, lembaga_id: activeLembagaId || "" });
     setError("");
     setShowModal(true);
   }
@@ -106,6 +88,7 @@ export default function MasterFaskes() {
     setEditTarget(item);
     setForm({
       jenis_faskes_id: item.jenis_faskes_id ?? "",
+      lembaga_id: item.lembaga_id || activeLembagaId || "",
       nama: item.nama || "",
       no_sertifikat: item.no_sertifikat || "",
       nomor_surat_faskes: item.nomor_surat_faskes || "",
@@ -131,18 +114,15 @@ export default function MasterFaskes() {
     setSaving(true);
     try {
       const payload = { ...form };
-      // Force jenis_faskes_id to null if empty (Laravel uuid rule rejects "")
       if (payload.jenis_faskes_id === "") payload.jenis_faskes_id = null;
-      // Normalize status to lowercase for backend validation
+      if (payload.lembaga_id === "") payload.lembaga_id = null;
       payload.status = (payload.status || "aktif").toLowerCase();
-      const body = JSON.stringify(payload);
-      const res = editTarget
-        ? await api(`/master/faskes/${editTarget.id}`, { method: "PUT", body })
-        : await api("/master/faskes", { method: "POST", body });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menyimpan.");
+      await mutate.mutateAsync({
+        path: editTarget ? `/master/faskes/${editTarget.id}` : "/master/faskes",
+        method: editTarget ? "PUT" : "POST",
+        body: payload,
+      });
       setShowModal(false);
-      load();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -153,10 +133,10 @@ export default function MasterFaskes() {
   async function handleDelete(item) {
     if (!confirm(`Hapus faskes "${item.nama}"?`)) return;
     try {
-      const res = await api(`/master/faskes/${item.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menghapus.");
-      load();
+      await mutate.mutateAsync({
+        path: `/master/faskes/${item.id}`,
+        method: "DELETE",
+      });
     } catch (err) {
       alert(err.message);
     }
@@ -207,6 +187,7 @@ export default function MasterFaskes() {
               <tr>
                 <th>Nama Faskes</th>
                 <th>Jenis</th>
+                <th>Lembaga</th>
                 <th>Kota</th>
                 <th>Kontak</th>
                 <th>Status</th>
@@ -214,10 +195,10 @@ export default function MasterFaskes() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr><td colSpan="6" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
+              {isLoading ? (
+                <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan="6" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>
+                <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>
                   {search ? "Tidak ada hasil" : "Belum ada data."}
                 </td></tr>
               ) : items.map(item => (
@@ -231,6 +212,7 @@ export default function MasterFaskes() {
                       {item.jenis_faskes ? `${item.jenis_faskes.kode || ""} — ${item.jenis_faskes.nama}` : "—"}
                     </span>
                   </td>
+                  <td style={{ color: "#64748B", fontSize: "13px" }}>{item.lembaga?.nama || "—"}</td>
                   <td style={{ color: "#64748B", fontSize: "13px" }}>{item.kota || "—"}</td>
                   <td style={{ color: "#64748B", fontSize: "13px" }}>{item.telepon || item.email || "—"}</td>
                   <td>
@@ -270,7 +252,7 @@ export default function MasterFaskes() {
 
               <div style={{ marginBottom: "14px" }}>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Jenis Faskes</label>
-                <select className="form-input" value={form.jenis_faskes_id} onChange={e => set("jenis_faskes_id", e.target.value)}>
+                <select className="form-input" value={form.jenis_faskes_id} onChange={e => handleJenisChange(e.target.value)}>
                   <option value="">— Pilih Jenis —</option>
                   {jenisList.map(j => <option key={j.id} value={j.id}>{j.kode ? `${j.kode} — ` : ""}{j.nama}</option>)}
                 </select>
@@ -284,6 +266,28 @@ export default function MasterFaskes() {
               <div style={{ marginBottom: "14px" }}>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>No. Surat Faskes</label>
                 <input className="form-input" value={form.nomor_surat_faskes} onChange={e => set("nomor_surat_faskes", e.target.value)} placeholder="cth: 123/SURAT/2024" />
+              </div>
+
+              <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Lembaga</label>
+                <select
+                  className="form-input"
+                  value={form.lembaga_id}
+                  onChange={e => set("lembaga_id", e.target.value)}
+                  disabled={!!selectedJenis?.lembaga_id && filteredLembagaList.length === 1}
+                >
+                  <option value="">— Pilih Lembaga —</option>
+                  {filteredLembagaList.map(l => (
+                    <option key={l.id} value={l.id}>
+                      {l.nama}{l.id === activeLembagaId ? " (Aktif)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {selectedJenis?.lembaga_id && (
+                  <div style={{ fontSize: "11px", color: "#64748B", marginTop: "4px" }}>
+                    Lembaga otomatis terikat dengan jenis faskes "{selectedJenis.nama}".
+                  </div>
+                )}
               </div>
 
               <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
@@ -355,7 +359,7 @@ export default function MasterFaskes() {
       <ImportModal
         open={showImport}
         onClose={() => setShowImport(false)}
-        onSuccess={load}
+        onSuccess={() => {}}
         title="Import Faskes dari CSV"
         downloadUrl="/master/faskes/template"
         downloadName="template_faskes.csv"

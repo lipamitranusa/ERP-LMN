@@ -1,21 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Error ${res.status}`);
-  }
-  return res;
-}
+import React, { useState } from "react";
+import { useApi } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -157,16 +141,13 @@ function SlipRow({ slip, onClick }) {
 }
 
 function SlipDetailModal({ tenagaAhliId, periode, onClose }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { data: resp, isLoading, error } = useApi(
+    ["slip-detail", tenagaAhliId, periode],
+    `/ledger/slip-honor/${tenagaAhliId}?periode=${periode}`,
+    { enabled: !!tenagaAhliId }
+  );
 
-  useEffect(() => {
-    api(`/ledger/slip-honor/${tenagaAhliId}?periode=${periode}`)
-      .then(r => r.json())
-      .then(d => { setData(d.data); setLoading(false); })
-      .catch(e => { setError(e.message); setLoading(false); });
-  }, [tenagaAhliId, periode]);
+  const d = resp?.data;
 
   return (
     <div style={{
@@ -183,15 +164,15 @@ function SlipDetailModal({ tenagaAhliId, periode, onClose }) {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <div style={{ fontWeight: "700", fontSize: "14px", color: "#1E293B" }}>Slip Honorarium</div>
-              {data && (
+              {d && (
                 <div style={{ fontSize: "12px", color: "#64748B", marginTop: "2px" }}>
-                  {data.tenaga_ahli.nama} — {data.tenaga_ahli.npwp ? `NPWP: ${data.tenaga_ahli.npwp}` : `NIK: ${data.tenaga_ahli.nik}`}
+                  {d.tenaga_ahli.nama} — {d.tenaga_ahli.npwp ? `NPWP: ${d.tenaga_ahli.npwp}` : `NIK: ${d.tenaga_ahli.nik}`}
                 </div>
               )}
-              {data && (
+              {d && (
                 <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>
-                  {data.tenaga_ahli.nama_pajak || data.tenaga_ahli.nama}
-                  {data.tenaga_ahli.alamat_pajak ? ` · ${data.tenaga_ahli.alamat_pajak}` : ""}
+                  {d.tenaga_ahli.nama_pajak || d.tenaga_ahli.nama}
+                  {d.tenaga_ahli.alamat_pajak ? ` · ${d.tenaga_ahli.alamat_pajak}` : ""}
                 </div>
               )}
             </div>
@@ -199,20 +180,20 @@ function SlipDetailModal({ tenagaAhliId, periode, onClose }) {
           </div>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>
         ) : error ? (
-          <div style={{ padding: "20px", color: "#991B1B" }}>{error}</div>
+          <div style={{ padding: "20px", color: "#991B1B" }}>{error.message}</div>
         ) : (
           <>
             <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
               {/* Periode badge */}
               <div style={{ marginBottom: "16px" }}>
                 <span style={{ display: "inline-block", padding: "4px 12px", borderRadius: "9999px", fontSize: "12px", fontWeight: "700", background: "#4F46E5", color: "#fff" }}>
-                  Periode {data.periode}
+                  Periode {d.periode}
                 </span>
                 <span style={{ marginLeft: "8px", fontSize: "12px", color: "#64748B" }}>
-                  {data.entries.length} penugasan
+                  {d.entries.length} penugasan
                 </span>
               </div>
 
@@ -232,7 +213,7 @@ function SlipDetailModal({ tenagaAhliId, periode, onClose }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.entries.map(e => (
+                    {d.entries.map(e => (
                       <tr key={e.id}>
                         <td>{tipeBadge(e.tipe)}</td>
                         <td style={{ color: "#475569", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -251,10 +232,10 @@ function SlipDetailModal({ tenagaAhliId, periode, onClose }) {
                   <tfoot>
                     <tr style={{ background: "#F8FAFC", fontWeight: "700" }}>
                       <td colSpan="2" style={{ textAlign: "right", color: "#475569", fontSize: "11px" }}>TOTAL</td>
-                      <td style={{ textAlign: "right", fontWeight: "700", color: "#1E293B" }}>{formatRp(data.total.bruto)}</td>
-                      <td style={{ textAlign: "right", fontWeight: "600", color: "#92400E" }}>{formatRp(data.total.potongan_ppn)}</td>
-                      <td style={{ textAlign: "right", fontWeight: "600", color: "#92400E" }}>{formatRp(data.total.potongan_pph)}</td>
-                      <td style={{ textAlign: "right", fontWeight: "800", color: "#166534" }}>{formatRp(data.total.neto)}</td>
+                      <td style={{ textAlign: "right", fontWeight: "700", color: "#1E293B" }}>{formatRp(d.total.bruto)}</td>
+                      <td style={{ textAlign: "right", fontWeight: "600", color: "#92400E" }}>{formatRp(d.total.potongan_ppn)}</td>
+                      <td style={{ textAlign: "right", fontWeight: "600", color: "#92400E" }}>{formatRp(d.total.potongan_pph)}</td>
+                      <td style={{ textAlign: "right", fontWeight: "800", color: "#166534" }}>{formatRp(d.total.neto)}</td>
                       <td colSpan="2"></td>
                     </tr>
                   </tfoot>
@@ -262,16 +243,16 @@ function SlipDetailModal({ tenagaAhliId, periode, onClose }) {
               </div>
 
               {/* AC-7 total verification */}
-              <Ac7Box ac7={data.ac7} />
+              <Ac7Box ac7={d.ac7} />
 
               {/* Tariff snapshot */}
-              {data.entries[0]?.tarif_snapshot && (
+              {d.entries[0]?.tarif_snapshot && (
                 <div style={{ marginTop: "16px", background: "#F8FAFC", borderRadius: "8px", padding: "12px", fontSize: "11px", color: "#64748B" }}>
                   <div style={{ fontWeight: "700", color: "#475569", marginBottom: "6px" }}>SNAPSHOT TARIF (saat entry dibuat)</div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
                     {[
-                      { label: "PPN", val: data.entries[0].tarif_snapshot.ppn },
-                      { label: "PPh 21", val: data.entries[0].tarif_snapshot.pph },
+                      { label: "PPN", val: d.entries[0].tarif_snapshot.ppn },
+                      { label: "PPh 21", val: d.entries[0].tarif_snapshot.pph },
                     ].map(s => (
                       <div key={s.label} style={{ background: "#fff", borderRadius: "6px", padding: "8px" }}>
                         <div style={{ fontSize: "10px", fontWeight: "600", color: "#94A3B8" }}>{s.label}</div>
@@ -294,28 +275,14 @@ function SlipDetailModal({ tenagaAhliId, periode, onClose }) {
 export default function SlipHonorarium() {
   const [tahun, setTahun] = useState(new Date().getFullYear());
   const [bulan, setBulan] = useState(new Date().getMonth() + 1);
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [selectedSlip, setSelectedSlip] = useState(null);
 
   const periode = `${tahun}-${String(bulan).padStart(2, "0")}`;
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await api(`/ledger/slip-honor?periode=${periode}`);
-      const d = await res.json();
-      setData(d.data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [periode]);
-
-  useEffect(() => { loadData(); }, [loadData]);
+  const { data, isLoading, error } = useApi(
+    ["slip-honor", tahun, bulan],
+    `/ledger/slip-honor?periode=${periode}`
+  );
 
   const TAHUN_OPTIONS = [2024, 2025, 2026, 2027];
 
@@ -345,31 +312,31 @@ export default function SlipHonorarium() {
             ))}
           </select>
         </div>
-        <button onClick={loadData} className="btn btn-primary" style={{ height: "38px" }}>
+        <button onClick={() => {}} className="btn btn-primary" style={{ height: "38px" }}>
           Lihat Data
         </button>
       </div>
 
-      {error && (
+      {error?.message && (
         <div style={{ padding: "12px 16px", background: "#FEE2E2", color: "#991B1B", borderRadius: "8px", marginBottom: "16px", fontSize: "13px" }}>
-          {error}
+          {error.message}
         </div>
       )}
 
-      {loading ? (
+      {isLoading ? (
         <div style={{ padding: "60px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>
       ) : (
         <>
           {/* Summary */}
-          {data && (
+          {data?.data && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px", marginBottom: "20px" }}>
               {[
                 { label: "Periode", value: `${bulanIndo(bulan)} ${tahun}`, tone: "default" },
-                { label: "Jumlah TA", value: data.jumlah_tenaga_ahli, tone: "info" },
-                { label: "Total Bruto", value: formatRp(data.total_bruto), tone: "default" },
-                { label: "Total PPN", value: formatRp(data.total_potongan_ppn), tone: "warn" },
-                { label: "Total PPh", value: formatRp(data.total_potongan_pph), tone: "warn" },
-                { label: "Total Neto", value: formatRp(data.total_neto), tone: "success" },
+                { label: "Jumlah TA", value: data.data.jumlah_tenaga_ahli, tone: "info" },
+                { label: "Total Bruto", value: formatRp(data.data.total_bruto), tone: "default" },
+                { label: "Total PPN", value: formatRp(data.data.total_potongan_ppn), tone: "warn" },
+                { label: "Total PPh", value: formatRp(data.data.total_potongan_pph), tone: "warn" },
+                { label: "Total Neto", value: formatRp(data.data.total_neto), tone: "success" },
               ].map((c, i) => (
                 <div key={i} style={{
                   background: c.tone === "success" ? "#DCFCE7" : c.tone === "warn" ? "#FEF9C3" : c.tone === "info" ? "#EDE9F6" : "#fff",
@@ -385,7 +352,7 @@ export default function SlipHonorarium() {
 
           {/* Table */}
           <div className="card" style={{ padding: 0 }}>
-            {data?.slips?.length === 0 ? (
+            {data?.data?.slips?.length === 0 ? (
               <div style={{ padding: "60px", textAlign: "center", color: "#94A3B8", fontSize: "13px" }}>
                 Tidak ada slip honorarium untuk periode ini.
               </div>
@@ -406,7 +373,7 @@ export default function SlipHonorarium() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data?.slips?.map(slip => (
+                    {data?.data?.slips?.map(slip => (
                       <SlipRow
                         key={slip.tenaga_ahli_id}
                         slip={slip}
@@ -414,14 +381,14 @@ export default function SlipHonorarium() {
                       />
                     ))}
                   </tbody>
-                  {data?.slips?.length > 0 && (
+                  {data?.data?.slips?.length > 0 && (
                     <tfoot>
                       <tr style={{ background: "#F8FAFC" }}>
                         <td colSpan="3" style={{ textAlign: "right", fontWeight: "700", color: "#475569", fontSize: "11px" }}>GRAND TOTAL</td>
-                        <td style={{ textAlign: "right", fontWeight: "800", color: "#1E293B" }}>{formatRp(data.total_bruto)}</td>
-                        <td style={{ textAlign: "right", fontWeight: "600", color: "#92400E" }}>{formatRp(data.total_potongan_ppn)}</td>
-                        <td style={{ textAlign: "right", fontWeight: "600", color: "#92400E" }}>{formatRp(data.total_potongan_pph)}</td>
-                        <td style={{ textAlign: "right", fontWeight: "800", color: "#166534" }}>{formatRp(data.total_neto)}</td>
+                        <td style={{ textAlign: "right", fontWeight: "800", color: "#1E293B" }}>{formatRp(data.data.total_bruto)}</td>
+                        <td style={{ textAlign: "right", fontWeight: "600", color: "#92400E" }}>{formatRp(data.data.total_potongan_ppn)}</td>
+                        <td style={{ textAlign: "right", fontWeight: "600", color: "#92400E" }}>{formatRp(data.data.total_potongan_pph)}</td>
+                        <td style={{ textAlign: "right", fontWeight: "800", color: "#166534" }}>{formatRp(data.data.total_neto)}</td>
                         <td colSpan="2"></td>
                       </tr>
                     </tfoot>

@@ -19,6 +19,7 @@ class Faskes extends Model
 
     protected $fillable = [
         'jenis_faskes_id',
+        'lembaga_id',
         'nama',
         'no_sertifikat',
         'nomor_surat_faskes',
@@ -60,6 +61,11 @@ class Faskes extends Model
     public function jenisFaskes(): BelongsTo
     {
         return $this->belongsTo(JenisFaskes::class, 'jenis_faskes_id');
+    }
+
+    public function lembaga(): BelongsTo
+    {
+        return $this->belongsTo(Lembaga::class, 'lembaga_id');
     }
 
     public function siklusAkreditasis(): HasMany

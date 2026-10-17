@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToLembaga;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TenagaAhli extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasUuids, BelongsToLembaga;
 
     public $incrementing = false;
     protected $keyType = 'string';
@@ -29,6 +30,7 @@ class TenagaAhli extends Model
         'id',
         'nomor_induk_surveior',
         'nama',
+        'no_wa',
         'peran',
         'jenis',
         'status_aktif',
@@ -47,6 +49,7 @@ class TenagaAhli extends Model
         'nama_bank',
         'atas_nama_rekening',
         'npwp_diverifikasi_at',
+        'lembaga_id',
     ];
 
     /**

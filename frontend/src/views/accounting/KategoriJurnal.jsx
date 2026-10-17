@@ -1,15 +1,5 @@
-import React, { useState, useEffect } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) { localStorage.removeItem("token"); window.location.href = "/auth/login"; return null; }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.message || `API error: ${res.status}`);
-  return body;
-}
+import React, { useState } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 const JENIS_LABEL = {
   adjustment: "Adjustment", pemasukan: "Pemasukan", pengeluaran: "Pengeluaran",
@@ -41,19 +31,22 @@ function Modal({ title, children, onClose }) {
 }
 
 export default function AccountingKategori() {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({ nama: "", jenis: "adjustment", is_aktif: true });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const load = () => {
-    setLoading(true);
-    api("/keuangan/accounting/kategori").then(d => { setData(d?.data || []); setLoading(false); }).catch(() => setLoading(false));
-  };
-  useEffect(() => { load(); }, []);
+  const { data: apiData, isLoading: loading } = useApi("kategori-jurnal", "/keuangan/accounting/kategori");
+  const data = apiData?.data || [];
+
+  const saveMutation = useMutateKeys(["kategori-jurnal"], {
+    onSuccess: () => setShowForm(false),
+    onError: (err) => { setError(err.message); setSaving(false); },
+  });
+  const deleteMutation = useMutateKeys(["kategori-jurnal"], {
+    onError: (err) => alert(err.message),
+  });
 
   const openNew = () => { setEditItem(null); setForm({ nama: "", jenis: "adjustment", is_aktif: true }); setError(""); setShowForm(true); };
   const openEdit = (k) => { setEditItem(k); setForm({ nama: k.nama, jenis: k.jenis, is_aktif: k.is_aktif }); setError(""); setShowForm(true); };
@@ -62,20 +55,16 @@ export default function AccountingKategori() {
     e.preventDefault();
     if (!form.nama) { setError("Nama kategori wajib diisi."); return; }
     setSaving(true);
-    try {
-      if (editItem) await api(`/keuangan/accounting/kategori/${editItem.id}`, { method: "PUT", body: JSON.stringify(form) });
-      else await api("/keuangan/accounting/kategori", { method: "POST", body: JSON.stringify(form) });
-      setShowForm(false);
-      load();
-    } catch (err) { setError(err.message); setSaving(false); }
+    saveMutation.mutate({
+      path: editItem ? `/keuangan/accounting/kategori/${editItem.id}` : "/keuangan/accounting/kategori",
+      method: editItem ? "PUT" : "POST",
+      body: form,
+    });
   };
 
   const handleDelete = async (k) => {
     if (!window.confirm(`Hapus kategori "${k.nama}"?`)) return;
-    try {
-      await api(`/keuangan/accounting/kategori/${k.id}`, { method: "DELETE" });
-      load();
-    } catch (err) { alert(err.message); }
+    deleteMutation.mutate({ path: `/keuangan/accounting/kategori/${k.id}`, method: "DELETE" });
   };
 
   return (

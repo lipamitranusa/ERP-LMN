@@ -1,21 +1,5 @@
-import React, { useState, useEffect } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Error ${res.status}`);
-  }
-  return res;
-}
+import React, { useState } from "react";
+import { useApi } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -50,35 +34,26 @@ function TrendArrow({ value }) {
 }
 
 export default function RekonsiliasiDashboard() {
-  const [kpi, setKpi] = useState(null);
-  const [perFaskes, setPerFaskes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [dari, setDari] = useState("");
   const [sampai, setSampai] = useState("");
+  const [trigger, setTrigger] = useState(0);
 
-  async function loadData() {
-    setLoading(true);
-    setError("");
-    try {
-      const params = new URLSearchParams();
-      if (dari) params.set("dari", dari);
-      if (sampai) params.set("sampai", sampai);
-      const qs = params.toString() ? `?${params}` : "";
-      const res = await api(`/dasbor/rekonsiliasi${qs}`);
-      const data = await res.json();
-      setKpi(data.data?.kpi);
-      setPerFaskes(data.data?.per_faskes || []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const qs = React.useMemo(() => {
+    const params = new URLSearchParams();
+    if (dari) params.set("dari", dari);
+    if (sampai) params.set("sampai", sampai);
+    return params.toString() ? `?${params}` : "";
+  }, [dari, sampai]);
 
-  useEffect(() => { loadData(); }, []);
+  const { data, isLoading, isError, error } = useApi(
+    ["rekonsiliasi", dari, sampai, trigger],
+    `/dasbor/rekonsiliasi${qs}`
+  );
 
-  const margin = kpi?.margin_persen ?? 0;
+  const kpi = data?.data?.kpi || null;
+  const perFaskes = data?.data?.per_faskes || [];
+  const loading = isLoading;
+  const errMsg = error?.message || "";
 
   return (
     <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
@@ -88,7 +63,7 @@ export default function RekonsiliasiDashboard() {
           Dasbor Rekonsiliasi
         </h1>
         <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
-          Pemasukan − Honor Surveior &amp; Verifikator · PRD FR-5.4
+          Pemasukan − Honor Surveior & Verifikator · PRD FR-5.4
         </p>
       </div>
 
@@ -102,19 +77,19 @@ export default function RekonsiliasiDashboard() {
           <label style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", display: "block", marginBottom: "4px" }}>Sampai Tanggal</label>
           <input type="date" className="form-input" value={sampai} onChange={e => setSampai(e.target.value)} style={{ width: "160px" }} />
         </div>
-        <button onClick={loadData} className="btn btn-primary" style={{ height: "38px" }}>
+        <button onClick={() => setTrigger(t => t + 1)} className="btn btn-primary" style={{ height: "38px" }}>
           Terapkan Filter
         </button>
         {(dari || sampai) && (
-          <button onClick={() => { setDari(""); setSampai(""); }} className="btn btn-ghost" style={{ height: "38px" }}>
+          <button onClick={() => { setDari(""); setSampai(""); setTrigger(t => t + 1); }} className="btn btn-ghost" style={{ height: "38px" }}>
             Reset
           </button>
         )}
       </div>
 
-      {error && (
+      {errMsg && (
         <div style={{ padding: "12px 16px", background: "#FEE2E2", color: "#991B1B", borderRadius: "8px", marginBottom: "16px", fontSize: "13px" }}>
-          Gagal memuat data: {error}
+          Gagal memuat data: {errMsg}
         </div>
       )}
 
@@ -154,22 +129,22 @@ export default function RekonsiliasiDashboard() {
           <div className="card" style={{
             padding: "24px",
             marginBottom: "24px",
-            background: margin > 0 ? "#DCFCE7" : margin < 0 ? "#FEE2E2" : "#F8FAFC",
-            border: `2px solid ${margin > 0 ? "#16A34A" : margin < 0 ? "#DC2626" : "#CBD5E1"}`,
+            background: (kpi?.margin_persen ?? 0) > 0 ? "#DCFCE7" : (kpi?.margin_persen ?? 0) < 0 ? "#FEE2E2" : "#F8FAFC",
+            border: `2px solid ${(kpi?.margin_persen ?? 0) > 0 ? "#16A34A" : (kpi?.margin_persen ?? 0) < 0 ? "#DC2626" : "#CBD5E1"}`,
           }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
               <div>
                 <div style={{ fontSize: "13px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
                   LABA PROYEK (Pemasukan − Total Honor)
                 </div>
-                <div style={{ fontSize: "32px", fontWeight: "800", color: margin > 0 ? "#166534" : margin < 0 ? "#991B1B" : "#475569" }}>
+                <div style={{ fontSize: "32px", fontWeight: "800", color: (kpi?.margin_persen ?? 0) > 0 ? "#166534" : (kpi?.margin_persen ?? 0) < 0 ? "#991B1B" : "#475569" }}>
                   {formatRp(kpi?.laba_proyek)}
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", marginBottom: "2px" }}>MARGIN</div>
-                <div style={{ fontSize: "28px", fontWeight: "700", color: margin > 0 ? "#166534" : margin < 0 ? "#991B1B" : "#475569" }}>
-                  <TrendArrow value={margin} /> {margin.toFixed(1)}%
+                <div style={{ fontSize: "28px", fontWeight: "700", color: (kpi?.margin_persen ?? 0) > 0 ? "#166534" : (kpi?.margin_persen ?? 0) < 0 ? "#991B1B" : "#475569" }}>
+                  <TrendArrow value={kpi?.margin_persen ?? 0} /> {(kpi?.margin_persen ?? 0).toFixed(1)}%
                 </div>
                 <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>
                   {kpi?.jumlah_siklus_aktif ?? 0} siklus aktif

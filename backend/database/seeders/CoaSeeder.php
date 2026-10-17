@@ -13,8 +13,17 @@ class CoaSeeder extends Seeder
         $this->coa();
     }
 
+    private function getDefaultLembagaId(): string
+    {
+        return \App\Models\Lembaga::query()
+            ->orderBy('created_at')
+            ->value('id')
+            ?? Str::uuid()->toString();
+    }
+
     private function kategori(): void
     {
+        $lembagaId = $this->getDefaultLembagaId();
         $kategoriList = [
             ['nama' => 'Pemasukan Lain', 'jenis' => 'pemasukan', 'urutan' => 1],
             ['nama' => 'Pengeluaran Operasional', 'jenis' => 'pengeluaran', 'urutan' => 2],
@@ -23,15 +32,16 @@ class CoaSeeder extends Seeder
         ];
 
         foreach ($kategoriList as $k) {
-            \App\Models\KategoriJurnal::updateOrCreate(
-                ['nama' => $k['nama']],
-                array_merge($k, ['id' => Str::uuid()->toString(), 'is_aktif' => true])
+            \App\Models\KategoriJurnal::withoutGlobalScope('lembaga')->updateOrCreate(
+                ['lembaga_id' => $lembagaId, 'nama' => $k['nama']],
+                array_merge($k, ['id' => Str::uuid()->toString(), 'is_aktif' => true, 'lembaga_id' => $lembagaId])
             );
         }
     }
 
     private function coa(): void
     {
+        $lembagaId = $this->getDefaultLembagaId();
         $accounts = [
             // ─── AKTIVA LANCAR (kelompok: debit) ────────────────────────────
             ['kode' => '1101', 'nama' => 'Kas', 'jenis' => 'aktiva_lancar', 'kelompok' => 'debit', 'urutan' => 1],
@@ -86,7 +96,7 @@ class CoaSeeder extends Seeder
             ['kode' => '5201', 'nama' => 'Beban Gaji Karyawan', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 60],
             ['kode' => '5202', 'nama' => 'Beban THR & Bonus', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 61],
             ['kode' => '5203', 'nama' => 'Beban BPJS Kesehatan', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 62],
-            ['kode' => '5204', 'nama' => 'Beban BPJS Ketenagakerjaan', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 63],
+            ['kode' => '5204', 'nема' => 'Beban BPJS Ketenagakerjaan', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 63],
             ['kode' => '5301', 'nama' => 'Beban Listrik & Air', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 70],
             ['kode' => '5302', 'nama' => 'Beban Internet & Telepon', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 71],
             ['kode' => '5303', 'nama' => 'Beban Sewa Kantor', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 72],
@@ -105,9 +115,9 @@ class CoaSeeder extends Seeder
         ];
 
         foreach ($accounts as $a) {
-            \App\Models\Coa::updateOrCreate(
-                ['kode' => $a['kode']],
-                array_merge($a, ['id' => Str::uuid()->toString(), 'is_aktif' => true])
+            \App\Models\Coa::withoutGlobalScope('lembaga')->updateOrCreate(
+                ['lembaga_id' => $lembagaId, 'kode' => $a['kode']],
+                array_merge($a, ['id' => Str::uuid()->toString(), 'is_aktif' => true, 'lembaga_id' => $lembagaId])
             );
         }
     }

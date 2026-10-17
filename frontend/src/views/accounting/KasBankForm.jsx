@@ -1,15 +1,5 @@
-import React, { useState, useEffect } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) { localStorage.removeItem("token"); window.location.href = "/auth/login"; return null; }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.message || `API error: ${res.status}`);
-  return body;
-}
+import React, { useState } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -40,9 +30,6 @@ function Modal({ title, children, onClose, wide }) {
  * }
  */
 export default function KasBankForm({ type, title, subtitle, color, icon, jenis }) {
-  const [coaList, setCoaList] = useState([]);
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
@@ -58,18 +45,28 @@ export default function KasBankForm({ type, title, subtitle, color, icon, jenis 
   });
 
   // ── Load COA + history ──────────────────────────────────────────────────
-  const load = () => {
-    setLoading(true);
-    Promise.all([
-      api("/keuangan/accounting/coa"),
-      api(`/keuangan/accounting/jurnal?kategori_jenis=${type}`),
-    ]).then(([coaData, jurnalData]) => {
-      setCoaList(coaData?.data || []);
-      setRecords((jurnalData?.data || []).slice(0, 50));
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  };
-  useEffect(() => { load(); }, []);
+  const { data: coaData, isLoading: loading } = useApi("coa-accounting", "/keuangan/accounting/coa");
+  const coaList = coaData?.data || [];
+
+  const historyQs = `/keuangan/accounting/jurnal?kategori_jenis=${type}`;
+  const { data: historyData } = useApi(["history", type], historyQs);
+  const records = (historyData?.data || []).slice(0, 50);
+
+  const saveMutation = useMutateKeys(["history", type], {
+    onSuccess: (data) => {
+      setSuccessMsg(`${jenis} berhasil direkam — ${data.data.nomor}`);
+      setShowForm(false);
+      setForm({
+        tanggal: new Date().toISOString().split("T")[0],
+        ref: "",
+        akun_kas_bank: "",
+        details: [{ coa_id: "", deskripsi: "", nominal: 0 }],
+        keterangan: "",
+      });
+      setTimeout(() => setSuccessMsg(""), 5000);
+    },
+    onError: (err) => { setFormError(err.message); setSubmitting(false); },
+  });
 
   // ── Akun dropdown options ──────────────────────────────────────────────
   const bankAccounts = coaList.filter(a =>
@@ -98,43 +95,18 @@ export default function KasBankForm({ type, title, subtitle, color, icon, jenis 
     if (validDetails.length === 0) { setFormError("Minimal 1 baris detail dengan akun dan nominal."); return; }
 
     setSubmitting(true);
-    try {
-      const fd = new FormData();
-      fd.append("jenis", type);
-      fd.append("tanggal", form.tanggal);
-      fd.append("ref", form.ref || "");
-      fd.append("akun_kas_bank", form.akun_kas_bank);
-      fd.append("keterangan", form.keterangan || "");
-      // details[].nominal: semua amounts di satu sisi sesuai jenis (KREDIT=BKM/KKM, DEBIT=BKK/KKK)
-      validDetails.forEach((r, i) => {
-        fd.append(`details[${i}][coa_id]`, r.coa_id);
-        fd.append(`details[${i}][nominal]`, r.nominal);
-        fd.append(`details[${i}][keterangan]`, r.deskripsi || "");
-      });
-
-      const res = await fetch("/api/keuangan/accounting/auto-jurnal", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        body: fd,
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.message || "Gagal menyimpan.");
-
-      setSuccessMsg(`${jenis} berhasil direkam — ${body.data.nomor}`);
-      setShowForm(false);
-      setForm({
-        tanggal: new Date().toISOString().split("T")[0],
-        ref: "",
-        akun_kas_bank: "",
-        details: [{ coa_id: "", deskripsi: "", nominal: 0 }],
-        keterangan: "",
-      });
-      setTimeout(() => setSuccessMsg(""), 5000);
-      load();
-    } catch (err) {
-      setFormError(err.message);
-      setSubmitting(false);
-    }
+    const fd = new FormData();
+    fd.append("jenis", type);
+    fd.append("tanggal", form.tanggal);
+    fd.append("ref", form.ref || "");
+    fd.append("akun_kas_bank", form.akun_kas_bank);
+    fd.append("keterangan", form.keterangan || "");
+    validDetails.forEach((r, i) => {
+      fd.append(`details[${i}][coa_id]`, r.coa_id);
+      fd.append(`details[${i}][nominal]`, r.nominal);
+      fd.append(`details[${i}][keterangan]`, r.deskripsi || "");
+    });
+    saveMutation.mutate({ path: "/keuangan/accounting/auto-jurnal", method: "POST", body: fd });
   };
 
   const openNew = () => {

@@ -1,18 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  return res;
-}
+import React, { useState, useEffect, useRef } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 /**
  * Default template text with marker format.
@@ -282,32 +269,24 @@ const BUNDLED_BLADES = [
 ];
 
 export default function PksTemplateSettings() {
-  const [templates, setTemplates] = useState([]);
-  const [jenisFaskesOptions, setJenisFaskesOptions] = useState([]);
-  const [availableVariables, setAvailableVariables] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [viewTarget, setViewTarget] = useState(null);
   const [form, setForm] = useState({ nama: "", blade: "", jenis_faskes_id: "", aktif: true, is_default: false, kontenText: DEFAULT_TEXT });
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const editorRef = useRef(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    api("/master/pks-templates")
-      .then(r => r?.json())
-      .then(d => {
-        setTemplates(d?.data || []);
-        setJenisFaskesOptions(d?.jenis_faskes_options || []);
-        setAvailableVariables(d?.available_variables || []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+  const { data, isLoading, refetch } = useApi("pks-templates", "/master/pks-templates");
+  const templates = data?.data || [];
+  const jenisFaskesOptions = data?.jenis_faskes_options || [];
+  const availableVariables = data?.available_variables || [];
 
-  useEffect(() => { load(); }, [load]);
+  const saveMutation = useMutateKeys(["pks-templates"], {
+    onError: (err) => setError(err?.message || "Terjadi kesalahan."),
+  });
+  const deleteMutation = useMutateKeys(["pks-templates"]);
+  const resetMutation = useMutateKeys(["pks-templates"]);
+  const toggleMutation = useMutateKeys(["pks-templates"]);
 
   function openAdd() {
     setEditTarget(null);
@@ -636,69 +615,57 @@ function EditorToolbar({ editorRef, form, setForm, onInsertPasal, allVars }) {
   );
 }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    setSaving(true);
-    try {
-      const body = JSON.stringify({
+    saveMutation.mutate({
+      path: editTarget ? `/master/pks-templates/${editTarget.id}` : "/master/pks-templates",
+      method: editTarget ? "PUT" : "POST",
+      body: {
         nama: form.nama,
         blade: form.blade,
         jenis_faskes_id: form.jenis_faskes_id || null,
         aktif: form.aktif,
         is_default: form.is_default,
         konten: form.kontenText,
-      });
-      const res = editTarget
-        ? await api(`/master/pks-templates/${editTarget.id}`, { method: "PUT", body })
-        : await api("/master/pks-templates", { method: "POST", body });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || Object.values(data.errors || {})[0]?.[0] || "Gagal menyimpan.");
-      setShowModal(false);
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+      },
+    }, {
+      onSuccess: (data) => {
+        if (!data.ok && data.message) throw new Error(data.message || Object.values(data.errors || {})[0]?.[0] || "Gagal menyimpan.");
+        setShowModal(false);
+      },
+      onError: (err) => setError(err.message),
+    });
   }
 
-  async function handleDelete(item) {
+  function handleDelete(item) {
     if (!confirm(`Hapus template "${item.nama}"?`)) return;
-    try {
-      const res = await api(`/master/pks-templates/${item.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menghapus.");
-      load();
-    } catch (err) {
-      alert(err.message);
-    }
+    deleteMutation.mutate({
+      path: `/master/pks-templates/${item.id}`,
+      method: "DELETE",
+    }, {
+      onError: (err) => alert(err.message),
+    });
   }
 
-  async function handleReset(item) {
+  function handleReset(item) {
     if (!confirm(`Reset template "${item.nama}" ke versi bawaan? Konten kustom akan hilang.`)) return;
-    try {
-      const res = await api(`/master/pks-templates/${item.id}/reset`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal reset.");
-      load();
-    } catch (err) {
-      alert(err.message);
-    }
+    resetMutation.mutate({
+      path: `/master/pks-templates/${item.id}/reset`,
+      method: "POST",
+    }, {
+      onError: (err) => alert(err.message),
+    });
   }
 
-  async function handleToggleAktif(item) {
-    try {
-      const res = await api(`/master/pks-templates/${item.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ aktif: !item.aktif }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
-      load();
-    } catch (err) {
-      alert(err.message);
-    }
+  function handleToggleAktif(item) {
+    toggleMutation.mutate({
+      path: `/master/pks-templates/${item.id}`,
+      method: "PUT",
+      body: { aktif: !item.aktif },
+    }, {
+      onError: (err) => alert(err.message),
+    });
   }
 
   function handlePreviewPdf(item) {
@@ -754,7 +721,7 @@ function EditorToolbar({ editorRef, form, setForm, onInsertPasal, allVars }) {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {isLoading ? (
                 <tr><td colSpan="5" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
               ) : templates.length === 0 ? (
                 <tr><td colSpan="5" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>
@@ -968,8 +935,8 @@ function EditorToolbar({ editorRef, form, setForm, onInsertPasal, allVars }) {
 
               <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", borderTop: "1px solid #F1F5F9", paddingTop: "20px", marginTop: "20px" }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? "Menyimpan..." : editTarget ? "Simpan" : "Tambah Template"}
+                <button type="submit" className="btn btn-primary" disabled={saveMutation.isPending}>
+                  {saveMutation.isPending ? "Menyimpan..." : editTarget ? "Simpan" : "Tambah Template"}
                 </button>
               </div>
             </div>

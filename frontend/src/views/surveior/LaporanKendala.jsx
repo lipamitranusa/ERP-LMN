@@ -1,29 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useHistory } from "react-router-dom";
+import React, { useState } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  try {
-    const res = await fetch(`/api${path}`, { ...options, headers });
-    if (res.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/auth/login";
-      return null;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `HTTP ${res.status}`);
-    }
-    return res;
-  } catch (err) {
-    console.error("[api]", err);
-    throw err;
-  }
-}
 
 const JENIS_LABEL = {
   conflict_of_interest: "Conflict of Interest (CoI)",
@@ -62,47 +39,34 @@ function Modal({ title, onClose, children }) {
 }
 
 export default function LaporanKendala() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [myPenugasan, setMyPenugasan] = useState([]);
   const [form, setForm] = useState({ penugasan_id: "", jenis: "conflict_of_interest", deskripsi: "" });
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const load = useCallback(() => {
-    setLoading(true);
-    api("/penugasan/kendala/saya")
-      .then(r => r?.json())
-      .then(d => {
-        const data = d?.data || (Array.isArray(d) ? d : []);
-        setItems(data);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setLoading(false);
-      });
-  }, []);
+  const { data: rawData, isLoading } = useApi("laporan-kendala-saya", "/penugasan/kendala/saya");
+  const items = rawData?.data || (Array.isArray(rawData) ? rawData : []);
 
-  useEffect(() => { load(); }, [load]);
+  const { data: penugasanList } = useApi("active-penugasan", "/penugasan/saya");
+
+  const myPenugasan = React.useMemo(() => {
+    const list = Array.isArray(penugasanList) ? penugasanList : penugasanList?.data || [];
+    return list.filter(p => p.status === "menunggu" || p.status === "sedang_bertugas");
+  }, [penugasanList]);
+
+  const submitMutate = useMutateKeys(["laporan-kendala-saya"], {
+    onSuccess: () => {
+      setShowModal(false);
+      alert("Laporan kendala berhasil dikirim. Admin akan menindaklanjuti.");
+    },
+  });
 
   function openModal() {
-    // Load penugasan aktif (menunggu / sedang_bertugas) untuk dipilih
-    api("/penugasan/saya")
-      .then(r => r?.json())
-      .then(d => {
-        const list = (Array.isArray(d) ? d : d?.data || []).filter(
-          p => p.status === "menunggu" || p.status === "sedang_bertugas"
-        );
-        setMyPenugasan(list);
-        setForm({ penugasan_id: list[0]?.id || "", jenis: "conflict_of_interest", deskripsi: "" });
-        setError("");
-        setShowModal(true);
-      });
+    setForm({ penugasan_id: myPenugasan[0]?.id || "", jenis: "conflict_of_interest", deskripsi: "" });
+    setError("");
+    setShowModal(true);
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault();
     setError("");
     if (!form.penugasan_id) {
@@ -113,23 +77,11 @@ export default function LaporanKendala() {
       setError("Deskripsi minimal 10 karakter.");
       return;
     }
-    setSubmitting(true);
-    try {
-      const res = await api("/penugasan/kendala", {
-        method: "POST",
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.message || "Gagal mengirim laporan.");
-      }
-      setShowModal(false);
-      load();
-      alert("Laporan kendala berhasil dikirim. Admin akan menindaklanjuti.");
-    } catch (err) {
-      setError(err.message);
-    }
-    setSubmitting(false);
+    submitMutate.mutate({
+      path: "/penugasan/kendala",
+      method: "POST",
+      body: form,
+    });
   }
 
   return (
@@ -149,7 +101,7 @@ export default function LaporanKendala() {
         </button>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>
       ) : items.length === 0 ? (
         <div className="card" style={{ padding: "48px", textAlign: "center" }}>
@@ -206,7 +158,7 @@ export default function LaporanKendala() {
       )}
 
       {showModal && (
-        <Modal title="Buat Laporan Kendala" onClose={() => !submitting && setShowModal(false)}>
+        <Modal title="Buat Laporan Kendala" onClose={() => !submitMutate.isPending && setShowModal(false)}>
           <form onSubmit={handleSubmit} style={{ padding: "20px 24px" }}>
             {error && (
               <div style={{ marginBottom: "16px", padding: "10px 12px", background: "#FEE2E2", color: "#991B1B", borderRadius: "6px", fontSize: "13px" }}>
@@ -261,9 +213,9 @@ export default function LaporanKendala() {
             )}
 
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "8px", borderTop: "1px solid #F1F5F9", paddingTop: "16px" }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} disabled={submitting}>Batal</button>
-              <button type="submit" className="btn btn-primary" disabled={submitting || myPenugasan.length === 0}>
-                {submitting ? "Mengirim..." : "Kirim Laporan"}
+              <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} disabled={submitMutate.isPending}>Batal</button>
+              <button type="submit" className="btn btn-primary" disabled={submitMutate.isPending || myPenugasan.length === 0}>
+                {submitMutate.isPending ? "Mengirim..." : "Kirim Laporan"}
               </button>
             </div>
           </form>

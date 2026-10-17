@@ -24,6 +24,7 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice): JsonResponse
     {
+        $this->ensureSameLembaga($invoice);
         $invoice->load(['siklus.faskes.jenisFaskes', 'pks', 'buktiPembayaran', 'dibuatOleh', 'items']);
         $invoice->total_diterima = $invoice->totalDiterima();
         $invoice->sisa_tagihan = $invoice->sisaTagihan();
@@ -45,6 +46,7 @@ class InvoiceController extends Controller
 
     public function bayarVa(Request $request, Invoice $invoice): JsonResponse
     {
+        $this->ensureSameLembaga($invoice);
         if ($invoice->isLunas()) {
             return response()->json(['message' => 'Invoice sudah lunas.'], 422);
         }
@@ -80,6 +82,7 @@ class InvoiceController extends Controller
 
     public function bayarQris(Request $request, Invoice $invoice): JsonResponse
     {
+        $this->ensureSameLembaga($invoice);
         if ($invoice->isLunas()) {
             return response()->json(['message' => 'Invoice sudah lunas.'], 422);
         }
@@ -114,6 +117,7 @@ class InvoiceController extends Controller
      */
     public function uploadBuktiManual(Request $request, Invoice $invoice): JsonResponse
     {
+        $this->ensureSameLembaga($invoice);
         if ($invoice->isLunas()) {
             return response()->json(['message' => 'Invoice sudah lunas, tidak dapat mengunggah bukti lagi.'], 422);
         }
@@ -317,5 +321,30 @@ class InvoiceController extends Controller
         }
 
         return response()->json(['data' => ['status' => 'processed', 'gateway' => $gateway]]);
+    }
+
+    /**
+     * Guard lembaga: invoice hanya bisa diakses dari session lembaga yang
+     * sama dengan lembaga siklus di bawahnya. Melengkapi trait
+     * BelongsToLembaga pada SiklusAkreditasi (tabel invoice tidak memiliki
+     * kolom lembaga_id).
+     *
+     * TIDAK berlaku untuk webhook (gateway publik) — method webhook &
+     * webhookMidtrans tidak memanggil helper ini.
+     */
+    private function ensureSameLembaga(Invoice $invoice): void
+    {
+        $sessionLembagaId = session('lembaga_id');
+        if ($sessionLembagaId === null) {
+            // Superadmin tanpa pilihan lembaga: skip filter
+            return;
+        }
+
+        $siklusLembagaId = $invoice->siklus?->lembaga_id
+            ?? $invoice->siklus()->value('lembaga_id');
+
+        if ($siklusLembagaId !== $sessionLembagaId) {
+            abort(response()->json(['message' => 'Invoice tidak ditemukan.'], 404));
+        }
     }
 }

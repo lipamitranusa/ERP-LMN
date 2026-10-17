@@ -1,22 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { formatDate } from "@/utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Error ${res.status}`);
-  }
-  return res;
-}
+import { useApi, useMutate } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -37,12 +21,7 @@ function LabelBadge({ children, tone }) {
 }
 
 export default function KonfigurasiPajak() {
-  const [tarifList, setTarifList] = useState([]);
-  const [aktif, setAktif] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
   // Form state
@@ -51,25 +30,21 @@ export default function KonfigurasiPajak() {
   const [berlakuSejak, setBerlakuSejak] = useState("");
   const [keterangan, setKeterangan] = useState("");
 
-  async function loadData() {
-    setLoading(true);
-    setError("");
-    try {
-      const [listRes, aktifRes] = await Promise.all([
-        api("/keuangan/konfigurasi-pajak"),
-        api("/keuangan/konfigurasi-pajak/aktif"),
-      ]);
-      const [listData, aktifData] = await Promise.all([listRes.json(), aktifRes.json()]);
-      setTarifList(listData.data || []);
-      setAktif(aktifData.data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data: tarifListData, isLoading: loading, error } = useApi("konfigurasi-pajak", "/keuangan/konfigurasi-pajak");
+  const { data: aktifData } = useApi("konfigurasi-pajak-aktif", "/keuangan/konfigurasi-pajak/aktif");
 
-  useEffect(() => { loadData(); }, []);
+  const tarifList = tarifListData?.data || [];
+  const aktif = aktifData?.data;
+
+  const submitMutate = useMutate({
+    onSuccess: () => {
+      resetForm();
+      setShowForm(false);
+    },
+    onError: (err) => {
+      setSubmitError(err.message);
+    },
+  });
 
   function resetForm() {
     setJenisPajak("ppn");
@@ -81,28 +56,17 @@ export default function KonfigurasiPajak() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setSubmitting(true);
     setSubmitError("");
-    try {
-      const res = await api("/keuangan/konfigurasi-pajak", {
-        method: "POST",
-        body: JSON.stringify({
-          jenis_pajak: jenisPajak,
-          tarif_persen: parseFloat(tarifPersen),
-          berlaku_sejak: berlakuSejak,
-          keterangan: keterangan || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menyimpan tarif.");
-      resetForm();
-      setShowForm(false);
-      loadData();
-    } catch (err) {
-      setSubmitError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
+    submitMutate.mutate({
+      path: "/keuangan/konfigurasi-pajak",
+      method: "POST",
+      body: {
+        jenis_pajak: jenisPajak,
+        tarif_persen: parseFloat(tarifPersen),
+        berlaku_sejak: berlakuSejak,
+        keterangan: keterangan || undefined,
+      },
+    });
   }
 
   const ppnList = tarifList.filter(t => t.jenis_pajak === "ppn").sort((a, b) => new Date(b.berlaku_sejak) - new Date(a.berlaku_sejak));
@@ -222,8 +186,8 @@ export default function KonfigurasiPajak() {
             )}
 
             <div style={{ display: "flex", gap: "10px" }}>
-              <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting ? "Menyimpan..." : "Simpan Tarif"}
+              <button type="submit" className="btn btn-primary" disabled={submitMutate.isPending}>
+                {submitMutate.isPending ? "Menyimpan..." : "Simpan Tarif"}
               </button>
               <button type="button" onClick={() => setShowForm(false)} className="btn btn-ghost">
                 Batal

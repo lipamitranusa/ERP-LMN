@@ -28,6 +28,13 @@ class MasterTenagaAhliController extends Controller
     {
         $query = TenagaAhli::with('akunPengguna');
 
+        // Override global scope jika user kirim lembaga_id eksplisit
+        // (untuk superadmin yang ingin filter per lembaga via dropdown)
+        if ($request->filled('lembaga_id')) {
+            $query->withoutGlobalScope('lembaga')
+                ->where('lembaga_id', $request->string('lembaga_id'));
+        }
+
         if ($request->filled('q')) {
             $q = $request->string('q')->toString();
             $query->where(function ($w) use ($q) {
@@ -50,7 +57,7 @@ class MasterTenagaAhliController extends Controller
             ->limit(200)
             ->get()
             ->map(fn ($t) => array_merge($t->only([
-                'id', 'nomor_induk_surveior', 'nama', 'peran', 'jenis',
+                'id', 'nomor_induk_surveior', 'nama', 'no_wa', 'peran', 'jenis',
                 'status_aktif', 'status_penugasan_saat_ini', 'batas_penugasan_per_periode',
                 'npwp', 'nik', 'nama_pajak', 'kode_objek_pajak',
                 'status_ptkp', 'kode_kpp',
@@ -122,16 +129,22 @@ class MasterTenagaAhliController extends Controller
 
     public function destroy(TenagaAhli $tenagaAhli): JsonResponse
     {
-        if ($tenagaAhli->akunPengguna()->exists()) {
+        // Jika sudah ada penugasan, tidak bisa dihapus
+        if ($tenagaAhli->penugasan()->exists()) {
             return response()->json([
-                'message' => 'Tidak dapat menghapus tenaga ahli yang masih terhubung ke akun pengguna.',
+                'message' => 'Tidak dapat menghapus tenaga ahli yang sudah memiliki penugasan.',
             ], 422);
+        }
+
+        // Hapus akun pengguna yang terhubung jika ada
+        if ($tenagaAhli->akunPengguna()->exists()) {
+            $tenagaAhli->akunPengguna()->delete();
         }
 
         $tenagaAhli->delete();
         $this->audit->log('tenaga_ahli.deleted', 'tenaga_ahli', $tenagaAhli->id);
 
-        return response()->json(['message' => 'Tenaga ahli dihapus.']);
+        return response()->json(['message' => 'Tenaga ahli berhasil dihapus.']);
     }
 
     /**
@@ -192,7 +205,7 @@ class MasterTenagaAhliController extends Controller
             'created_at' => now(),
         ]);
 
-        $this->audit->log('akun.create', null, $akun->id, 'AkunPengguna', $akun->id);
+        $this->audit->log('akun.create', 'AkunPengguna', $akun->id);
 
         return [
             'akun' => [
@@ -209,18 +222,23 @@ class MasterTenagaAhliController extends Controller
     {
         $nikRule = ['required', 'string', 'max:30'];
         if ($id) {
-            $nikRule[] = Rule::unique('tenaga_ahli', 'nomor_induk_surveior')->ignore($id);
+            $nikRule[] = Rule::unique('tenaga_ahli', 'nomor_induk_surveior')
+                ->ignore($id)
+                ->where('lembaga_id', $request->input('lembaga_id'));
         } else {
-            $nikRule[] = 'unique:tenaga_ahli,nomor_induk_surveior';
+            $nikRule[] = Rule::unique('tenaga_ahli', 'nomor_induk_surveior')
+                ->where('lembaga_id', $request->input('lembaga_id'));
         }
 
         $rules = [
             'nomor_induk_surveior' => $nikRule,
             'nama' => 'required|string|max:255',
+            'no_wa' => 'nullable|string|max:20|regex:/^[0-9+\-\s()]*$/',
             'peran' => 'required|string|in:surveior,verifikator,rekomendator,kedua',
             'jenis' => 'nullable|string|in:TKPP,TKSDU',
             'status_aktif' => 'required|string|in:Aktif,Nonaktif,Cuti,Resign',
             'batas_penugasan_per_periode' => 'nullable|integer|min:0',
+            'lembaga_id' => 'required|uuid|exists:lembaga,id',
             // FR-5.8: NPWP & NIK untuk bukti potong PPh 21
             'npwp' => ['nullable', 'string', 'max:30', new \App\Rules\IndonesianNpwp()],
             'nik' => ['nullable', 'string', 'max:20', 'regex:/^\d{16}$/'],
@@ -275,7 +293,7 @@ class MasterTenagaAhliController extends Controller
         ];
 
         $columns = [
-            'nomor_induk_surveior', 'nama', 'peran', 'jenis',
+            'nomor_induk_surveior', 'nama', 'no_wa', 'peran', 'jenis',
             'status_aktif', 'batas_penugasan_per_periode',
             'npwp', 'nik', 'nama_pajak', 'alamat_pajak', 'kota_pajak',
             'kode_objek_pajak', 'status_ptkp', 'kode_kpp',
@@ -288,7 +306,7 @@ class MasterTenagaAhliController extends Controller
             fputcsv($handle, $columns);
             // Example row
             fputcsv($handle, [
-                'NS-0001', 'Dr. Budi Santoso', 'surveior', 'TKPP',
+                'NS-0001', 'Dr. Budi Santoso', '081234567890', 'surveior', 'TKPP',
                 'Aktif', '5',
                 '', '', '', '', '', '', 'TK/0', '',
                 '', '', '',
@@ -415,6 +433,7 @@ class MasterTenagaAhliController extends Controller
                     'id' => (string) Str::uuid(),
                     'nomor_induk_surveior' => $nik,
                     'nama' => $nama,
+                    'no_wa' => trim($data['no_wa'] ?? '') ?: null,
                     'peran' => $peran,
                     'jenis' => $jenis ?: null,
                     'status_aktif' => $status,
@@ -481,7 +500,7 @@ class MasterTenagaAhliController extends Controller
                                 'locked_until' => null,
                                 'created_at' => now(),
                             ]);
-                            $this->audit->log('akun.create', null, $akun->id, 'AkunPengguna', $akun->id);
+                            $this->audit->log('akun.create', 'AkunPengguna', $akun->id);
                             $akunCreated = $email;
                         }
                     }

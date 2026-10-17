@@ -1,21 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useHistory } from "react-router-dom";
 import InvoiceStatusCard from "@/components/InvoiceStatusCard";
 import PaymentMethodSelector from "@/components/PaymentMethodSelector";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  return res;
-}
+import { useApi } from "@/hooks/useApi";
 
 function formatRp(n) {
   return `Rp ${Number(n).toLocaleString("id-ID")}`;
@@ -23,37 +11,31 @@ function formatRp(n) {
 
 export default function FaskesTagihan() {
   const history = useHistory();
-  const [siklusList, setSiklusList] = useState([]);
   const [selectedSiklus, setSelectedSiklus] = useState(null);
-  const [invoices, setInvoices] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    api("/pendaftaran/siklus?per_page=50")
-      .then(r => r?.json())
-      .then(d => {
-        const list = d?.data || [];
-        setSiklusList(list);
-        if (list.length > 0) setSelectedSiklus(list[0].id);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+  const { data: siklusListData, isLoading: loading } = useApi(
+    "siklus-list-faskes",
+    "/pendaftaran/siklus?per_page=50"
+  );
 
-  useEffect(() => {
-    if (!selectedSiklus) return;
-    let cancelled = false;
-    const loadInvoices = () => {
-      api(`/invoice/by-siklus/${selectedSiklus}`)
-        .then(r => r?.json())
-        .then(d => { if (!cancelled) setInvoices(d?.data || []); });
-    };
-    loadInvoices();
-    // Auto-refresh saat tab kembali aktif (mis. selesai bayar di tab lain)
-    const onVis = () => { if (document.visibilityState === "visible") loadInvoices(); };
-    document.addEventListener("visibilitychange", onVis);
-    return () => { cancelled = true; document.removeEventListener("visibilitychange", onVis); };
-  }, [selectedSiklus]);
+  const siklusList = siklusListData?.data || [];
+
+  React.useEffect(() => {
+    if (siklusList.length > 0 && !selectedSiklus) {
+      setSelectedSiklus(siklusList[0].id);
+    }
+  }, [siklusList, selectedSiklus]);
+
+  const { data: invoicesData } = useApi(
+    ["invoices", selectedSiklus],
+    selectedSiklus ? `/invoice/by-siklus/${selectedSiklus}` : "/pendaftaran/siklus?per_page=50",
+    {
+      enabled: !!selectedSiklus,
+      // Refetch when tab becomes visible (e.g., after paying in another tab)
+    }
+  );
+
+  const invoices = invoicesData?.data || [];
 
   if (loading) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>;

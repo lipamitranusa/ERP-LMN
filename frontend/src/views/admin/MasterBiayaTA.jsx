@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { formatDate } from "@/utils/dateFormat";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 /**
  * MasterBiayaTA — Master Biaya Honor Tenaga Ahli per tipe faskes.
@@ -17,110 +18,49 @@ import { formatDate } from "@/utils/dateFormat";
  * Konfigurasi PPN yang tampil di header hanya untuk referensi tarif aktif.
  */
 export default function MasterBiayaTA() {
-  const [data, setData] = useState([]);
-  const [jenisFaskes, setJenisFaskes] = useState([]);
-  const [tarifPajak, setTarifPajak] = useState({ ppn: null, pph21: null });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [editing, setEditing] = useState(null); // row yang sedang diedit
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(blankForm());
-  const [saving, setSaving] = useState(false);
+
+  const { data: listData, isLoading, error } = useApi("master-biaya-ta", "/penugasan/master-biaya");
+  const data = listData?.data || [];
+  const jenisFaskes = listData?.jenis_faskes_tersedia || [];
+  const tarifPajak = listData?.tarif_pajak_aktif || { ppn: null, pph21: null };
+
+  const mutateSubmit = useMutateKeys(["master-biaya-ta"], {
+    onSuccess: () => {
+      setCreating(false);
+      setEditing(null);
+      setForm(blankForm());
+    },
+    onError: (err) => alert(`Gagal menyimpan: ${err.message}`),
+  });
+
+  const mutateToggle = useMutateKeys(["master-biaya-ta"], {
+    onError: (err) => alert(`Gagal: ${err.message}`),
+  });
 
   function blankForm() {
     return { peran: "surveior", tipe_faskes: "PUSKESMAS", tarif_dasar: 0, keterangan: "", aktif: true };
   }
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  async function load() {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/penugasan/master-biaya", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      if (!res.ok) throw new Error(`Gagal memuat (${res.status})`);
-      const body = await res.json();
-      setData(body.data || []);
-      setJenisFaskes(body.jenis_faskes_tersedia || []);
-      setTarifPajak(body.tarif_pajak_aktif || { ppn: null, pph21: null });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function submit(e) {
+  function submit(e) {
     e.preventDefault();
-    setSaving(true);
-    try {
-      const url = editing
-        ? `/api/penugasan/master-biaya/${editing.id}`
-        : "/api/penugasan/master-biaya";
-      const method = editing ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({
-          ...form,
-          tarif_dasar: Number(form.tarif_dasar),
-        }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
-      setCreating(false);
-      setEditing(null);
-      setForm(blankForm());
-      await load();
-    } catch (err) {
-      alert(`Gagal menyimpan: ${err.message}`);
-    } finally {
-      setSaving(false);
-    }
+    const path = editing
+      ? `/penugasan/master-biaya/${editing.id}`
+      : "/penugasan/master-biaya";
+    const method = editing ? "PUT" : "POST";
+    mutateSubmit.mutate({ path, method, body: { ...form, tarif_dasar: Number(form.tarif_dasar) } });
   }
 
-  async function deactivate(row) {
+  function deactivate(row) {
     if (!confirm(`Nonaktifkan tarif untuk ${row.peran} / ${row.tipe_faskes}?`)) return;
-    try {
-      const res = await fetch(`/api/penugasan/master-biaya/${row.id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.message || `HTTP ${res.status}`);
-      }
-      await load();
-    } catch (err) {
-      alert(`Gagal: ${err.message}`);
-    }
+    mutateToggle.mutate({ path: `/penugasan/master-biaya/${row.id}`, method: "DELETE" });
   }
 
-  async function activate(row) {
+  function activate(row) {
     if (!confirm(`Aktifkan tarif untuk ${row.peran} / ${row.tipe_faskes}?`)) return;
-    try {
-      const res = await fetch(`/api/penugasan/master-biaya/${row.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({ aktif: true }),
-      });
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.message || `HTTP ${res.status}`);
-      }
-      await load();
-    } catch (err) {
-      alert(`Gagal: ${err.message}`);
-    }
+    mutateToggle.mutate({ path: `/penugasan/master-biaya/${row.id}`, method: "PUT", body: { aktif: true } });
   }
 
   function startEdit(row) {
@@ -173,7 +113,7 @@ export default function MasterBiayaTA() {
 
       {error && (
         <div style={{ background: "#FEE2E2", color: "#991B1B", padding: "10px 14px", borderRadius: "6px", marginBottom: "12px", fontSize: "13px" }}>
-          {error}
+          {error?.message || error}
         </div>
       )}
 
@@ -183,7 +123,7 @@ export default function MasterBiayaTA() {
           setForm={setForm}
           jenisFaskes={jenisFaskes}
           editing={editing}
-          saving={saving}
+          saving={mutateSubmit.isPending}
           onSubmit={submit}
           onCancel={() => { setCreating(false); setEditing(null); setForm(blankForm()); }}
         />
@@ -203,7 +143,7 @@ export default function MasterBiayaTA() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {isLoading ? (
                 <tr><td colSpan="6" style={{ textAlign: "center", padding: "32px", color: "#94A3B8" }}>Memuat...</td></tr>
               ) : data.length === 0 ? (
                 <tr><td colSpan="6" style={{ textAlign: "center", padding: "32px", color: "#94A3B8" }}>Belum ada master biaya. Klik + Tambah Tarif untuk mulai.</td></tr>

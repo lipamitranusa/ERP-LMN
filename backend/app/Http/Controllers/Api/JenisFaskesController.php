@@ -22,7 +22,14 @@ class JenisFaskesController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = JenisFaskes::query();
+        $query = JenisFaskes::with('lembaga:id,nama');
+
+        // Override global scope jika user kirim lembaga_id eksplisit
+        // (untuk superadmin yang ingin filter per lembaga via dropdown)
+        if ($request->filled('lembaga_id')) {
+            $query->withoutGlobalScope('lembaga')
+                ->where('lembaga_id', $request->string('lembaga_id'));
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->string('status'));
@@ -60,10 +67,24 @@ class JenisFaskesController extends Controller
     {
         $data = $request->validate([
             'nama' => 'required|string|max:100',
-            'kode' => 'nullable|string|max:30|unique:jenis_faskes,kode',
+            'kode' => 'nullable|string|max:30',
             'deskripsi' => 'nullable|string|max:500',
             'status' => 'nullable|in:aktif,nonaktif',
+            'lembaga_id' => 'required|uuid|exists:lembaga,id',
         ]);
+
+        // Custom unique check per lembaga (bukan global)
+        if (! empty($data['kode'])) {
+            $exists = \App\Models\JenisFaskes::withoutGlobalScope('lembaga')
+                ->where('lembaga_id', $data['lembaga_id'])
+                ->where('kode', $data['kode'])
+                ->exists();
+            if ($exists) {
+                return response()->json([
+                    'message' => 'Kode sudah digunakan untuk lembaga ini.',
+                ], 422);
+            }
+        }
 
         $jenis = JenisFaskes::create([
             'id' => (string) Str::uuid(),
@@ -74,6 +95,7 @@ class JenisFaskesController extends Controller
         $this->audit->log('jenis_faskes.create', 'jenis_faskes', $jenis->id, [
             'nama' => $jenis->nama,
             'kode' => $jenis->kode,
+            'lembaga_id' => $jenis->lembaga_id,
         ]);
 
         return response()->json(['data' => $jenis], 201);
@@ -94,10 +116,25 @@ class JenisFaskesController extends Controller
 
         $data = $request->validate([
             'nama' => 'required|string|max:100',
-            'kode' => 'nullable|string|max:30|unique:jenis_faskes,kode,' . $jenisFaskesId,
+            'kode' => 'nullable|string|max:30',
             'deskripsi' => 'nullable|string|max:500',
             'status' => 'required|in:aktif,nonaktif',
+            'lembaga_id' => 'required|uuid|exists:lembaga,id',
         ]);
+
+        // Custom unique check per lembaga (excluding current)
+        if (! empty($data['kode'])) {
+            $exists = \App\Models\JenisFaskes::withoutGlobalScope('lembaga')
+                ->where('lembaga_id', $data['lembaga_id'])
+                ->where('kode', $data['kode'])
+                ->where('id', '!=', $jenisFaskesId)
+                ->exists();
+            if ($exists) {
+                return response()->json([
+                    'message' => 'Kode sudah digunakan untuk lembaga ini.',
+                ], 422);
+            }
+        }
 
         $before = $model->replicate();
         $model->update($data);

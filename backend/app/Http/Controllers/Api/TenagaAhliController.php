@@ -25,8 +25,27 @@ class TenagaAhliController extends Controller
      */
     public function dropdown(Request $request): JsonResponse
     {
-        $query = TenagaAhli::query()
-            ->where('status_aktif', TenagaAhli::STATUS_AKTIF);
+        // Jika ada siklus_id, filter surveyor berdasarkan lembaga siklus tersebut.
+        // Ini mengoverride global scope BelongsToLembaga yang mem-filter
+        // berdasarkan session['lembaga_id'] — yang mungkin stale/salah.
+        $siklusLembagaId = null;
+        if ($request->filled('siklus_id')) {
+            // Bypass global scope saat cari siklus — siklus tidak menggunakan BelongsToLembaga,
+            // tapi jika session['lembaga_id'] salah, query ini bisareturn null
+            // (jarang terjadi, tapi amanhill untuk konsistensi).
+            $siklus = \App\Models\SiklusAkreditasi::find($request->string('siklus_id'));
+            $siklusLembagaId = $siklus?->lembaga_id;
+        }
+
+        $query = TenagaAhli::query();
+
+        if ($siklusLembagaId !== null) {
+            // Bypass global scope, lalu filter berdasarkan lembaga siklus
+            $query->withoutGlobalScope('lembaga')
+                ->where('lembaga_id', $siklusLembagaId);
+        }
+
+        $query->where('status_aktif', TenagaAhli::STATUS_AKTIF);
 
         // Filter peran
         $peran = $request->string('peran')->toString();

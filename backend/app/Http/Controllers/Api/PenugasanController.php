@@ -31,11 +31,23 @@ class PenugasanController extends Controller
      */
     public function listAll(Request $request): JsonResponse
     {
-        $query = Penugasan::with(['tenagaAhli', 'siklus.faskes', 'suratTugas']);
+        $query = Penugasan::with([
+            'tenagaAhli' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'siklus' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'siklus.faskes' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'siklus.lembaga',
+            'suratTugas',
+        ]);
 
         // Rekomendator tidak lagi memakai baris penugasan — direkomendator
         // dikonfigurasi global via konfigurasi_penugasan.default_rekomendator_user_id.
         $query->where('jenis', '!=', Penugasan::JENIS_REKOMENDASI);
+
+        // Filter per lembaga aktif: hanya tampilkan penugasan yang siklus-nya
+        // berada di lembaga yang sama dengan session user.
+        if ($lembagaId = session('lembaga_id')) {
+            $query->whereHas('siklus', fn ($q) => $q->where('lembaga_id', $lembagaId));
+        }
 
         if ($request->filled('jenis')) {
             $query->where('jenis', $request->string('jenis'));
@@ -70,8 +82,18 @@ class PenugasanController extends Controller
     {
         $activeStatuses = [Penugasan::STATUS_MENUNGGU, Penugasan::STATUS_SEDANG_BERTUGAS];
 
-        $list = Penugasan::with(['tenagaAhli', 'siklus.faskes'])
-            ->whereIn('status', $activeStatuses)
+        $query = Penugasan::with([
+            'tenagaAhli' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'siklus' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'siklus.faskes' => fn($q) => $q->withoutGlobalScope('lembaga'),
+        ])
+            ->whereIn('status', $activeStatuses);
+
+        if ($lembagaId = session('lembaga_id')) {
+            $query->whereHas('siklus', fn ($q) => $q->where('lembaga_id', $lembagaId));
+        }
+
+        $list = $query
             ->orderBy('updated_at', 'desc')
             ->limit(20)
             ->get()
@@ -91,6 +113,16 @@ class PenugasanController extends Controller
      */
     public function histori(string $siklusId, Request $request): JsonResponse
     {
+        // Validasi siklus milik lembaga aktif — string parameter tidak otomatis
+        // ter-scope oleh trait BelongsToLembaga (route model binding tidak dipakai).
+        $lembagaId = session('lembaga_id');
+        if ($lembagaId !== null) {
+            $siklusLembagaId = SiklusAkreditasi::where('id', $siklusId)->value('lembaga_id');
+            if ($siklusLembagaId !== $lembagaId) {
+                abort(response()->json(['message' => 'Siklus tidak ditemukan.'], 404));
+            }
+        }
+
         $jenis = $request->string('jenis')->toString();
         $query = \App\Models\HistoriPergantianPenugasan::with([
             'tenagaAhliLama:id,nama,nomor_induk_surveior,jenis',
@@ -236,7 +268,10 @@ class PenugasanController extends Controller
 
     public function index(SiklusAkreditasi $siklus): JsonResponse
     {
-        $penugasan = Penugasan::with(['tenagaAhli', 'suratTugas'])
+        $penugasan = Penugasan::with([
+            'tenagaAhli' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'suratTugas',
+        ])
             ->where('siklus_id', $siklus->id)
             ->orderBy('jenis')
             ->get();
@@ -250,14 +285,33 @@ class PenugasanController extends Controller
      */
     public function myAssignments(Request $request): JsonResponse
     {
-        $user = $request->user();
+        // Bypass global scope agar tenaga_ahli_id selalu tersedia
+        // meskipun session lembaga berbeda dari lembaga asli user.
+        $user = AkunPengguna::withoutGlobalScope('lembaga')
+            ->find($request->user()->id);
 
-        if (! $user->tenaga_ahli_id) {
+        if (! $user?->tenaga_ahli_id) {
             return response()->json(['data' => []]);
         }
 
-        $penugasan = Penugasan::with(['siklus.faskes', 'suratTugas', 'laporanPengerjaan'])
-            ->where('tenaga_ahli_id', $user->tenaga_ahli_id)
+        // siklus.lembaga dibutuhkan untuk menampilkan nama lembaga di UI
+        $query = Penugasan::with([
+            'tenagaAhli' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'siklus' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'siklus.faskes' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'siklus.lembaga',
+            'suratTugas',
+            'laporanPengerjaan',
+        ])
+            ->where('tenaga_ahli_id', $user->tenaga_ahli_id);
+
+        // Filter per lembaga aktif: tenaga ahli hanya boleh melihat
+        // penugasan dari siklus di lembaga yang sama dengan session.
+        if ($lembagaId = session('lembaga_id')) {
+            $query->whereHas('siklus', fn ($q) => $q->where('lembaga_id', $lembagaId));
+        }
+
+        $penugasan = $query
             ->orderBy('id', 'desc')
             ->get();
 
@@ -311,7 +365,11 @@ class PenugasanController extends Controller
             'jenis' => 'required|string|in:survei,verifikasi',
         ]);
 
-        $siklus = SiklusAkreditasi::findOrFail($data['siklus_id']);
+        $siklus = SiklusAkreditasi::findWithLembagaCheck($data['siklus_id']);
+        \Log::debug('appoint-debug', [
+            'ta_ids' => $data['tenaga_ahli_ids'] ?? null,
+            'ta_id_single' => $data['tenaga_ahli_id'] ?? null,
+        ]);
 
         // Guard: survei sudah selesai → tidak bisa tawarkan penugasan survei lagi
         if ($data['jenis'] === Penugasan::JENIS_SURVEI) {
@@ -416,6 +474,10 @@ class PenugasanController extends Controller
      */
     public function appoint(Request $request, AttachmentService $attachment, AuditService $audit): JsonResponse
     {
+        \Log::debug('appoint', [
+            'ta_ids' => $request->input('tenaga_ahli_ids'),
+            'ta_id' => $request->input('tenaga_ahli_id'),
+        ]);
         $data = $request->validate([
             'siklus_id' => 'required|uuid|exists:siklus_akreditasi,id',
             'jenis' => 'required|string|in:survei,verifikasi',
@@ -427,7 +489,14 @@ class PenugasanController extends Controller
             'surat_tugas' => 'nullable|file|mimes:pdf|max:10240',
         ]);
 
-        $siklus = SiklusAkreditasi::findOrFail($data['siklus_id']);
+        $siklus = SiklusAkreditasi::findWithLembagaCheck($data['siklus_id']);
+        \Log::debug('appoint-debug', [
+            'siklus_id' => $data['siklus_id'],
+            'siklus_lembaga' => $siklus->lembaga_id,
+            'ta_ids' => $data['tenaga_ahli_ids'] ?? null,
+            'ta_id_single' => $data['tenaga_ahli_id'] ?? null,
+            'jenis' => $data['jenis'],
+        ]);
 
         // Guard: untuk penugasan survei, tolak jika survei sudah selesai
         // (ada laporan_pengerjaan untuk siklus + jenis survei).
@@ -469,6 +538,12 @@ class PenugasanController extends Controller
 
         // Normalisasi: kumpulkan ID dari tenaga_ahli_ids[] atau tenaga_ahli_id
         $taIds = $data['tenaga_ahli_ids'] ?? [];
+        \Log::debug('appoint-taIds', [
+            'tenaga_ahli_ids' => $data['tenaga_ahli_ids'] ?? null,
+            'tenaga_ahli_id' => $data['tenaga_ahli_id'] ?? null,
+            'taIds_count' => count($taIds),
+            'taIds' => $taIds,
+        ]);
         if (! empty($data['tenaga_ahli_id'])) {
             $taIds[] = $data['tenaga_ahli_id'];
         }
@@ -496,7 +571,8 @@ class PenugasanController extends Controller
             ? TenagaAhli::PERAN_SURVEIOR
             : TenagaAhli::PERAN_VERIFIKATOR;
 
-        $tenagaAhliList = TenagaAhli::whereIn('id', $taIds)->get();
+        $tenagaAhliList = TenagaAhli::withoutGlobalScope('lembaga')->whereIn('id', $taIds)->get();
+        \Log::debug('APPOINT-TA-FOUND', ['jenis_values' => $tenagaAhliList->pluck('jenis')->toArray(), 'all' => $tenagaAhliList->map(fn($t) => ['id' => $t->id, 'jenis' => $t->jenis, 'peran' => $t->peran])->toArray()]);
 
         // Validasi setiap tenaga ahli
         $jenisCounts = [TenagaAhli::JENIS_TKPP => 0, TenagaAhli::JENIS_TKSDU => 0];
@@ -567,7 +643,7 @@ class PenugasanController extends Controller
 
         // Untuk response ke frontend, sertakan TA yang di-keep
         $kept = $tenagaAhliList->merge(
-            TenagaAhli::whereIn('id', $keepTaIds)->get()
+            TenagaAhli::withoutGlobalScope('lembaga')->whereIn('id', $keepTaIds)->get()
         );
 
         $penugasanList = DB::transaction(function () use ($data, $siklus, $tenagaAhliList, $peran, $request, $audit, $attachment) {
@@ -637,15 +713,21 @@ class PenugasanController extends Controller
             ->all();
         $allIds = array_unique(array_merge($penugasanIds, $keepPenugasanIds));
 
-        $loaded = Penugasan::with(['tenagaAhli', 'siklus.faskes', 'suratTugas'])
+        $loaded = Penugasan::with([
+            'tenagaAhli' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'siklus' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'siklus.faskes' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'siklus.lembaga',
+            'suratTugas',
+        ])
             ->whereIn('id', $allIds)
             ->get();
 
         // Bangun message berdasarkan semua TA akhir (kept + created)
-        $finalNames = $loaded->map(fn ($p) => $p->tenagaAhli->nama)->join(', ');
+        $finalNames = $loaded->map(fn ($p) => $p->tenagaAhli?->nama ?? '?')->join(', ');
         $message = "Tenaga ahli {$finalNames} ditugaskan untuk penugasan {$data['jenis']}.";
         if (count($cancelled) > 0) {
-            $cancelledNames = TenagaAhli::whereIn('id', collect($cancelled)->pluck('tenaga_ahli_id'))->pluck('nama')->join(', ');
+            $cancelledNames = TenagaAhli::withoutGlobalScope('lembaga')->whereIn('id', collect($cancelled)->pluck('tenaga_ahli_id'))->pluck('nama')->join(', ');
             $message .= " ({$cancelledNames} sebelumnya digantikan)";
         }
 
@@ -931,7 +1013,7 @@ class PenugasanController extends Controller
      */
     public function cekEligible(string $siklusId, string $jenis): JsonResponse
     {
-        $siklus = SiklusAkreditasi::findOrFail($siklusId);
+        $siklus = SiklusAkreditasi::findWithLembagaCheck($siklusId);
 
         $peran = $jenis === Penugasan::JENIS_SURVEI
             ? TenagaAhli::PERAN_SURVEIOR

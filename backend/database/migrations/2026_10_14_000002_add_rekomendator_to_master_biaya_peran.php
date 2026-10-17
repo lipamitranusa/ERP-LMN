@@ -12,19 +12,15 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement("
-            ALTER TABLE master_biaya_tenaga_ahli
-            MODIFY COLUMN peran ENUM('surveior','verifikator','rekomendator')
-            NOT NULL COMMENT 'surveior | verifikator | rekomendator'
-        ");
+        // PostgreSQL: enum() menghasilkan CHECK constraint, bukan native ENUM type
+        // Drop constraint lama, add constraint baru yang include 'rekomendator'
+        DB::statement("ALTER TABLE master_biaya_tenaga_ahli DROP CONSTRAINT IF EXISTS master_biaya_tenaga_ahli_peran_check");
+        DB::statement("ALTER TABLE master_biaya_tenaga_ahli ADD CONSTRAINT master_biaya_tenaga_ahli_peran_check CHECK (peran IN ('surveior', 'verifikator', 'rekomendator'))");
     }
 
     public function down(): void
     {
-        DB::statement("
-            ALTER TABLE master_biaya_tenaga_ahli
-            MODIFY COLUMN peran ENUM('surveior','verifikator')
-            NOT NULL COMMENT 'surveior | verifikator'
-        ");
+        DB::statement("ALTER TABLE master_biaya_tenaga_ahli DROP CONSTRAINT IF EXISTS master_biaya_tenaga_ahli_peran_check");
+        DB::statement("ALTER TABLE master_biaya_tenaga_ahli ADD CONSTRAINT master_biaya_tenaga_ahli_peran_check CHECK (peran IN ('surveior', 'verifikator'))");
     }
 };

@@ -1,24 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("menu_actions");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `HTTP ${res.status}`);
-  }
-  return res;
-}
+import { useApi, useMutate } from "@/hooks/useApi";
 
 function Modal({ title, onClose, children }) {
   return (
@@ -49,93 +31,67 @@ export default function RekomendasiSettings() {
   const { menuActions } = useAuth();
   const canEdit = menuActions?.some(a => a.modul === "Rekomendasi" && a.action === "Ubah");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const [current, setCurrent] = useState(null);
-  const [candidates, setCandidates] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-
   const [editOpen, setEditOpen] = useState(false);
   const [editSelected, setEditSelected] = useState("");
+  const [message, setMessage] = useState("");
 
   const isRekomendator = user?.role === "Rekomendator";
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [defRes, candRes] = await Promise.all([
-        api("/rekomendator/default"),
-        api("/rekomendator/candidates"),
-      ]);
-      const def = await defRes.json();
-      const cand = await candRes.json();
-      setCurrent(def?.data || null);
-      setCandidates(Array.isArray(cand?.data) ? cand.data : []);
-      setEditSelected(def?.data?.user_id || "");
-    } catch (err) {
-      setError(err.message);
-    }
-    setLoading(false);
-  }, []);
+  const { data: defaultData, isLoading } = useApi("rekomendator-default", "/rekomendator/default");
+  const { data: candidatesData } = useApi("rekomendator-candidates", "/rekomendator/candidates");
 
-  useEffect(() => { load(); }, [load]);
+  const current = defaultData?.data || null;
+  const candidates = Array.isArray(candidatesData?.data) ? candidatesData.data : [];
 
-  async function handleSetAsDefault() {
-    if (!confirm(`Setel diri Anda (${user.nama}) sebagai default rekomendator?`)) return;
-    setSaving(true);
-    setError("");
-    setMessage("");
-    try {
-      const res = await api("/rekomendator/default", {
-        method: "PUT",
-        body: JSON.stringify({ user_id: user.id }),
-      });
-      if (!res) { setSaving(false); return; }
-      const d = await res.json();
-      setCurrent(d?.data || null);
+  const setDefaultMutate = useMutate({
+    onSuccess: (d) => {
       setMessage(d?.message || "Berhasil disetel.");
-      load();
-    } catch (err) {
-      setError(err.message);
-    }
-    setSaving(false);
-  }
+    },
+    onError: (err) => {
+      alert(err.message);
+    },
+  });
+
+  const setEditMutate = useMutate({
+    onSuccess: (d) => {
+      setEditOpen(false);
+      setMessage(d?.message || "Berhasil disetel.");
+    },
+    onError: (err) => {
+      alert(err.message);
+    },
+  });
 
   function openEdit() {
     setEditSelected(current?.user_id || user.id || "");
-    setError("");
     setEditOpen(true);
   }
 
-  async function submitEdit() {
+  function handleSetAsDefault() {
+    if (!confirm(`Setel diri Anda (${user.nama}) sebagai default rekomendator?`)) return;
+    setDefaultMutate.mutate({
+      path: "/rekomendator/default",
+      method: "PUT",
+      body: { user_id: user.id },
+    });
+  }
+
+  function submitEdit() {
     if (!editSelected) {
-      setError("Pilih salah satu rekomendator terlebih dahulu.");
+      alert("Pilih salah satu rekomendator terlebih dahulu.");
       return;
     }
     const target = candidates.find(c => c.user_id === editSelected);
     if (!target) {
-      setError("Rekomendator tidak ditemukan di daftar.");
+      alert("Rekomendator tidak ditemukan di daftar.");
       return;
     }
     if (!confirm(`Setel default rekomendator ke ${target.nama}?`)) return;
-    setSaving(true);
-    setError("");
-    try {
-      const res = await api("/rekomendator/default", {
-        method: "PUT",
-        body: JSON.stringify({ user_id: editSelected }),
-      });
-      if (!res) { setSaving(false); return; }
-      const d = await res.json();
-      setCurrent(d?.data || null);
-      setEditOpen(false);
-      setMessage(d?.message || "Berhasil disetel.");
-      load();
-    } catch (err) {
-      setError(err.message);
-    }
-    setSaving(false);
+    setEditMutate.mutate({
+      path: "/rekomendator/default",
+      method: "PUT",
+      body: { user_id: editSelected },
+    });
   }
 
   return (
@@ -151,12 +107,6 @@ export default function RekomendasiSettings() {
         </p>
       </div>
 
-      {error && (
-        <div style={{ background: "#FEE2E2", color: "#991B1B", padding: "10px 14px", borderRadius: "6px", marginBottom: "12px", fontSize: "13px" }}>
-          {error}
-        </div>
-      )}
-
       {message && (
         <div style={{ background: "#DCFCE7", color: "#166534", padding: "10px 14px", borderRadius: "6px", marginBottom: "12px", fontSize: "13px" }}>
           {message}
@@ -164,7 +114,7 @@ export default function RekomendasiSettings() {
       )}
 
       <div className="card" style={{ padding: "20px" }}>
-        {loading ? (
+        {isLoading ? (
           <div style={{ padding: "20px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>
         ) : (
           <>
@@ -198,7 +148,7 @@ export default function RekomendasiSettings() {
                   <button
                     className="btn btn-secondary"
                     onClick={openEdit}
-                    disabled={saving}
+                    disabled={setDefaultMutate.isPending}
                   >
                     Edit
                   </button>
@@ -206,9 +156,9 @@ export default function RekomendasiSettings() {
                     <button
                       className="btn btn-primary"
                       onClick={handleSetAsDefault}
-                      disabled={saving}
+                      disabled={setDefaultMutate.isPending}
                     >
-                      {saving ? "Menyetel..." : "Jadikan Saya Default"}
+                      {setDefaultMutate.isPending ? "Menyetel..." : "Jadikan Saya Default"}
                     </button>
                   )}
                 </div>
@@ -258,7 +208,7 @@ export default function RekomendasiSettings() {
       </div>
 
       {editOpen && (
-        <Modal title="Edit Default Rekomendator" onClose={() => !saving && setEditOpen(false)}>
+        <Modal title="Edit Default Rekomendator" onClose={() => !setEditMutate.isPending && setEditOpen(false)}>
           <div style={{ padding: "20px 24px" }}>
             <p style={{ margin: "0 0 12px", fontSize: "13px", color: "#475569" }}>
               Pilih pengguna dengan role Rekomendator yang akan menerima hasil verifikasi.
@@ -283,11 +233,11 @@ export default function RekomendasiSettings() {
             </div>
           </div>
           <div style={{ padding: "12px 24px", borderTop: "1px solid #F1F5F9", display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-            <button className="btn btn-secondary" onClick={() => setEditOpen(false)} disabled={saving}>
+            <button className="btn btn-secondary" onClick={() => setEditOpen(false)} disabled={setEditMutate.isPending}>
               Batal
             </button>
-            <button className="btn btn-primary" onClick={submitEdit} disabled={saving || !editSelected}>
-              {saving ? "Menyimpan..." : "Simpan"}
+            <button className="btn btn-primary" onClick={submitEdit} disabled={setEditMutate.isPending || !editSelected}>
+              {setEditMutate.isPending ? "Menyimpan..." : "Simpan"}
             </button>
           </div>
         </Modal>

@@ -72,6 +72,7 @@ class MailSettingController extends Controller
         }
 
         $toEmail = $request->input('test_email', $request->user()?->email);
+        $testMessage = $request->input('test_message', "Ini adalah email test dari sistem ERP Akreditasi LIPA MITRA NUSA.\n\nJika Anda menerima email ini, berarti konfigurasi mail server berhasil.");
         if (empty($toEmail)) {
             return response()->json(['success' => false, 'message' => 'Email test wajib diisi.'], 422);
         }
@@ -80,7 +81,7 @@ class MailSettingController extends Controller
             $this->applyMailConfig($driver);
 
             $result = Mail::raw(
-                "Ini adalah email test dari sistem ERP Akreditasi LIPA MITRA NUSA.\n\nJika Anda menerima email ini, berarti konfigurasi mail server berhasil.",
+                $testMessage,
                 function ($message) use ($toEmail) {
                     $fromAddress = MailSetting::value('from_address') ?: config('mail.from.address') ?: 'noreply@localhost';
                     $fromName = MailSetting::value('from_name') ?: config('mail.from.name') ?: 'ERP Akreditasi';

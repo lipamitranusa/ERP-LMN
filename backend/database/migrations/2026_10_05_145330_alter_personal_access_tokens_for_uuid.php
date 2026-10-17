@@ -17,7 +17,7 @@ return new class extends Migration
 
         // Ubah tipe kolom lewat raw SQL karena Laravel Blueprint tidak support
         // perubahan tipe langsung untuk indexed morphs columns.
-        DB::statement('ALTER TABLE personal_access_tokens MODIFY tokenable_id VARCHAR(36) NOT NULL');
+        DB::statement('ALTER TABLE personal_access_tokens ALTER COLUMN tokenable_id TYPE VARCHAR(36), ALTER COLUMN tokenable_id SET NOT NULL');
 
         Schema::table('personal_access_tokens', function ($table) {
             $table->index(['tokenable_type', 'tokenable_id'], 'personal_access_tokens_tokenable_index');
@@ -30,7 +30,7 @@ return new class extends Migration
             $table->dropIndex('personal_access_tokens_tokenable_index');
         });
 
-        DB::statement('ALTER TABLE personal_access_tokens MODIFY tokenable_id BIGINT UNSIGNED NOT NULL');
+        DB::statement('ALTER TABLE personal_access_tokens ALTER COLUMN tokenable_id TYPE BIGINT, ALTER COLUMN tokenable_id SET NOT NULL');
 
         Schema::table('personal_access_tokens', function ($table) {
             $table->index(['tokenable_type', 'tokenable_id']);

@@ -1,29 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { ...options.headers };
-  // Jangan set Content-Type kalau body FormData — biar browser isi boundary-nya
-  if (!(options.body instanceof FormData)) {
-    headers["Content-Type"] = headers["Content-Type"] || "application/json";
-  }
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `HTTP ${res.status}`);
-  }
-  return res;
-}
+import React, { useState, useRef } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 const EMPTY_FORM = {
   nama: "",
+  nama_pt: "",
   alamat: "",
   kota: "",
   telepon: "",
@@ -96,8 +76,6 @@ function FormField({ label, children, required }) {
 }
 
 export default function MasterLembaga() {
-  const [lembaga, setLembaga] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -108,21 +86,9 @@ export default function MasterLembaga() {
   const [search, setSearch] = useState("");
   const fileInputRef = useRef(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    api("/master/lembaga?q=" + encodeURIComponent(search))
-      .then(r => r?.json())
-      .then(d => {
-        setLembaga(d?.data || []);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("[MasterLembaga]", err);
-        setLoading(false);
-      });
-  }, [search]);
-
-  useEffect(() => { load(); }, [load]);
+  const { data, isLoading } = useApi(["lembaga", search], "/master/lembaga?q=" + encodeURIComponent(search));
+  const lembaga = data?.data || [];
+  const mutate = useMutateKeys(["lembaga"]);
 
   function openAdd() {
     setEditTarget(null);
@@ -137,6 +103,7 @@ export default function MasterLembaga() {
     setEditTarget(item);
     setForm({
       nama: item.nama || "",
+      nama_pt: item.nama_pt || "",
       alamat: item.alamat || "",
       kota: item.kota || "",
       telepon: item.telepon || "",
@@ -175,13 +142,12 @@ export default function MasterLembaga() {
       if (logoFile) fd.append("logo", logoFile);
       if (hapusLogo) fd.append("hapus_logo", "1");
 
-      const res = editTarget
-        ? await api(`/master/lembaga/${editTarget.id}`, { method: "PUT", body: fd })
-        : await api("/master/lembaga", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menyimpan.");
+      await mutate.mutateAsync({
+        path: editTarget ? `/master/lembaga/${editTarget.id}` : "/master/lembaga",
+        method: editTarget ? "PUT" : "POST",
+        body: fd,
+      });
       setShowModal(false);
-      load();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -198,10 +164,7 @@ export default function MasterLembaga() {
   async function handleDelete(item) {
     if (!confirm(`Hapus lembaga "${item.nama}"?`)) return;
     try {
-      const res = await api(`/master/lembaga/${item.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menghapus.");
-      load();
+      await mutate.mutateAsync({ path: `/master/lembaga/${item.id}`, method: "DELETE" });
     } catch (err) {
       alert(err.message);
     }
@@ -235,7 +198,7 @@ export default function MasterLembaga() {
           <input
             type="text"
             className="form-input"
-            placeholder="Cari nama, kota, atau email..."
+            placeholder="Cari nama, nama PT, kota, atau email..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{ paddingLeft: "38px" }}
@@ -250,6 +213,7 @@ export default function MasterLembaga() {
             <thead>
               <tr>
                 <th>Nama Lembaga</th>
+                <th>Nama PT</th>
                 <th>Kota</th>
                 <th>Kontak</th>
                 <th>Email / Website</th>
@@ -258,18 +222,20 @@ export default function MasterLembaga() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr><td colSpan="6" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
+              {isLoading ? (
+                <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
               ) : lembaga.length === 0 ? (
-                <tr><td colSpan="6" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>
+                <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>
                   {search ? "Tidak ada hasil untuk pencarian ini" : "Belum ada lembaga. Klik 'Tambah Lembaga' untuk memulai."}
                 </td></tr>
               ) : lembaga.map(l => (
                 <tr key={l.id}>
                   <td style={{ fontWeight: "500", color: "#1E293B", maxWidth: "220px" }}>
                     <div style={{ fontWeight: "500" }}>{l.nama}</div>
+                    {l.nama_pt && <div style={{ fontSize: "11px", color: "#64748B", marginTop: "2px" }}>PT: {l.nama_pt}</div>}
                     {l.nama_cp && <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>CP: {l.nama_cp}</div>}
                   </td>
+                  <td style={{ color: "#64748B", fontSize: "13px" }}>{l.nama_pt || "—"}</td>
                   <td style={{ color: "#64748B", fontSize: "13px" }}>{l.kota || "—"}</td>
                   <td style={{ color: "#64748B", fontSize: "13px" }}>{l.telepon || l.telepon_cp || "—"}</td>
                   <td style={{ color: "#64748B", fontSize: "12px", maxWidth: "180px" }}>
@@ -328,6 +294,10 @@ export default function MasterLembaga() {
             <Section title="Identitas & Logo">
               <FormField label="Nama Lembaga" required>
                 <input className="form-input" value={form.nama} onChange={e => set("nama", e.target.value)} required placeholder="cth: Lembaga Akreditasi Mandiri X" />
+              </FormField>
+
+              <FormField label="Nama PT (Perusahaan)">
+                <input className="form-input" value={form.nama_pt} onChange={e => set("nama_pt", e.target.value)} placeholder="cth: PT. Lembaga Akreditasi Indonesia" />
               </FormField>
 
               <FormField label="Logo (untuk kop invoice & slip)">

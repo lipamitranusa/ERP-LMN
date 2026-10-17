@@ -1,15 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  // Jangan redirect otomatis — biar component handle sendiri
-  return res;
-}
+import { useApi } from "@/hooks/useApi";
+import { SkeletonStatCards, SkeletonTable } from "@/components/Skeleton";
 
 const LMNIcon = () => (
   <svg viewBox="0 0 36 36" width="32" height="32" fill="none">
@@ -83,30 +76,19 @@ function StatCard({ label, value, trend, trendDirection, iconColor, iconBg, icon
 }
 
 function Dashboard() {
-  const [stats, setStats] = useState({
-    siklus_total: 0,
-    siklus_aktif: 0,
-    verif_done: 0,
-    pending_review: 0,
-  });
-  const [recentSiklus, setRecentSiklus] = useState([]);
-  const [recentPenugasan, setRecentPenugasan] = useState([]);
   const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const { data, isLoading } = useApi("dashboard-prefetch", "/admin/dashboard");
 
-  useEffect(() => {
-    api("/admin/dashboard").then(r => r?.json()).then(d => {
-      if (d?.stats) {
-        setStats({
-          siklus_total: d.stats.total_siklus,
-          siklus_aktif: d.stats.aktif_sekarang,
-          verif_done: d.stats.terverifikasi,
-          pending_review: d.stats.pending_review,
-        });
-        setRecentSiklus(d.recent_siklus || []);
-        setRecentPenugasan(d.penugasan_aktif || []);
-      }
-    }).catch(() => {});
-  }, []);
+  const stats = {
+    siklus_total: data?.stats?.total_siklus ?? 0,
+    siklus_aktif: data?.stats?.aktif_sekarang ?? 0,
+    verif_done: data?.stats?.terverifikasi ?? 0,
+    pending_review: data?.stats?.pending_review ?? 0,
+  };
+  const recentSiklus = data?.recent_siklus ?? [];
+  const recentPenugasan = data?.penugasan_aktif ?? [];
+
+  const hasData = !isLoading && !!data;
 
   return (
     <div>
@@ -128,44 +110,48 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* Stat cards — summary pages use cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "28px" }}>
-        <StatCard
-          label="Total Siklus"
-          value={stats.siklus_total}
-          trend="Semua waktu"
-          trendDirection="up"
-          iconColor="#4CAF50"
-          iconBg="#E8F5E9"
-          icon={<><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M3 14h7v7H3z"/><path d="M14 14h7v7h-7z"/></>}
-        />
-        <StatCard
-          label="Aktif Sekarang"
-          value={stats.siklus_aktif}
-          trend="Sedang berlangsung"
-          trendDirection="up"
-          iconColor="#2563EB"
-          iconBg="#DBEAFE"
-          icon={<><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></>}
-        />
-        <StatCard
-          label="Terverifikasi"
-          value={stats.verif_done}
-          trend="—"
-          iconColor="#7E57C2"
-          iconBg="#EDE9F6"
-          icon={<><polyline points="20 6 9 17 4 12"/></>}
-        />
-        <StatCard
-          label="Pending Review"
-          value={stats.pending_review}
-          trend="Memerlukan perhatian"
-          trendDirection="down"
-          iconColor="#F59E0B"
-          iconBg="#FEF9C3"
-          icon={<><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>}
-        />
-      </div>
+      {/* Stat cards — skeleton saat load, konten saat data siap */}
+      {isLoading ? (
+        <SkeletonStatCards />
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "28px" }}>
+          <StatCard
+            label="Total Siklus"
+            value={stats.siklus_total}
+            trend="Semua waktu"
+            trendDirection="up"
+            iconColor="#4CAF50"
+            iconBg="#E8F5E9"
+            icon={<><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M3 14h7v7H3z"/><path d="M14 14h7v7h-7z"/></>}
+          />
+          <StatCard
+            label="Aktif Sekarang"
+            value={stats.siklus_aktif}
+            trend="Sedang berlangsung"
+            trendDirection="up"
+            iconColor="#2563EB"
+            iconBg="#DBEAFE"
+            icon={<><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></>}
+          />
+          <StatCard
+            label="Terverifikasi"
+            value={stats.verif_done}
+            trend="—"
+            iconColor="#7E57C2"
+            iconBg="#EDE9F6"
+            icon={<><polyline points="20 6 9 17 4 12"/></>}
+          />
+          <StatCard
+            label="Pending Review"
+            value={stats.pending_review}
+            trend="Memerlukan perhatian"
+            trendDirection="down"
+            iconColor="#F59E0B"
+            iconBg="#FEF9C3"
+            icon={<><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>}
+          />
+        </div>
+      )}
 
       {/* Two-column: Siklus + Penugasan — working pages use dense table */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
@@ -187,7 +173,9 @@ function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {recentSiklus.length === 0 ? (
+                {isLoading ? (
+                  <SkeletonTable rows={5} cols={3} />
+                ) : recentSiklus.length === 0 ? (
                   <tr>
                     <td colSpan="3" style={{ textAlign: "center", color: "#94A3B8", padding: "32px 16px", fontSize: "13px" }}>
                       Belum ada siklus
@@ -230,7 +218,9 @@ function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {recentPenugasan.length === 0 ? (
+                {isLoading ? (
+                  <SkeletonTable rows={5} cols={4} />
+                ) : recentPenugasan.length === 0 ? (
                   <tr>
                     <td colSpan="4" style={{ textAlign: "center", color: "#94A3B8", padding: "32px 16px", fontSize: "13px" }}>
                       Belum ada penugasan aktif

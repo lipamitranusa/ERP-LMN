@@ -1,27 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  try {
-    const res = await fetch(`/api${path}`, { ...options, headers });
-    if (res.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/auth/login";
-      return null;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `HTTP ${res.status}`);
-    }
-    return res;
-  } catch (err) {
-    console.error("[api]", err);
-    throw err;
-  }
-}
+import React, { useState, useMemo } from "react";
+import { useApi, useMutate } from "@/hooks/useApi";
 
 function PasswordField({ value, onChange, label, placeholder = "••••••••" }) {
   const [show, setShow] = useState(false);
@@ -92,40 +70,29 @@ const TABS = [
 ];
 
 export default function PengaturanMail() {
-  const [settings, setSettings] = useState([]);
-  const [grouped, setGrouped] = useState({});
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testEmail, setTestEmail] = useState("");
+  const [testMessage, setTestMessage] = useState("Ini adalah email test dari sistem ERP Akreditasi Faskes.");
   const [activeTab, setActiveTab] = useState("umum");
   const [toastMsg, setToastMsg] = useState(null);
   const [toastType, setToastType] = useState("success");
   const [dirty, setDirty] = useState({});
   const [tempValues, setTempValues] = useState({});
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api("/mail-settings");
-      if (!res) { setLoading(false); return; }
-      const json = await res.json();
-      const all = Array.isArray(json) ? json : (json.data || []);
-      setSettings(all);
-      const grp = {};
-      all.forEach(s => {
-        if (!grp[s.kategori]) grp[s.kategori] = {};
-        grp[s.kategori][s.kunci] = s;
-      });
-      setGrouped(grp);
-    } catch (err) {
-      showToast("Gagal memuat pengaturan: " + err.message, "error");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data, isLoading } = useApi("mail-settings", "/mail-settings");
+  const mutateSave = useMutate({});
 
-  useEffect(() => { load(); }, [load]);
+  const settings = data?.data || [];
+
+  const grouped = useMemo(() => {
+    const grp = {};
+    settings.forEach(s => {
+      if (!grp[s.kategori]) grp[s.kategori] = {};
+      grp[s.kategori][s.kunci] = s;
+    });
+    return grp;
+  }, [settings]);
 
   const getVal = (kat, kunci) => {
     const key = `${kat}:${kunci}`;
@@ -152,16 +119,14 @@ export default function PengaturanMail() {
         setSaving(false);
         return;
       }
-      const res = await api("/mail-settings", {
+      await mutateSave.mutateAsync({
+        path: "/mail-settings",
         method: "PUT",
-        body: JSON.stringify({ values: payload }),
+        body: { values: payload },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
       setTempValues({});
       setDirty({});
-      await load();
-      showToast(data.message || "Berhasil disimpan.", "success");
+      showToast("Berhasil disimpan.", "success");
     } catch (err) {
       showToast(err.message || "Gagal menyimpan.", "error");
     } finally {
@@ -175,12 +140,12 @@ export default function PengaturanMail() {
     setTesting(true);
     try {
       const driver = getVal("umum", "driver") || "smtp";
-      const res = await api("/mail-settings/test-connection", {
+      const { api } = await import("@/lib/api");
+      // api() sudah parse JSON & throw on non-ok — langsung dapat response body
+      const data = await api("/mail-settings/test-connection", {
         method: "POST",
-        body: JSON.stringify({ driver, test_email: email }),
+        body: JSON.stringify({ driver, test_email: email, test_message }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
       showToast(data.message, "success");
     } catch (err) {
       showToast(err.message || "Gagal mengirim email test.", "error");
@@ -308,7 +273,7 @@ export default function PengaturanMail() {
     ));
   };
 
-  if (loading) return <LoadingSpinner />;
+  if (isLoading) return <LoadingSpinner />;
 
   return (
     <div>
@@ -324,17 +289,6 @@ export default function PengaturanMail() {
           </p>
         </div>
         <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-          <button className="btn btn-secondary" onClick={handleTestConnection} disabled={testing || !isEnabled}
-            style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            {testing ? (
-              <div style={{ width: "14px", height: "14px", border: "2px solid #94A3B8", borderTopColor: "#4CAF50", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-              </svg>
-            )}
-            {testing ? "Mengirim..." : "Kirim Test Email"}
-          </button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving || !hasDirty}>
             {saving ? "Menyimpan..." : "Simpan Perubahan"}
           </button>
@@ -358,22 +312,57 @@ export default function PengaturanMail() {
 
       {isEnabled && (
         <div style={{
-          padding: "12px 16px", borderRadius: "8px", marginBottom: "20px",
+          padding: "16px", borderRadius: "8px", marginBottom: "20px",
           background: "#EFF6FF", border: "1px solid #BFDBFE",
-          display: "flex", gap: "10px", alignItems: "flex-end", flexWrap: "wrap",
         }}>
-          <div style={{ flex: "1", minWidth: "200px" }}>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-              Email Tujuan Test
-            </label>
-            <input className="form-input" type="email" value={testEmail}
-              onChange={e => setTestEmail(e.target.value)}
-              placeholder="admin@lembaga.com"
-              style={{ marginBottom: 0 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+              <polyline points="22,6 12,13 2,6"/>
+            </svg>
+            <span style={{ fontSize: "13px", fontWeight: "600", color: "#1E40AF" }}>Kirim Email Test</span>
           </div>
-          <span style={{ fontSize: "12px", color: "#64748B", flexShrink: 0 }}>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+            <div>
+              <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
+                Email Tujuan
+              </label>
+              <input className="form-input" type="email" value={testEmail}
+                onChange={e => setTestEmail(e.target.value)}
+                placeholder="admin@lembaga.com"
+                style={{ marginBottom: 0 }} />
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-end" }}>
+              <button className="btn btn-secondary" onClick={handleTestConnection}
+                disabled={testing || !isEnabled}
+                style={{ display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}>
+                {testing ? (
+                  <div style={{ width: "14px", height: "14px", border: "2px solid #94A3B8", borderTopColor: "#4CAF50", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                )}
+                {testing ? "Mengirim..." : "Kirim Test Email"}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
+              Isi Pesan
+            </label>
+            <textarea className="form-input" value={testMessage}
+              onChange={e => setTestMessage(e.target.value)}
+              placeholder="Ketik isi pesan email test..."
+              rows={3}
+              style={{ marginBottom: 0, resize: "vertical" }} />
+          </div>
+          <p style={{ fontSize: "11px", color: "#64748B", margin: "6px 0 0", lineHeight: "1.4" }}>
             Kirim email test untuk memastikan konfigurasi SMTP benar.
-          </span>
+          </p>
         </div>
       )}
 

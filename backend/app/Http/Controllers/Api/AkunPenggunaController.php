@@ -26,7 +26,21 @@ class AkunPenggunaController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $query = AkunPengguna::with(['role', 'faskes:id,nama,kota', 'tenagaAhli:id,nama'])->orderBy('created_at', 'desc');
+        // Tanpa trait scope: filter default + pivot secara eksplisit agar
+        // user multi-lembaga (yang lembaga_id default ≠ lembaga aktif tapi
+        // ada di pivot) tetap muncul di list.
+        $query = AkunPengguna::withoutGlobalScope('lembaga')
+            ->with(['role', 'faskes:id,nama,kota', 'tenagaAhli:id,nama', 'lembagas:id,nama'])
+            ->orderBy('created_at', 'desc');
+
+        // Auto-scope ke lembaga aktif session: lembaga_id default ATAU ada di pivot
+        $sessionLembagaId = session('lembaga_id');
+        if ($sessionLembagaId) {
+            $query->where(function ($q) use ($sessionLembagaId) {
+                $q->where('lembaga_id', $sessionLembagaId)
+                  ->orWhereHas('lembagas', fn ($sq) => $sq->where('lembaga.id', $sessionLembagaId));
+            });
+        }
 
         if ($request->filled('q')) {
             $q = $request->string('q');
@@ -39,9 +53,23 @@ class AkunPenggunaController extends Controller
         if ($request->filled('status_akun')) {
             $query->where('status_akun', $request->string('status_akun'));
         }
+        if ($request->filled('lembaga_id')) {
+            // Override auto-scope: filter via pivot sesuai request
+            $lembagaId = $request->string('lembaga_id');
+            $query->where(function ($q) use ($lembagaId) {
+                $q->where('lembaga_id', $lembagaId)
+                  ->orWhereHas('lembagas', fn ($sq) => $sq->where('lembaga.id', $lembagaId));
+            });
+        }
 
         $perPage = min((int) $request->integer('per_page', 25), 50);
         $items = $query->paginate($perPage);
+
+        // Tambahkan lembaga_ids + lembagas ke setiap item
+        $items->getCollection()->transform(function ($u) {
+            $u->lembaga_ids = $u->lembagas->pluck('id')->all();
+            return $u;
+        });
 
         return response()->json($items);
     }
@@ -53,6 +81,10 @@ class AkunPenggunaController extends Controller
         $this->validateTenagaAhliForRole($data);
 
         $password = $data['password'] ?? Str::random(12);
+
+        // lembaga_id (default) = lembaga pertama dari array lembaga_ids
+        $lembagaIds = $this->resolveLembagaIds($data);
+        $defaultLembagaId = $lembagaIds[0] ?? null;
 
         $akun = AkunPengguna::create([
             'id' => (string) Str::uuid(),
@@ -66,8 +98,14 @@ class AkunPenggunaController extends Controller
             'status_akun' => $data['status_akun'] ?? 'Aktif',
             'failed_login_attempts' => 0,
             'locked_until' => null,
+            'lembaga_id' => $defaultLembagaId,
             'created_at' => now(),
         ]);
+
+        // Sync multi-lembaga ke pivot
+        if (! empty($lembagaIds)) {
+            $akun->lembagas()->sync($lembagaIds);
+        }
 
         $this->audit->record('akun.create', null, $akun, 'AkunPengguna', $akun->id);
 
@@ -78,6 +116,9 @@ class AkunPenggunaController extends Controller
                 'email' => $akun->email,
                 'role_id' => $akun->role_id,
                 'status_akun' => $akun->status_akun,
+                'lembaga_id' => $akun->lembaga_id,
+                'lembaga_ids' => $akun->lembagas()->pluck('lembaga.id')->all(),
+                'lembagas' => $akun->lembagas()->get(['lembaga.id', 'lembaga.nama'])->all(),
             ],
         ];
 
@@ -90,19 +131,34 @@ class AkunPenggunaController extends Controller
         return response()->json($response, 201);
     }
 
-    public function show(AkunPengguna $akun): JsonResponse
+    public function show(Request $request, string $akun): JsonResponse
     {
-        $akun->load('role');
+        // Bypass trait scope agar user multi-lembaga yang lembaga_id default
+        // ≠ session lembaga tapi ada di pivot tetap bisa di-load
+        $id = $this->resolveId($request, $akun);
+        $akun = AkunPengguna::withoutGlobalScope('lembaga')->findOrFail($id);
+        $this->ensureLembagaAccess($akun);
+        $akun->load(['role', 'lembagas']);
+        $akun->lembaga_ids = $akun->lembagas->pluck('id')->all();
         return response()->json(['data' => $akun]);
     }
 
-    public function update(Request $request, AkunPengguna $akun): JsonResponse
+    public function update(Request $request, string $akun): JsonResponse
     {
+        // Bypass trait scope + manual lookup agar user multi-lembaga bisa di-edit
+        $id = $this->resolveId($request, $akun);
+        $akun = AkunPengguna::withoutGlobalScope('lembaga')->findOrFail($id);
+        $this->ensureLembagaAccess($akun);
+
         $data = $request->validate($this->rules($akun->id));
 
         $this->validateTenagaAhliForRole($data, $akun);
 
         $before = $akun->replicate();
+
+        // lembaga_id (default) = lembaga pertama dari array lembaga_ids
+        $lembagaIds = $this->resolveLembagaIds($data);
+        $defaultLembagaId = $lembagaIds[0] ?? null;
 
         $updateFields = [
             'role_id' => $data['role_id'],
@@ -111,6 +167,7 @@ class AkunPenggunaController extends Controller
             'nama' => $data['nama'],
             'username' => $data['username'] ?? null,
             'status_akun' => $data['status_akun'] ?? 'Aktif',
+            'lembaga_id' => $defaultLembagaId,
         ];
 
         // Only update password if explicitly provided
@@ -125,21 +182,37 @@ class AkunPenggunaController extends Controller
         }
 
         $akun->forceFill($updateFields)->save();
+
+        // Sync multi-lembaga ke pivot (replace existing)
+        $akun->lembagas()->sync($lembagaIds);
+
         $this->audit->record('akun.update', $before, $akun->fresh(), 'AkunPengguna', $akun->id);
 
-        return response()->json(['data' => $akun->fresh()->only(['id', 'nama', 'username', 'email', 'role_id', 'status_akun', 'locked_until'])]);
+        $fresh = $akun->fresh();
+        $fresh->lembaga_ids = $lembagaIds;
+        $fresh->lembagas;
+        return response()->json(['data' => $fresh->only(['id', 'nama', 'username', 'email', 'role_id', 'status_akun', 'locked_until', 'lembaga_id', 'lembaga_ids'])]);
     }
 
-    public function destroy(AkunPengguna $akun): JsonResponse
+    public function destroy(Request $request, string $akun): JsonResponse
     {
+        // Bypass trait scope + manual lookup agar user multi-lembaga bisa di-hapus
+        $id = $this->resolveId($request, $akun);
+        $akun = AkunPengguna::withoutGlobalScope('lembaga')->findOrFail($id);
+        $this->ensureLembagaAccess($akun);
         $before = $akun->replicate();
         $akun->delete();
         $this->audit->record('akun.delete', $before, null, 'AkunPengguna', $before->id);
         return response()->json(['message' => 'Akun pengguna dihapus.']);
     }
 
-    public function resetPassword(Request $request, AkunPengguna $akun): JsonResponse
+    public function resetPassword(Request $request, string $akun): JsonResponse
     {
+        // Bypass trait scope + manual lookup agar user multi-lembaga bisa di-reset
+        $id = $this->resolveId($request, $akun);
+        $akun = AkunPengguna::withoutGlobalScope('lembaga')->findOrFail($id);
+        $this->ensureLembagaAccess($akun);
+
         $request->validate([
             'password' => 'nullable|string|min:8',
         ]);
@@ -179,10 +252,90 @@ class AkunPenggunaController extends Controller
             'role_id' => 'required|uuid|exists:roles,id',
             'faskes_id' => 'nullable|uuid|exists:faskes,id',
             'tenaga_ahli_id' => 'nullable|uuid|exists:tenaga_ahli,id',
+            // Multi-lembaga: array minimal 1 lembaga
+            'lembaga_ids' => 'required|array|min:1',
+            'lembaga_ids.*' => 'uuid|exists:lembaga,id',
+            // legacy: lembaga_id tunggal (opsional, default = lembaga_ids[0])
+            'lembaga_id' => 'nullable|uuid|exists:lembaga,id',
             'password' => 'nullable|string|min:8',
             'status_akun' => 'nullable|in:Aktif,Nonaktif,Terkunci',
             'unlock' => 'nullable|boolean',
         ];
+    }
+
+    /**
+     * Guard lembaga: akun hanya bisa di-show/update/delete dari session
+     * lembaga yang user admin ini punya akses. Akses = lembaga_id default
+     * OR ada di pivot `akun_pengguna_lembaga`.
+     *
+     * Superadmin tanpa session lembaga: skip check.
+     */
+    private function ensureLembagaAccess(AkunPengguna $akun): void
+    {
+        $sessionLembagaId = session('lembaga_id');
+        if ($sessionLembagaId === null) {
+            // Superadmin tanpa pilihan lembaga: skip
+            return;
+        }
+
+        $hasAccess = $akun->lembaga_id === $sessionLembagaId
+            || $akun->lembagas()->where('lembaga.id', $sessionLembagaId)->exists();
+
+        if (! $hasAccess) {
+            abort(response()->json([
+                'message' => 'Akun ini tidak memiliki akses ke lembaga Anda saat ini.',
+            ], 404));
+        }
+    }
+
+    /**
+     * Resolve ID user dari route parameter dengan robust:
+     * - Prioritas 1: ambil dari `request->route('akun')` (eksplisit, anti-matching-issue)
+     * - Prioritas 2: ekstrak UUID dari string (kalau frontend kirim object JSON sebagai path)
+     * - Validasi format UUID; kalau tidak valid → 404
+     */
+    private function resolveId(Request $request, ?string $param = null): string
+    {
+        // 1) Ambil dari route parameter eksplisit
+        $routeId = $request->route('akun');
+        if (is_string($routeId) && $routeId !== '') {
+            $param = $routeId;
+        }
+
+        if (! is_string($param) || $param === '') {
+            abort(response()->json(['message' => 'ID user tidak valid.'], 400));
+        }
+
+        // 2) Kalau param adalah JSON string (mis. frontend kirim object stringified),
+        //    ekstrak field "id" dari JSON
+        if (str_starts_with($param, '{')) {
+            $decoded = json_decode($param, true);
+            if (is_array($decoded) && isset($decoded['id']) && is_string($decoded['id'])) {
+                $param = $decoded['id'];
+            }
+        }
+
+        // 3) Validasi format UUID (Laravel Str::uuid())
+        if (! preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $param)) {
+            abort(response()->json(['message' => 'ID user bukan format UUID yang valid.'], 400));
+        }
+
+        return $param;
+    }
+
+    /**
+     * Resolve daftar lembaga yang akan di-attach ke user.
+     * Prioritas: lembaga_ids[] → lembaga_id (legacy) → existing data.
+     */
+    private function resolveLembagaIds(array $data): array
+    {
+        if (! empty($data['lembaga_ids'])) {
+            return array_values(array_unique($data['lembaga_ids']));
+        }
+        if (! empty($data['lembaga_id'])) {
+            return [$data['lembaga_id']];
+        }
+        return [];
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToLembaga;
 use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,7 +15,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 class AkunPengguna extends Model implements AuthenticatableContract
 {
-    use Authenticatable, HasApiTokens, HasFactory, HasUuids, Notifiable;
+    use Authenticatable, HasApiTokens, HasFactory, HasUuids, Notifiable, BelongsToLembaga;
 
     public $incrementing = false;
     protected $keyType = 'string';
@@ -35,6 +36,7 @@ class AkunPengguna extends Model implements AuthenticatableContract
         'failed_login_attempts',
         'locked_until',
         'last_login_at',
+        'lembaga_id',
     ];
 
     protected $hidden = [
@@ -65,6 +67,17 @@ class AkunPengguna extends Model implements AuthenticatableContract
     public function tenagaAhli(): BelongsTo
     {
         return $this->belongsTo(TenagaAhli::class, 'tenaga_ahli_id');
+    }
+
+    /**
+     * Many-to-many: daftar lembaga yang menjadi scope user ini.
+     * User multi-lembaga bisa berada di beberapa lembaga sekaligus.
+     * Source of truth untuk scope per-lembaga.
+     */
+    public function lembagas(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Lembaga::class, 'akun_pengguna_lembaga', 'akun_pengguna_id', 'lembaga_id')
+            ->withTimestamps();
     }
 
     public function siklusAkreditasi(): HasMany

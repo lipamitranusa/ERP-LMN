@@ -3,12 +3,15 @@
 namespace Database\Seeders;
 
 use App\Models\JenisFaskes;
+use App\Models\Lembaga;
 use Illuminate\Database\Seeder;
 
 class JenisFaskesSeeder extends Seeder
 {
     public function run(): void
     {
+        $lembagaId = $this->defaultLembagaId();
+
         $data = [
             [
                 'id' => 'jf-rs',
@@ -69,10 +72,15 @@ class JenisFaskesSeeder extends Seeder
         ];
 
         foreach ($data as $row) {
-            JenisFaskes::updateOrCreate(
+            JenisFaskes::withoutGlobalScope('lembaga')->updateOrCreate(
                 ['id' => $row['id']],
-                $row,
+                array_merge($row, ['lembaga_id' => $lembagaId]),
             );
         }
+    }
+
+    private function defaultLembagaId(): ?string
+    {
+        return Lembaga::query()->orderBy('created_at')->value('id');
     }
 }

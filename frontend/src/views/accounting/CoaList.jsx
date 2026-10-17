@@ -1,15 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) { localStorage.removeItem("token"); window.location.href = "/auth/login"; return null; }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.message || `API error: ${res.status}`);
-  return body;
-}
+import React, { useState, useMemo } from "react";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 const JENIS_GROUP = {
   'NERACA - AKTIVA': 'aktiva_lancar,aktiva_tetap',
@@ -41,8 +31,6 @@ function Modal({ title, children, onClose }) {
 }
 
 export default function AccountingCoa() {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({ jenis: "", q: "" });
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -50,11 +38,16 @@ export default function AccountingCoa() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const load = () => {
-    setLoading(true);
-    api("/keuangan/accounting/coa").then(d => { setData(d?.data || []); setLoading(false); }).catch(() => setLoading(false));
-  };
-  useEffect(() => { load(); }, []);
+  const { data: apiData, isLoading: loading } = useApi("coa", "/keuangan/accounting/coa");
+  const data = apiData?.data || [];
+
+  const saveMutation = useMutateKeys(["coa"], {
+    onSuccess: () => setShowForm(false),
+    onError: (err) => { setError(err.message); setSaving(false); },
+  });
+  const deleteMutation = useMutateKeys(["coa"], {
+    onError: (err) => alert(err.message),
+  });
 
   const grouped = useMemo(() => {
     let list = data;
@@ -77,23 +70,16 @@ export default function AccountingCoa() {
     e.preventDefault();
     if (!form.kode || !form.nama || !form.jenis) { setError("Kode, Nama, dan Jenis wajib diisi."); return; }
     setSaving(true);
-    try {
-      if (editItem) await api(`/keuangan/accounting/coa/${editItem.id}`, { method: "PUT", body: JSON.stringify(form) });
-      else await api("/keuangan/accounting/coa", { method: "POST", body: JSON.stringify(form) });
-      setShowForm(false);
-      load();
-    } catch (err) {
-      setError(err.message);
-      setSaving(false);
-    }
+    saveMutation.mutate({
+      path: editItem ? `/keuangan/accounting/coa/${editItem.id}` : "/keuangan/accounting/coa",
+      method: editItem ? "PUT" : "POST",
+      body: form,
+    });
   };
 
   const handleDelete = async (a) => {
     if (!window.confirm(`Hapus akun ${a.kode} - ${a.nama}?`)) return;
-    try {
-      await api(`/keuangan/accounting/coa/${a.id}`, { method: "DELETE" });
-      load();
-    } catch (err) { alert(err.message); }
+    deleteMutation.mutate({ path: `/keuangan/accounting/coa/${a.id}`, method: "DELETE" });
   };
 
   return (

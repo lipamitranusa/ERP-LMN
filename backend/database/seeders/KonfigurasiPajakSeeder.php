@@ -34,14 +34,14 @@ class KonfigurasiPajakSeeder extends Seeder
     {
         $rows = [
             [
-                'id' => '00000000-0000-0000-0000-00000000pp01',
+                'id' => '00000000-0000-0000-0000-00000000aa01',
                 'jenis_pajak' => KonfigurasiPajak::JENIS_PPN,
                 'tarif_persen' => 11.00,
                 'berlaku_sejak' => '2022-04-01',
                 'keterangan' => 'PPN 11% — tarif aktif sejak 1 April 2022 (UU HPP 2021). Untuk honor tenaga ahli (bukan PKP) PPN tidak dipotong.',
             ],
             [
-                'id' => '00000000-0000-0000-0000-00000000ph21',
+                'id' => '00000000-0000-0000-0000-00000000aa02',
                 'jenis_pajak' => KonfigurasiPajak::JENIS_PPH21,
                 'tarif_persen' => 5.00,
                 'berlaku_sejak' => '2024-01-01',
@@ -50,7 +50,7 @@ class KonfigurasiPajakSeeder extends Seeder
         ];
 
         foreach ($rows as $row) {
-            KonfigurasiPajak::updateOrCreate(
+            KonfigurasiPajak::withoutGlobalScope('lembaga')->updateOrCreate(
                 ['id' => $row['id']],
                 $row,
             );

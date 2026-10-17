@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { useLembaga } from "@/contexts/LembagaContext";
+import { useAuth } from "@/hooks/useAuth";
 
 const LMNIcon = () => (
   <svg viewBox="0 0 36 36" width="28" height="28" fill="none">
@@ -16,8 +20,40 @@ const LMNIcon = () => (
 function AdminHeader() {
   const location = useLocation();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [lembagaMenuOpen, setLembagaMenuOpen] = useState(false);
   const menuRef = useRef(null);
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const lembagaMenuRef = useRef(null);
+  // Subscribe ke useAuth agar re-render saat user data di-refresh oleh
+  // fetchMe (penting untuk lembaga_ids yang mungkin baru ditambahkan admin)
+  const { user: authUser } = useAuth();
+  const user = authUser || JSON.parse(localStorage.getItem("user") || "{}");
+  const { lembagaId, lembagaName, switchLembaga } = useLembaga();
+
+  // Fetch daftar lembaga untuk selector. Filter di-frontend berdasarkan
+  // akses lembaga user (user.lembaga_ids) — jika user hanya punya
+  // akses 1 lembaga, dropdown cuma tampilkan 1 itu.
+  // Fallback: jika user.lembaga_ids tidak ada (mis. legacy data), tampilkan
+  // semua lembaga.
+  const { data: lembagaList } = useQuery({
+    queryKey: ["lembaga-list"],
+    queryFn: () => api("/master/lembaga?per_page=100").then(r => r.data ?? []),
+    enabled: lembagaMenuOpen,
+  });
+  const userLembagaIds = user.lembaga_ids;
+  const allLembagas = lembagaList || [];
+  const accessibleLembagas = Array.isArray(userLembagaIds) && userLembagaIds.length > 0
+    ? allLembagas.filter(l => userLembagaIds.includes(l.id))
+    : allLembagas;  // fallback untuk legacy user tanpa lembaga_ids
+  // Jika lembaga aktif tidak ada di accessible (mis. user baru di-add
+  // lembaga lain setelah login), tetap tampilkan dropdown dengan lembaga
+  // aktif disorot + lembaga accessible lainnya.
+  const displayLembagas = accessibleLembagas.length > 0
+    ? accessibleLembagas
+    : allLembagas;
+
+  const selectedLembaga = allLembagas.find(l => l.id === lembagaId);
+  // Fallback: gunakan nama dari context (jika list belum di-fetch)
+  const displayName = selectedLembaga?.nama || lembagaName || "Lembaga";
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -25,10 +61,24 @@ function AdminHeader() {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         setUserMenuOpen(false);
       }
+      if (lembagaMenuRef.current && !lembagaMenuRef.current.contains(e.target)) {
+        setLembagaMenuOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  const handleSwitchLembaga = async (newId) => {
+    setLembagaMenuOpen(false);
+    const lembaga = displayLembagas.find(l => l.id === newId);
+    try {
+      await switchLembaga(newId, lembaga?.nama);
+      window.location.reload();
+    } catch {
+      // error handled by context
+    }
+  };
 
   // Update sidebar user info
   useEffect(() => {
@@ -41,6 +91,8 @@ function AdminHeader() {
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    localStorage.removeItem("menu_actions");
+    // JANGAN hapus lembaga_id — simpan untuk auto-restore saat login ulang
     window.location.href = "/auth/login";
   };
 
@@ -68,6 +120,83 @@ function AdminHeader() {
 
       {/* Right: notifications + user menu */}
       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+
+        {/* Lembaga selector */}
+        {lembagaId && (
+          <div ref={lembagaMenuRef} style={{ position: "relative" }}>
+            <button
+              className="btn btn-ghost"
+              style={{
+                display: "flex", alignItems: "center", gap: "6px",
+                padding: "6px 10px", borderRadius: "8px",
+                color: "#334155", background: "#F0FDF4",
+                border: "1px solid #BBF7D0",
+                fontSize: "13px", maxWidth: "200px",
+              }}
+              onClick={() => setLembagaMenuOpen(v => !v)}
+              title="Ganti Lembaga"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+              </svg>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {displayName}
+              </span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12" style={{ color: "#94A3B8", flexShrink: 0 }}>
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+
+            {lembagaMenuOpen && (
+              <div style={{
+                position: "absolute",
+                top: "calc(100% + 4px)",
+                right: 0,
+                width: "220px",
+                background: "#FFFFFF",
+                border: "1px solid #E2E8F0",
+                borderRadius: "8px",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+                overflow: "hidden",
+                zIndex: 100,
+              }}>
+                <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid #F1F5F9" }}>
+                  <div style={{ fontSize: "11px", fontWeight: "600", color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Pilih Lembaga
+                  </div>
+                </div>
+                <div style={{ padding: "4px", maxHeight: "200px", overflowY: "auto" }}>
+                  {displayLembagas.length === 0 ? (
+                    <div style={{ padding: "12px", textAlign: "center", color: "#94A3B8", fontSize: "12px" }}>
+                      Anda belum punya akses ke lembaga manapun.
+                    </div>
+                  ) : displayLembagas.map(l => (
+                    <button
+                      key={l.id}
+                      onClick={() => handleSwitchLembaga(l.id)}
+                      style={{
+                        display: "flex", alignItems: "flex-start", gap: "8px",
+                        padding: "8px 10px", borderRadius: "6px",
+                        fontSize: "13px", color: l.id === lembagaId ? "#16A34A" : "#334155",
+                        background: l.id === lembagaId ? "#F0FDF4" : "transparent",
+                        border: "none", cursor: "pointer", width: "100%", textAlign: "left",
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ marginTop: "2px", flexShrink: 0, color: l.id === lembagaId ? "#16A34A" : "#CBD5E1" }}>
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                      </svg>
+                      <div>
+                        <div style={{ fontWeight: l.id === lembagaId ? "600" : "400" }}>{l.nama}</div>
+                        {l.nama_pt && <div style={{ fontSize: "11px", color: "#94A3B8" }}>{l.nama_pt}</div>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Notification bell */}
         <button
           className="btn btn-ghost"

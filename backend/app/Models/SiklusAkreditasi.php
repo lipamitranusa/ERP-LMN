@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToLembaga;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
 class SiklusAkreditasi extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasUuids, BelongsToLembaga;
 
     public $incrementing = false;
     protected $keyType = 'string';
@@ -122,6 +123,37 @@ class SiklusAkreditasi extends Model
     public function isComplete(): bool
     {
         return $this->status_kelengkapan === 'lengkap';
+    }
+
+    /**
+     * Lookup siklus by ID dengan validasi lembaga yang informatif.
+     *
+     * Berbeda dengan findOrFail(), method ini bypass global scope lembaga
+     * untuk lookup awal agar bisa mendeteksi siklus yang ada di lembaga
+     * lain dari session user — lalu mengembalikan error 403 dengan pesan
+     * yang jelas ("Siklus ini milik lembaga X, Anda sedang di Y")
+     * alih-alih 404 generik "No query results".
+     *
+     * Gunakan method ini di endpoint admin yang menerima siklus_id via
+     * request body (POST/PUT/PATCH) — terutama yang diakses via UI yang
+     * menampilkan daftar siklus dari session lembaga aktif.
+     */
+    public static function findWithLembagaCheck(string $id): self
+    {
+        $siklus = static::withoutGlobalScope('lembaga')->find($id);
+        if (! $siklus) {
+            abort(response()->json(['message' => 'Siklus tidak ditemukan.'], 404));
+        }
+
+        $sessionLembagaId = session('lembaga_id');
+        if ($sessionLembagaId !== null && $siklus->lembaga_id !== $sessionLembagaId) {
+            $lembagaName = $siklus->lembaga?->nama ?? 'lain';
+            abort(response()->json([
+                'message' => "Siklus ini milik lembaga \"{$lembagaName}\". Anda sedang di lembaga lain. Silakan pindah lembaga melalui menu Lembaga di header.",
+            ], 403));
+        }
+
+        return $siklus;
     }
 
     /**

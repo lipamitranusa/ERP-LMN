@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToLembaga;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class MasterBiayaTenagaAhli extends Model
 {
-    use HasUuids;
+    use HasUuids, BelongsToLembaga;
 
     public $incrementing = false;
     protected $keyType = 'string';
@@ -27,6 +28,7 @@ class MasterBiayaTenagaAhli extends Model
         'tarif_dasar',
         'keterangan',
         'aktif',
+        'lembaga_id',
     ];
 
     protected $casts = [

@@ -1,19 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useApi, useMutateKeys, useMutate } from "@/hooks/useApi";
 import InvoiceStatusCard from "@/components/InvoiceStatusCard";
-import { formatDate, formatDateTime } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  return res;
-}
+import { formatDate } from "../../utils/dateFormat";
 
 const formatRp = (n) => `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
 const SATUAN_LABEL = {
@@ -90,184 +78,132 @@ function InvoiceItems({ inv }) {
 }
 
 function DetailPanel({ pksId, onClose }) {
-  const [pks, setPks] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [editingNomor, setEditingNomor] = useState(false);
   const [editNomorPks, setEditNomorPks] = useState("");
-  const [savingNomor, setSavingNomor] = useState(false);
-  const [validating, setValidating] = useState(false);
   const [tolakOpen, setTolakOpen] = useState(false);
   const [tolakAlasan, setTolakAlasan] = useState("");
-  const [submittingTolak, setSubmittingTolak] = useState(false);
-  const [error, setError] = useState("");
   const [kirimOpen, setKirimOpen] = useState(false);
   const [kirimMode, setKirimMode] = useState("template");
   const [lampiranFile, setLampiranFile] = useState(null);
-  const [kirimLoading, setKirimLoading] = useState(false);
-  const [estimasi, setEstimasi] = useState(null);
-  const [estimasiLoading, setEstimasiLoading] = useState(false);
+  const [error, setError] = useState("");
 
   // Kirim Tagihan state
   const [tagihanPanelOpen, setTagihanPanelOpen] = useState(false);
   const [tagihanInvId, setTagihanInvId] = useState(null);
-  const [tagihanData, setTagihanData] = useState(null);
-  const [tagihanLoading, setTagihanLoading] = useState(false);
-  const [tagihanError, setTagihanError] = useState("");
-  const [tagihanChannel, setTagihanChannel] = useState("whatsapp");
-  const [tagihanSending, setTagihanSending] = useState(false);
   const [tagihanResult, setTagihanResult] = useState(null);
   const [tagihanPrintOpen, setTagihanPrintOpen] = useState(false);
   const [tagihanPreviewHtml, setTagihanPreviewHtml] = useState("");
   const slipIframeRef = useRef(null);
-
-  const loadTagihan = async (invId) => {
-    setTagihanLoading(true);
-    setTagihanError("");
-    setTagihanData(null);
-    try {
-      const res = await fetch(`/api/invoice/${invId}/tagihan/generate`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      const d = await res.json();
-      if (d.message && !d.data) {
-        setTagihanError(d.message);
-      } else {
-        setTagihanData(d.data);
-      }
-    } catch (err) {
-      setTagihanError(err.message);
-    } finally {
-      setTagihanLoading(false);
-    }
-  };
-
-  const loadTagihanHtml = async (invId) => {
-    const token = localStorage.getItem("token");
-    const res = await fetch(`/api/invoice/${invId}/tagihan/preview`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      const html = await res.text();
-      setTagihanPreviewHtml(html);
-    }
-  };
-
-  const handleOpenTagihan = (invId) => {
-    setTagihanInvId(invId);
-    setTagihanPanelOpen(true);
-    setTagihanResult(null);
-    loadTagihan(invId);
-  };
-
-  const handleSendTagihan = async () => {
-    setTagihanSending(true);
-    setTagihanResult(null);
-    try {
-      const res = await fetch(`/api/invoice/${tagihanInvId}/tagihan/send`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({ channel: tagihanChannel }),
-      });
-      const d = await res.json();
-      setTagihanResult(d);
-    } catch (err) {
-      setTagihanResult({ message: err.message, data: null });
-    } finally {
-      setTagihanSending(false);
-    }
-  };
-
   const fileInputRef = useRef(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const res = await api(`/kontrak/${pksId}`);
-    if (!res) return;
-    const data = await res.json();
-    setPks(data.data);
-    setLoading(false);
-  }, [pksId]);
+  // Detail PKS query
+  const { data: pksData, isLoading: pksLoading } = useApi(
+    ["kontrak-detail", pksId],
+    `/kontrak/${pksId}`
+  );
+  const pks = pksData?.data;
 
-  // Muat rincian estimasi biaya (hanya untuk PKS yang belum punya invoice)
-  const loadEstimasi = useCallback(async () => {
-    if (!pks) return;
-    if (pks.invoice_count > 0) {
-      setEstimasi(null);
-      return;
-    }
-    setEstimasiLoading(true);
-    const res = await api(`/kontrak/${pks.id}/estimasi-biaya`);
-    if (res) {
-      const data = await res.json();
-      setEstimasi(data.data);
-    }
-    setEstimasiLoading(false);
-  }, [pks]);
+  // Estimasi biaya (only for PKS with no invoice)
+  const { data: estimasiData, isLoading: estimasiLoading } = useApi(
+    ["kontrak-estimasi", pks?.id],
+    `/kontrak/${pks?.id}/estimasi-biaya`,
+    { enabled: !!pks && pks.invoice_count === 0 }
+  );
+  const estimasi = estimasiData?.data;
 
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => { if (pks) loadEstimasi(); }, [pks, loadEstimasi]);
+  // Tagihan generate query (triggered when tagihanInvId is set)
+  const { data: tagihanData, isLoading: tagihanLoading, error: tagihanError, refetch: refetchTagihan } = useApi(
+    ["tagihan-generate", tagihanInvId],
+    `/invoice/${tagihanInvId}/tagihan/generate`,
+    { enabled: !!tagihanInvId }
+  );
 
-  if (loading || !pks) {
-    return (
-      <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ background: "#fff", padding: "24px", borderRadius: "8px" }}>Memuat detail PKS...</div>
-      </div>
-    );
-  }
+  // Mutations
+  const { mutate: mutateTagihan, isPending: tagihanSending } = useMutate({
+    onSuccess: (data) => { setTagihanResult(data); },
+    onError: (err) => { setTagihanResult({ message: err.message, data: null }); },
+  });
 
-  function startEditNomor() {
-    setEditNomorPks(pks?.nomor_pks || "");
-    setEditingNomor(true);
-  }
-
-  async function handleUpdateNomorPks() {
-    if (!pks || !editNomorPks.trim()) return;
-    setSavingNomor(true);
-    try {
-      const res = await api(`/kontrak/${pks.id}/nomor-pks`, {
-        method: "PATCH",
-        body: JSON.stringify({ nomor_pks: editNomorPks.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.errors?.nomor_pks?.[0] || data.message || "Gagal update.");
-      setPks(data.data);
+  const { mutate: updateNomorPks, isPending: savingNomor } = useMutateKeys(["kontrak-detail", pksId], {
+    onSuccess: (data) => {
+      // The query cache for ["kontrak-detail", pksId] is already invalidated,
+      // but we can also manually update it
       setEditingNomor(false);
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setSavingNomor(false);
-    }
-  }
+    },
+    onError: (err) => { alert(err.message); },
+  });
 
-  async function handleKirimSubmit() {
-    if (!pks) return;
-    setKirimLoading(true);
-    setError("");
-    try {
-      const fd = new FormData();
-      if (kirimMode === "upload" && lampiranFile) {
-        fd.append("lampiran_pdf", lampiranFile);
-      }
-      const res = await fetch(`/api/kontrak/${pks.id}/kirim`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        body: fd,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal mengirim PKS.");
-      setPks(data.data);
+  const { mutate: kirimPks, isPending: kirimLoading } = useMutateKeys(["kontrak-detail", pksId], {
+    onSuccess: () => {
       setKirimOpen(false);
       setLampiranFile(null);
       setKirimMode("template");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setKirimLoading(false);
+    },
+    onError: (err) => { setError(err.message); },
+  });
+
+  const { mutate: validateSigned, isPending: validating } = useMutateKeys(["kontrak-detail", pksId], {
+    onError: (err) => { setError(err.message); },
+  });
+
+  const { mutate: tolakSigned, isPending: submittingTolak } = useMutateKeys(["kontrak-detail", pksId], {
+    onSuccess: () => {
+      setTolakOpen(false);
+      setTolakAlasan("");
+    },
+    onError: (err) => { setError(err.message); },
+  });
+
+  const handleSendTagihan = () => {
+    mutateTagihan({
+      path: `/invoice/${tagihanInvId}/tagihan/send`,
+      method: "POST",
+      body: { channel: tagihanChannel },
+    });
+  };
+
+  const handleUpdateNomorPks = () => {
+    if (!pks || !editNomorPks.trim()) return;
+    updateNomorPks({
+      path: `/kontrak/${pks.id}/nomor-pks`,
+      method: "PATCH",
+      body: { nomor_pks: editNomorPks.trim() },
+    });
+  };
+
+  const handleKirimSubmit = () => {
+    if (!pks) return;
+    setError("");
+    const fd = new FormData();
+    if (kirimMode === "upload" && lampiranFile) {
+      fd.append("lampiran_pdf", lampiranFile);
     }
-  }
+    kirimPks({
+      path: `/kontrak/${pks.id}/kirim`,
+      method: "POST",
+      body: fd,
+    });
+  };
+
+  const handleValidateSigned = () => {
+    if (!pks) return;
+    setError("");
+    validateSigned({
+      path: `/kontrak/${pks.id}/validate-signed`,
+      method: "POST",
+      body: {},
+    });
+  };
+
+  const handleTolakSigned = () => {
+    if (!pks || !tolakAlasan.trim()) return;
+    setError("");
+    tolakSigned({
+      path: `/kontrak/${pks.id}/tolak-signed`,
+      method: "POST",
+      body: { alasan: tolakAlasan.trim() },
+    });
+  };
 
   function handleLampiranFileChange(e) {
     const file = e.target.files[0];
@@ -292,42 +228,7 @@ function DetailPanel({ pksId, onClose }) {
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   }
 
-  async function handleValidateSigned() {
-    if (!pks) return;
-    setValidating(true);
-    setError("");
-    try {
-      const res = await api(`/kontrak/${pks.id}/validate-signed`, { method: "POST", body: "{}" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal memvalidasi.");
-      setPks(data.data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setValidating(false);
-    }
-  }
-
-  async function handleTolakSigned() {
-    if (!pks || !tolakAlasan.trim()) return;
-    setSubmittingTolak(true);
-    setError("");
-    try {
-      const res = await api(`/kontrak/${pks.id}/tolak-signed`, {
-        method: "POST",
-        body: JSON.stringify({ alasan: tolakAlasan.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menolak.");
-      setPks(data.data);
-      setTolakOpen(false);
-      setTolakAlasan("");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmittingTolak(false);
-    }
-  }
+  const [tagihanChannel, setTagihanChannel] = useState("whatsapp");
 
   async function handleDownloadSignedPdf(preview = false) {
     if (!pks?.path_signed_pdf) return;
@@ -353,6 +254,25 @@ function DetailPanel({ pksId, onClose }) {
     } catch (err) {
       setError(err.message);
     }
+  }
+
+  const handleOpenTagihan = (invId) => {
+    setTagihanInvId(invId);
+    setTagihanPanelOpen(true);
+    setTagihanResult(null);
+  };
+
+  if (pksLoading || !pks) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ background: "#fff", padding: "24px", borderRadius: "8px" }}>Memuat detail PKS...</div>
+      </div>
+    );
+  }
+
+  function startEditNomor() {
+    setEditNomorPks(pks?.nomor_pks || "");
+    setEditingNomor(true);
   }
 
   return (
@@ -678,7 +598,7 @@ function DetailPanel({ pksId, onClose }) {
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
                   <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#1E293B" }}>Kirim Tagihan ke Faskes</h3>
-                  <button onClick={() => { setTagihanPanelOpen(false); setTagihanResult(null); setTagihanData(null); }}
+                  <button onClick={() => { setTagihanPanelOpen(false); setTagihanResult(null); setTagihanInvId(null); }}
                     style={{ background: "none", border: "none", cursor: "pointer", fontSize: "20px", color: "#94A3B8", lineHeight: 1 }}>
                     ×
                   </button>
@@ -687,8 +607,8 @@ function DetailPanel({ pksId, onClose }) {
                 {tagihanLoading ? (
                   <div style={{ textAlign: "center", padding: "24px", color: "#64748B" }}>Memuat data tagihan...</div>
                 ) : tagihanError ? (
-                  <div style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "12px", color: "#DC2626", fontSize: "13px" }}>{tagihanError}</div>
-                ) : tagihanData ? (
+                  <div style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "12px", color: "#DC2626", fontSize: "13px" }}>{tagihanError.message}</div>
+                ) : tagihanData?.data ? (
                   <>
                     {tagihanResult ? (
                       <div>
@@ -702,7 +622,7 @@ function DetailPanel({ pksId, onClose }) {
                             {tagihanResult.message || "Gagal mengirim tagihan."}
                           </div>
                         )}
-                        <button className="btn btn-secondary" style={{ marginTop: "12px" }} onClick={() => { setTagihanPanelOpen(false); setTagihanResult(null); setTagihanData(null); }}>
+                        <button className="btn btn-secondary" style={{ marginTop: "12px" }} onClick={() => { setTagihanPanelOpen(false); setTagihanResult(null); setTagihanInvId(null); }}>
                           Tutup
                         </button>
                       </div>
@@ -710,14 +630,14 @@ function DetailPanel({ pksId, onClose }) {
                       <>
                         {/* Preview info */}
                         <div style={{ background: "#F8FAFC", borderRadius: "8px", padding: "12px", marginBottom: "16px", fontSize: "12px" }}>
-                          <div style={{ marginBottom: "4px" }}><strong>Invoice:</strong> {tagihanData.nomor_invoice}</div>
-                          <div style={{ marginBottom: "4px" }}><strong>Total:</strong> {formatRp(tagihanData.total_tagihan)}</div>
-                          <div style={{ marginBottom: "4px" }}><strong>Jatuh Tempo:</strong> {formatDate(tagihanData.due_date)}</div>
-                          {tagihanData.faskes && (
+                          <div style={{ marginBottom: "4px" }}><strong>Invoice:</strong> {tagihanData.data.nomor_invoice}</div>
+                          <div style={{ marginBottom: "4px" }}><strong>Total:</strong> {formatRp(tagihanData.data.total_tagihan)}</div>
+                          <div style={{ marginBottom: "4px" }}><strong>Jatuh Tempo:</strong> {formatDate(tagihanData.data.due_date)}</div>
+                          {tagihanData.data.faskes && (
                             <>
-                              <div style={{ marginBottom: "4px" }}><strong>Faskes:</strong> {tagihanData.faskes.nama}</div>
-                              {tagihanData.faskes.telepon && <div style={{ marginBottom: "4px" }}><strong>Telepon:</strong> {tagihanData.faskes.telepon}</div>}
-                              {tagihanData.faskes.email && <div><strong>Email:</strong> {tagihanData.faskes.email}</div>}
+                              <div style={{ marginBottom: "4px" }}><strong>Faskes:</strong> {tagihanData.data.faskes.nama}</div>
+                              {tagihanData.data.faskes.telepon && <div style={{ marginBottom: "4px" }}><strong>Telepon:</strong> {tagihanData.data.faskes.telepon}</div>}
+                              {tagihanData.data.faskes.email && <div><strong>Email:</strong> {tagihanData.data.faskes.email}</div>}
                             </>
                           )}
                         </div>
@@ -734,14 +654,14 @@ function DetailPanel({ pksId, onClose }) {
                                   color: tagihanChannel === ch ? "#7C3AED" : "#64748B",
                                   fontWeight: "600", fontSize: "12px", cursor: "pointer",
                                 }}>
-                                {ch === "whatsapp" ? "📱 WhatsApp" : ch === "email" ? "✉️ Email" : "📱+✉️ Keduanya"}
+                                {ch === "whatsapp" ? "WhatsApp" : ch === "email" ? "Email" : "Keduanya"}
                               </button>
                             ))}
                           </div>
                         </div>
 
                         <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-                          <button className="btn btn-secondary" onClick={() => { setTagihanPanelOpen(false); setTagihanResult(null); setTagihanData(null); }}>
+                          <button className="btn btn-secondary" onClick={() => { setTagihanPanelOpen(false); setTagihanResult(null); setTagihanInvId(null); }}>
                             Batal
                           </button>
                           <button className="btn btn-primary" onClick={handleSendTagihan} disabled={tagihanSending}
@@ -752,6 +672,8 @@ function DetailPanel({ pksId, onClose }) {
                       </>
                     )}
                   </>
+                ) : tagihanData?.message && !tagihanData?.data ? (
+                  <div style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "12px", color: "#DC2626", fontSize: "13px" }}>{tagihanData.message}</div>
                 ) : null}
               </div>
             </div>
@@ -773,7 +695,7 @@ function DetailPanel({ pksId, onClose }) {
                   <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#1E293B" }}>Preview Tagihan</h3>
                   <div style={{ display: "flex", gap: "8px" }}>
                     <button className="btn btn-secondary btn-sm" onClick={() => { if (slipIframeRef.current && slipIframeRef.current.contentWindow?.print) slipIframeRef.current.contentWindow.print(); }}>
-                      🖨️ Cetak
+                      Cetak
                     </button>
                     <button onClick={() => setTagihanPrintOpen(false)}
                       style={{ background: "none", border: "none", cursor: "pointer", fontSize: "20px", color: "#94A3B8", lineHeight: 1 }}>
@@ -837,19 +759,25 @@ function DetailPanel({ pksId, onClose }) {
                       <button
                         className="btn btn-secondary btn-sm"
                         onClick={async () => {
-                          setTagihanInvId(inv.id);
+                          const token = localStorage.getItem("token");
                           setTagihanPreviewHtml("");
-                          await loadTagihanHtml(inv.id);
-                          setTagihanPrintOpen(true);
+                          const res = await fetch(`/api/invoice/${inv.id}/tagihan/preview`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                          });
+                          if (res.ok) {
+                            const html = await res.text();
+                            setTagihanPreviewHtml(html);
+                            setTagihanPrintOpen(true);
+                          }
                         }}
                       >
-                        🖨️ Cetak Tagihan
+                        Cetak Tagihan
                       </button>
                       <button
                         className="btn btn-secondary btn-sm"
                         onClick={() => handleOpenTagihan(inv.id)}
                       >
-                        📤 Kirim Tagihan
+                        Kirim Tagihan
                       </button>
                     </div>
                   </div>
@@ -864,92 +792,84 @@ function DetailPanel({ pksId, onClose }) {
 }
 
 export default function KontrakInvoicing() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [lastPage, setLastPage] = useState(1);
   const [selectedPks, setSelectedPks] = useState(null);
-  const [error, setError] = useState("");
 
   // Modal tambah PKS
   const [showAddModal, setShowAddModal] = useState(false);
   const [eligibleSiklus, setEligibleSiklus] = useState([]);
-  const [loadingSiklus, setLoadingSiklus] = useState(false);
   const [selectedSiklus, setSelectedSiklus] = useState(null);
   const [nomorPksInput, setNomorPksInput] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
 
   // Ref untuk akses page terbaru di dalam callback (bypass closure)
   const pageRef = useRef(1);
   useEffect(() => { pageRef.current = page; }, [page]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    params.set("page", String(pageRef.current));
-    if (search) params.set("search", search);
-    if (statusFilter) params.set("status", statusFilter);
-    const res = await api(`/kontrak?${params.toString()}`);
-    if (!res) return;
-    const data = await res.json();
-    setItems(data.data || []);
-    setTotal(data.total || 0);
-    setLastPage(data.last_page || 1);
-    setLoading(false);
-  }, [search, statusFilter]);
+  // Build query params
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  if (search) params.set("search", search);
+  if (statusFilter) params.set("status", statusFilter);
 
-  // Re-fetch saat page berubah; load() di dalam tidak bergantung pada `page`
-  // sehingga useEffect tidak memicu double-fetch
-  useEffect(() => { load(); }, [load, page]);
+  // Kontrak list query
+  const { data: listData, isLoading: listLoading } = useApi(
+    ["kontrak-list", page, search, statusFilter],
+    `/kontrak?${params.toString()}`,
+    { enabled: true }
+  );
+
+  const items = listData?.data || [];
+  React.useEffect(() => {
+    if (listData) {
+      setTotal(listData.total || 0);
+      setLastPage(listData.last_page || 1);
+    }
+  }, [listData]);
+
+  // Load eligible siklus for add modal
+  const { data: siklusData, isLoading: loadingSiklus } = useApi(
+    ["siklus-eligible"],
+    "/kontrak/siklus-eligible",
+    { enabled: showAddModal }
+  );
+
+  React.useEffect(() => {
+    if (siklusData) {
+      setEligibleSiklus(siklusData.data || []);
+    }
+  }, [siklusData]);
+
+  // Mutations
+  const { mutate: createDraft, isPending: creating } = useMutateKeys(["kontrak-list"], {
+    onSuccess: () => {
+      setShowAddModal(false);
+      if (pageRef.current !== 1) {
+        setPage(1);
+      }
+    },
+    onError: (err) => { setError(err.message); },
+  });
+
+  const handleCreateDraft = () => {
+    if (!selectedSiklus) return;
+    setError("");
+    const body = {};
+    if (nomorPksInput.trim()) body.nomor_pks = nomorPksInput.trim();
+    createDraft({
+      path: `/kontrak/siklus/${selectedSiklus.id}/draf`,
+      method: "POST",
+      body,
+    });
+  };
 
   function handleSearchKey(e) {
     if (e.key === "Enter") {
       setPage(1);
-      load();
-    }
-  }
-
-  async function openAddModal() {
-    setShowAddModal(true);
-    setSelectedSiklus(null);
-    setNomorPksInput("");
-    setLoadingSiklus(true);
-    setError("");
-    const res = await api("/kontrak/siklus-eligible");
-    setLoadingSiklus(false);
-    if (res) {
-      const data = await res.json();
-      setEligibleSiklus(data.data || []);
-    }
-  }
-
-  async function handleCreateDraft() {
-    if (!selectedSiklus) return;
-    setCreating(true);
-    setError("");
-    try {
-      const body = {};
-      if (nomorPksInput.trim()) body.nomor_pks = nomorPksInput.trim();
-      const res = await api(`/kontrak/siklus/${selectedSiklus.id}/draf`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal membuat draf PKS.");
-      setShowAddModal(false);
-      // Paksa kembali ke halaman 1 agar draf baru (paling baru) selalu terlihat
-      if (pageRef.current !== 1) {
-        setPage(1); // akan memicu useEffect → load()
-      } else {
-        load(); // sudah di page 1, fetch manual
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setCreating(false);
     }
   }
 
@@ -969,7 +889,7 @@ export default function KontrakInvoicing() {
           <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Kontrak & Invoicing</h1>
           <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>Daftar Perjanjian Kerja Sama (PKS) dan invoice yang terkait.</p>
         </div>
-        <button className="btn btn-primary" onClick={openAddModal}>
+        <button className="btn btn-primary" onClick={() => { setShowAddModal(true); setSelectedSiklus(null); setNomorPksInput(""); setError(""); }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
@@ -1003,7 +923,7 @@ export default function KontrakInvoicing() {
         <select
           className="form-input"
           value={statusFilter}
-          onChange={e => { setStatusFilter(e.target.value); setPage(1); load(); }}
+          onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
           style={{ width: "200px" }}
         >
           <option value="">Semua Status</option>
@@ -1031,7 +951,7 @@ export default function KontrakInvoicing() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {listLoading ? (
                 <tr><td colSpan="9" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
               ) : items.length === 0 ? (
                 <tr><td colSpan="9" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Tidak ada PKS ditemukan.</td></tr>
@@ -1104,7 +1024,7 @@ export default function KontrakInvoicing() {
       </div>
 
       {selectedPks && (
-        <DetailPanel pksId={selectedPks} onClose={() => { setSelectedPks(null); load(); }} />
+        <DetailPanel pksId={selectedPks} onClose={() => { setSelectedPks(null); }} />
       )}
 
       {/* Modal Tambah PKS */}

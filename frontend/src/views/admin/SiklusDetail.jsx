@@ -1,21 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useParams, useHistory } from "react-router-dom";
 import SiklusStepper from "@/components/SiklusStepper";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  return res;
-}
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 const DOKUMEN_LABELS = {
   dfo: "Daftar Tilik Fasilitas (DFO)",
@@ -46,11 +33,13 @@ function FilePreviewModal({ dokumen, onClose }) {
     if (!dokumen?.id) return;
     setLoading(true);
     setError(null);
-    api(`/pendaftaran/dokumen/${dokumen.id}/serve`)
+    // Keep raw fetch for blob response — useApi returns parsed JSON
+    const token = localStorage.getItem("token");
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    fetch(`/api/pendaftaran/dokumen/${dokumen.id}/serve`, { headers })
       .then(r => {
-        if (!r.ok) {
-          throw new Error(`HTTP ${r.status}: Gagal memuat file`);
-        }
+        if (!r.ok) throw new Error(`HTTP ${r.status}: Gagal memuat file`);
         return r.blob();
       })
       .then(blob => {
@@ -160,31 +149,43 @@ function FilePreviewModal({ dokumen, onClose }) {
 function SiklusDetail() {
   const { id } = useParams();
   const history = useHistory();
-  const [siklus, setSiklus] = useState(null);
-  const [dokumen, setDokumen] = useState([]);
-  const [checklist, setChecklist] = useState([]);
-  const [catatan, setCatatan] = useState([]);
   const [uploadLoading, setUploadLoading] = useState(null);
   const [catatanText, setCatatanText] = useState("");
-  const [submittingCatatan, setSubmittingCatatan] = useState(false);
   const [previewDokumen, setPreviewDokumen] = useState(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!id) return;
-    api(`/pendaftaran/siklus/${id}`)
-      .then(r => r?.json())
-      .then(d => {
-        if (d?.data) {
-          setSiklus(d.data);
-          setDokumen(d.data.dokumen || []);
-          setChecklist(d.data.checklist || []);
-          setCatatan(d.data.catatan_revisi || []);
-        }
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [id]);
+  const { data, isLoading } = useApi(
+    ["siklus-detail", id],
+    `/pendaftaran/siklus/${id}`,
+    { enabled: !!id }
+  );
+
+  const siklus = data?.data ?? null;
+  const dokumen = siklus?.dokumen ?? [];
+  const checklist = siklus?.checklist ?? [];
+  const catatan = siklus?.catatan_revisi ?? [];
+
+  const mutateUpload = useMutateKeys([["siklus-detail"], ["siklus-list"]], {
+    onSuccess: (data) => {
+      if (data?.data) {
+        // dokumen list is nested in siklus.data.dokumen, refetch handles it
+      }
+    },
+  });
+
+  const mutateValidate = useMutateKeys([["siklus-detail"], ["siklus-list"]], {
+    onSuccess: (data) => {
+      if (data?.data) {
+        // refetch will update siklus + checklist
+      }
+      alert("Validasi berhasil disimpan!");
+    },
+  });
+
+  const mutateCatatan = useMutateKeys(["siklus-detail"], {
+    onSuccess: () => {
+      setCatatanText("");
+    },
+  });
 
   async function handleUpload(e, jenis) {
     e.preventDefault();
@@ -195,16 +196,10 @@ function SiklusDetail() {
     formData.append("jenis_dokumen", jenis);
     formData.append("file", file);
     try {
-      const res = await fetch(`/api/pendaftaran/siklus/${id}/dokumen`, {
+      await mutateUpload.mutateAsync({
+        path: `/pendaftaran/siklus/${id}/dokumen`,
         method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
         body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
-      setDokumen(prev => {
-        const filtered = prev.filter(d => d.jenis_dokumen !== jenis);
-        return [...filtered, data.data];
       });
     } catch (err) {
       alert(err.message);
@@ -221,60 +216,33 @@ function SiklusDetail() {
       alert("Semua dokumen harus validasi lengkap terlebih dahulu.");
       return;
     }
-    try {
-      const items = DOKUMEN_ORDER.map(j => ({ jenis_dokumen: j, status_validasi: "lengkap" }));
-      const res = await api(`/pendaftaran/siklus/${id}/checklist`, {
-        method: "PUT",
-        body: JSON.stringify({ items }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
-      if (data.data) setSiklus(data.data);
-      setChecklist(data.data?.checklist || items.map((j, i) => ({ ...j, id: i + 1 })));
-      alert("Validasi berhasil disimpan!");
-    } catch (err) {
-      alert(err.message);
-    }
+    const items = DOKUMEN_ORDER.map(j => ({ jenis_dokumen: j, status_validasi: "lengkap" }));
+    mutateValidate.mutate({
+      path: `/pendaftaran/siklus/${id}/checklist`,
+      method: "PUT",
+      body: { items },
+    });
   }
 
   async function handleValidateSingle(jenis) {
-    try {
-      const res = await api(`/pendaftaran/siklus/${id}/checklist`, {
-        method: "PUT",
-        body: JSON.stringify({ items: [{ jenis_dokumen: jenis, status_validasi: "lengkap" }] }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
-      if (data.data) setSiklus(data.data);
-      setChecklist(data.data?.checklist || checklist);
-    } catch (err) {
-      alert(err.message);
-    }
+    mutateValidate.mutate({
+      path: `/pendaftaran/siklus/${id}/checklist`,
+      method: "PUT",
+      body: { items: [{ jenis_dokumen: jenis, status_validasi: "lengkap" }] },
+    });
   }
 
   async function handleSubmitCatatan(e) {
     e.preventDefault();
     if (!catatanText.trim()) return;
-    setSubmittingCatatan(true);
-    try {
-      const res = await api(`/pendaftaran/siklus/${id}/catatan-revisi`, {
-        method: "POST",
-        body: JSON.stringify({ catatan: catatanText }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setCatatan(prev => [...prev, data.data]);
-        setCatatanText("");
-      } else {
-        throw new Error(data.message);
-      }
-    } catch (err) {
-      alert(err.message);
-    }
-    setSubmittingCatatan(false);
+    mutateCatatan.mutate({
+      path: `/pendaftaran/siklus/${id}/catatan-revisi`,
+      method: "POST",
+      body: { catatan: catatanText },
+    });
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "300px" }}>
         <div style={{ color: "#94A3B8", fontSize: "13px" }}>Memuat data siklus...</div>
@@ -593,10 +561,10 @@ function SiklusDetail() {
               <button
                 type="submit"
                 className="btn btn-secondary btn-sm"
-                disabled={submittingCatatan || !catatanText.trim()}
+                disabled={mutateCatatan.isPending || !catatanText.trim()}
                 style={{ width: "100%" }}
               >
-                {submittingCatatan ? "Mengirim..." : "Kirim Catatan"}
+                {mutateCatatan.isPending ? "Mengirim..." : "Kirim Catatan"}
               </button>
             </form>
           </div>

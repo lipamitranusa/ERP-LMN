@@ -31,6 +31,7 @@ class DatabaseSeeder extends Seeder
             // Akuntansi
             CoaSeeder::class,
             KategoriJurnalSeeder::class,
+            MasterBiayaTenagaAhliSeeder::class,
             // Transaksi dummy
             DummyTransaksiSeeder::class,
         ]);

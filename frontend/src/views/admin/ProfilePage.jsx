@@ -1,27 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useHistory } from "react-router-dom";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  try {
-    const res = await fetch(`/api${path}`, { ...options, headers });
-    if (res.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/auth/login";
-      return null;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `HTTP ${res.status}`);
-    }
-    return res;
-  } catch (err) {
-    throw err;
-  }
-}
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 function FieldRow({ label, value }) {
   return (
@@ -45,8 +24,8 @@ function FieldRow({ label, value }) {
 
 export default function ProfilePage() {
   const history = useHistory();
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading } = useApi("profile", "/auth/me");
+  const user = data?.user;
 
   // Password form state
   const [pwForm, setPwForm] = useState({
@@ -59,15 +38,7 @@ export default function ProfilePage() {
   const [pwSuccess, setPwSuccess] = useState("");
   const [pwErrors, setPwErrors] = useState({});
 
-  useEffect(() => {
-    api("/auth/me")
-      .then(r => r?.json())
-      .then(d => {
-        if (d?.user) setUser(d.user);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+  const invalidate = useMutateKeys(["profile"]);
 
   function setPw(key, value) {
     setPwForm(f => ({ ...f, [key]: value }));
@@ -84,20 +55,11 @@ export default function ProfilePage() {
     setPwSaving(true);
 
     try {
-      const body = JSON.stringify(pwForm);
-      const res = await api("/auth/password", { method: "PUT", body });
-      const data = await res.json();
-
-      if (!res.ok) {
-        // Handle Laravel validation errors
-        if (data.errors) {
-          setPwErrors(data.errors);
-          setPwError(data.message || "Validasi gagal.");
-        } else {
-          setPwError(data.message || "Gagal mengubah password.");
-        }
-        return;
-      }
+      const data = await invalidate.mutateAsync({
+        path: "/auth/password",
+        method: "PUT",
+        body: JSON.stringify(pwForm),
+      });
 
       setPwSuccess(data.message || "Password berhasil diubah.");
       setPwForm({ current_password: "", new_password: "", new_password_confirmation: "" });
@@ -109,13 +71,19 @@ export default function ProfilePage() {
         window.location.href = "/auth/login";
       }, 2000);
     } catch (err) {
-      setPwError(err.message);
+      const body = err?.data || {};
+      if (body.errors) {
+        setPwErrors(body.errors);
+        setPwError(body.message || "Validasi gagal.");
+      } else {
+        setPwError(body.message || err.message || "Gagal mengubah password.");
+      }
     } finally {
       setPwSaving(false);
     }
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "300px" }}>
         <span style={{ color: "#94A3B8", fontSize: "13px" }}>Memuat profil...</span>

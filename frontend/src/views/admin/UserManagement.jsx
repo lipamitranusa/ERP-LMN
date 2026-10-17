@@ -1,30 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
 import ImportModal from "@/components/ImportModal";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  try {
-    const res = await fetch(`/api${path}`, { ...options, headers });
-    if (res.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/auth/login";
-      return null;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `HTTP ${res.status}`);
-    }
-    return res;
-  } catch (err) {
-    console.error("[api]", err);
-    throw err;
-  }
-}
-
-const EMPTY = { nama: "", username: "", email: "", role_id: "", faskes_id: "", tenaga_ahli_id: "", password: "", status_akun: "Aktif" };
+const EMPTY = { nama: "", username: "", email: "", role_id: "", faskes_id: "", tenaga_ahli_id: "", lembaga_ids: [], password: "", status_akun: "Aktif" };
 
 function Modal({ title, onClose, children }) {
   return (
@@ -55,63 +33,62 @@ function StatusBadge({ status }) {
 }
 
 export default function UserManagement() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [form, setForm] = useState(EMPTY);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [roles, setRoles] = useState([]);
-  const [faskesList, setFaskesList] = useState([]);
   const [generatedPw, setGeneratedPw] = useState("");
   const [filterRole, setFilterRole] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [pagination, setPagination] = useState({ current_page: 1, per_page: 15, total: 0, last_page: 1 });
+  const [currentPage, setCurrentPage] = useState(1);
   const [showImport, setShowImport] = useState(false);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (filterRole) params.set("role_id", filterRole);
-    if (filterStatus) params.set("status_akun", filterStatus);
-    if (search) params.set("q", search);
-    params.set("page", pagination.current_page);
-    params.set("per_page", pagination.per_page);
-    api(`/master/akun?${params.toString()}`)
-      .then(r => r?.json())
-      .then(d => {
-        setItems(d?.data || []);
-        setPagination(prev => ({
-          ...prev,
-          current_page: d?.current_page || 1,
-          per_page: d?.per_page || 15,
-          total: d?.total || 0,
-          last_page: d?.last_page || 1,
-        }));
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("[UserManagement]", err);
-        setLoading(false);
-      });
-  }, [filterRole, filterStatus, search, pagination.current_page, pagination.per_page]);
+  const params = new URLSearchParams();
+  if (filterRole) params.set("role_id", filterRole);
+  if (filterStatus) params.set("status_akun", filterStatus);
+  if (search) params.set("q", search);
+  params.set("page", currentPage);
+  params.set("per_page", "15");
 
-  const loadMeta = useCallback(async () => {
-    const [rolesRes, faskesRes] = await Promise.all([
-      api("/admin/roles"),
-      api("/master/faskes/dropdown"),
-    ]);
-    const rolesData = await rolesRes?.json();
-    const faskesData = await faskesRes?.json();
-    if (rolesData) setRoles(rolesData.data || []);
-    if (faskesData) setFaskesList(faskesData.data || []);
-  }, []);
+  const { data: akunData, isLoading } = useApi(
+    ["user-management", filterRole, filterStatus, search, currentPage],
+    `/master/akun?${params.toString()}`
+  );
+  const { data: rolesData } = useApi("roles", "/admin/roles");
+  const { data: faskesData } = useApi("faskes-dropdown", "/master/faskes/dropdown");
+  // Fetch daftar lembaga untuk dropdown multi-select di form
+  const { data: lembagaData } = useApi("lembaga-list-all", "/master/lembaga?per_page=100");
+  const lembagaList = lembagaData?.data ?? [];
+  // Fetch daftar tenaga ahli untuk dropdown di form (untuk role Surveior/Verifikator)
+  const { data: taListData } = useApi(
+    "tenaga-ahli-dropdown",
+    "/master/tenaga-ahli?per_page=200"
+  );
+  const tenagaAhliList = taListData?.data ?? [];
 
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => { loadMeta(); }, [loadMeta]);
+  const items = akunData?.data ?? [];
+  const roles = rolesData?.data ?? [];
+  const faskesList = faskesData?.data ?? [];
+  const pagination = {
+    current_page: akunData?.current_page ?? 1,
+    per_page: akunData?.per_page ?? 15,
+    total: akunData?.total ?? 0,
+    last_page: akunData?.last_page ?? 1,
+  };
+
+  const mutateAkun = useMutateKeys(["user-management"], {
+    onSuccess: (data) => {
+      if (data.generated_password) setGeneratedPw(data.generated_password);
+      if (!data.generated_password) setShowModal(false);
+    },
+    onError: (err) => setError(err.message),
+  });
+  const mutateResetPw = useMutateKeys(["user-management"], {
+    onError: (err) => alert("Gagal reset password: " + err.message),
+  });
+  const mutateDelete = useMutateKeys(["user-management"]);
 
   function openAdd() {
     setEditTarget(null);
@@ -130,6 +107,7 @@ export default function UserManagement() {
       role_id: item.role_id || "",
       faskes_id: item.faskes_id || "",
       tenaga_ahli_id: item.tenaga_ahli_id || "",
+      lembaga_ids: item.lembaga_ids || (item.lembaga_id ? [item.lembaga_id] : []),
       password: "",
       status_akun: item.status_akun || "Aktif",
     });
@@ -141,50 +119,37 @@ export default function UserManagement() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    setSaving(true);
-    try {
-      const payload = { ...form };
-      if (!payload.role_id) payload.role_id = null;
-      if (!payload.faskes_id) payload.faskes_id = null;
-      if (!payload.tenaga_ahli_id) payload.tenaga_ahli_id = null;
-      const body = JSON.stringify(payload);
-      const res = editTarget
-        ? await api(`/master/akun/${editTarget.id}`, { method: "PUT", body })
-        : await api("/master/akun", { method: "POST", body });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menyimpan.");
-      if (data.generated_password) setGeneratedPw(data.generated_password);
-      setShowModal(false);
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
+    const payload = { ...form };
+    if (!payload.role_id) payload.role_id = null;
+    if (!payload.faskes_id) payload.faskes_id = null;
+    if (!payload.tenaga_ahli_id) payload.tenaga_ahli_id = null;
+    if (!payload.lembaga_ids || payload.lembaga_ids.length === 0) {
+      setError("Pilih minimal satu lembaga.");
+      return;
     }
+    mutateAkun.mutate({
+      path: editTarget ? `/master/akun/${editTarget.id}` : "/master/akun",
+      method: editTarget ? "PUT" : "POST",
+      body: payload,
+    });
   }
 
-  async function handleResetPw(item) {
+  function handleResetPw(item) {
     if (!confirm(`Reset password untuk "${item.nama}"? Password baru akan di-generate otomatis.`)) return;
-    try {
-      const res = await api(`/master/akun/${item.id}/reset-password`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
+    mutateResetPw.mutate({
+      path: `/master/akun/${item.id}/reset-password`,
+      method: "POST",
+    }).then(data => {
       alert(`Password berhasil direset.\nPassword baru: ${data.new_password}\nSegera informasikan ke pengguna.`);
-    } catch (err) {
-      alert("Gagal reset password: " + err.message);
-    }
+    }).catch(() => {});
   }
 
-  async function handleDelete(item) {
+  function handleDelete(item) {
     if (!confirm(`Hapus akun "${item.nama}" (${item.email})?`)) return;
-    try {
-      const res = await api(`/master/akun/${item.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal menghapus.");
-      load();
-    } catch (err) {
-      alert(err.message);
-    }
+    mutateDelete.mutate({
+      path: `/master/akun/${item.id}`,
+      method: "DELETE",
+    }).catch(err => alert(err.message));
   }
 
   function set(key, value) {
@@ -195,9 +160,9 @@ export default function UserManagement() {
   const needsFaskes = selectedRole?.nama_role === "Faskes";
   const needsTenagaAhli = selectedRole && ["Surveior", "Verifikator"].includes(selectedRole.nama_role);
 
-  function goTo(page) {
-    if (page < 1 || page > pagination.last_page) return;
-    setPagination(p => ({ ...p, current_page: page }));
+  function goTo(pageNum) {
+    if (pageNum < 1 || pageNum > pagination.last_page) return;
+    setCurrentPage(pageNum);
   }
 
   return (
@@ -245,13 +210,13 @@ export default function UserManagement() {
         </div>
 
         {/* Filter Role */}
-        <select className="form-input" style={{ maxWidth: "180px" }} value={filterRole} onChange={e => { setFilterRole(e.target.value); setPagination(p => ({ ...p, current_page: 1 })); }}>
+        <select className="form-input" style={{ maxWidth: "180px" }} value={filterRole} onChange={e => { setFilterRole(e.target.value); setCurrentPage(1); }}>
           <option value="">Semua Role</option>
           {roles.map(r => <option key={r.id} value={r.id}>{r.nama_role}</option>)}
         </select>
 
         {/* Filter Status */}
-        <select className="form-input" style={{ maxWidth: "160px" }} value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPagination(p => ({ ...p, current_page: 1 })); }}>
+        <select className="form-input" style={{ maxWidth: "160px" }} value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}>
           <option value="">Semua Status</option>
           <option value="Aktif">Aktif</option>
           <option value="Nonaktif">Nonaktif</option>
@@ -261,7 +226,7 @@ export default function UserManagement() {
         {(search || filterRole || filterStatus) && (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => { setSearch(""); setSearchInput(""); setFilterRole(""); setFilterStatus(""); setPagination(p => ({ ...p, current_page: 1 })); }}
+            onClick={() => { setSearch(""); setSearchInput(""); setFilterRole(""); setFilterStatus(""); setCurrentPage(1); }}
             style={{ color: "#94A3B8", fontSize: "12px", padding: "6px 8px" }}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
@@ -288,16 +253,17 @@ export default function UserManagement() {
                 <th>Username</th>
                 <th>Email</th>
                 <th>Role</th>
-                <th>Faskes</th>
+                <th>Lembaga</th>
+                <th>Faskes / TA</th>
                 <th>Status</th>
                 <th style={{ width: "160px" }}>Aksi</th>
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
+              {isLoading ? (
+                <tr><td colSpan="8" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Belum ada akun. Klik "Tambah Akun" untuk membuat.</td></tr>
+                <tr><td colSpan="8" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Belum ada akun. Klik "Tambah Akun" untuk membuat.</td></tr>
               ) : items.map(item => (
                 <tr key={item.id}>
                   <td style={{ fontWeight: "500", color: "#1E293B" }}>{item.nama}</td>
@@ -305,6 +271,22 @@ export default function UserManagement() {
                   <td style={{ color: "#64748B", fontSize: "13px" }}>{item.email}</td>
                   <td>
                     <span style={{ fontSize: "12px", fontWeight: "500", color: "#4F46E5" }}>{item.role?.nama_role || "—"}</span>
+                  </td>
+                  <td style={{ fontSize: "12px" }}>
+                    {item.lembagas && item.lembagas.length > 0 ? (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "3px" }}>
+                        {item.lembagas.map(l => (
+                          <span key={l.id} style={{
+                            display: "inline-block", padding: "2px 8px",
+                            borderRadius: "10px", background: "#F0FDF4",
+                            color: "#166534", fontSize: "11px", fontWeight: "500",
+                            border: "1px solid #BBF7D0",
+                          }}>{l.nama}</span>
+                        ))}
+                      </div>
+                    ) : (item.lembaga_id ? (
+                      <span style={{ fontSize: "11px", color: "#64748B" }}>{item.lembaga_id}</span>
+                    ) : <span style={{ color: "#94A3B8" }}>—</span>)}
                   </td>
                   <td style={{ color: "#64748B", fontSize: "13px" }}>
                     {item.faskes ? item.faskes.nama : (item.tenaga_ahli ? `TA: ${item.tenaga_ahli.nama}` : "—")}
@@ -328,67 +310,67 @@ export default function UserManagement() {
       {pagination.last_page > 1 && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "16px", flexWrap: "wrap", gap: "8px" }}>
           <div style={{ fontSize: "12px", color: "#94A3B8" }}>
-            Halaman {pagination.current_page} dari {pagination.last_page} — {pagination.total} total
+            Halaman {currentPage} dari {pagination.last_page} — {pagination.total} total
           </div>
           <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
             <button
               className="btn btn-ghost btn-sm"
               onClick={() => goTo(1)}
-              disabled={pagination.current_page <= 1}
-              style={{ padding: "4px 8px", fontSize: "12px", opacity: pagination.current_page <= 1 ? 0.4 : 1 }}
+              disabled={currentPage <= 1}
+              style={{ padding: "4px 8px", fontSize: "12px", opacity: currentPage <= 1 ? 0.4 : 1 }}
             >
               «
             </button>
             <button
               className="btn btn-ghost btn-sm"
-              onClick={() => goTo(pagination.current_page - 1)}
-              disabled={pagination.current_page <= 1}
-              style={{ padding: "4px 8px", fontSize: "12px", opacity: pagination.current_page <= 1 ? 0.4 : 1 }}
+              onClick={() => goTo(currentPage - 1)}
+              disabled={currentPage <= 1}
+              style={{ padding: "4px 8px", fontSize: "12px", opacity: currentPage <= 1 ? 0.4 : 1 }}
             >
               ‹
             </button>
 
             {/* Page numbers */}
             {Array.from({ length: Math.min(5, pagination.last_page) }, (_, i) => {
-              let page;
+              let pageNum;
               if (pagination.last_page <= 5) {
-                page = i + 1;
-              } else if (pagination.current_page <= 3) {
-                page = i + 1;
-              } else if (pagination.current_page >= pagination.last_page - 2) {
-                page = pagination.last_page - 4 + i;
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= pagination.last_page - 2) {
+                pageNum = pagination.last_page - 4 + i;
               } else {
-                page = pagination.current_page - 2 + i;
+                pageNum = currentPage - 2 + i;
               }
               return (
                 <button
-                  key={page}
-                  onClick={() => goTo(page)}
+                  key={pageNum}
+                  onClick={() => goTo(pageNum)}
                   style={{
                     padding: "4px 10px", fontSize: "12px", border: "none", borderRadius: "6px", cursor: "pointer",
-                    background: page === pagination.current_page ? "#4CAF50" : "transparent",
-                    color: page === pagination.current_page ? "#fff" : "#64748B",
-                    fontWeight: page === pagination.current_page ? "600" : "400",
+                    background: pageNum === currentPage ? "#4CAF50" : "transparent",
+                    color: pageNum === currentPage ? "#fff" : "#64748B",
+                    fontWeight: pageNum === currentPage ? "600" : "400",
                   }}
                 >
-                  {page}
+                  {pageNum}
                 </button>
               );
             })}
 
             <button
               className="btn btn-ghost btn-sm"
-              onClick={() => goTo(pagination.current_page + 1)}
-              disabled={pagination.current_page >= pagination.last_page}
-              style={{ padding: "4px 8px", fontSize: "12px", opacity: pagination.current_page >= pagination.last_page ? 0.4 : 1 }}
+              onClick={() => goTo(currentPage + 1)}
+              disabled={currentPage >= pagination.last_page}
+              style={{ padding: "4px 8px", fontSize: "12px", opacity: currentPage >= pagination.last_page ? 0.4 : 1 }}
             >
               ›
             </button>
             <button
               className="btn btn-ghost btn-sm"
               onClick={() => goTo(pagination.last_page)}
-              disabled={pagination.current_page >= pagination.last_page}
-              style={{ padding: "4px 8px", fontSize: "12px", opacity: pagination.current_page >= pagination.last_page ? 0.4 : 1 }}
+              disabled={currentPage >= pagination.last_page}
+              style={{ padding: "4px 8px", fontSize: "12px", opacity: currentPage >= pagination.last_page ? 0.4 : 1 }}
             >
               »
             </button>
@@ -445,12 +427,114 @@ export default function UserManagement() {
                 </div>
               )}
 
+              <div style={{ gridColumn: "1 / -1", marginBottom: "16px" }}>
+                <div style={{
+                  background: "#F8FAFC", border: "1px solid #E2E8F0",
+                  borderRadius: "8px", padding: "12px 14px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: "600", color: "#1E293B", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#4CAF50" strokeWidth="2" width="14" height="14">
+                          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                        </svg>
+                        Lembaga Akses
+                        <span style={{ color: "#DC2626" }}>*</span>
+                        <span style={{ fontWeight: "400", color: "#64748B", fontSize: "11px" }}>(bisa lebih dari satu)</span>
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#64748B", marginTop: "2px" }}>
+                        User akan punya akses ke data di semua lembaga yang dipilih. Lembaga pertama = default.
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button type="button" onClick={() => set("lembaga_ids", lembagaList.map(l => l.id))}
+                        style={{ padding: "4px 10px", fontSize: "11px", border: "1px solid #CBD5E1", background: "#fff", color: "#475569", borderRadius: "4px", cursor: "pointer" }}>
+                        Pilih Semua
+                      </button>
+                      <button type="button" onClick={() => set("lembaga_ids", [])}
+                        style={{ padding: "4px 10px", fontSize: "11px", border: "1px solid #CBD5E1", background: "#fff", color: "#475569", borderRadius: "4px", cursor: "pointer" }}>
+                        Bersihkan
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Badge lembaga yang sudah dipilih */}
+                  {(form.lembaga_ids || []).length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px", padding: "8px 10px", background: "#fff", borderRadius: "6px", border: "1px dashed #BBF7D0" }}>
+                      {(form.lembaga_ids || []).map((id, idx) => {
+                        const l = lembagaList.find(x => x.id === id);
+                        if (!l) return null;
+                        return (
+                          <span key={id} style={{
+                            display: "inline-flex", alignItems: "center", gap: "6px",
+                            padding: "4px 10px", borderRadius: "12px",
+                            background: idx === 0 ? "#16A34A" : "#DCFCE7",
+                            color: idx === 0 ? "#fff" : "#166534",
+                            fontSize: "12px", fontWeight: "500",
+                            border: idx === 0 ? "none" : "1px solid #BBF7D0",
+                          }}>
+                            {idx === 0 && <span style={{ fontSize: "10px", padding: "0 4px", background: "rgba(255,255,255,0.2)", borderRadius: "3px" }}>DEFAULT</span>}
+                            {l.nama}
+                            <button type="button" onClick={() => set("lembaga_ids", (form.lembaga_ids || []).filter(x => x !== id))}
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", padding: 0, fontSize: "14px", lineHeight: 1, fontWeight: "700" }}
+                              title="Hapus">
+                              ×
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Checkbox grid */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", padding: "8px", background: "#fff", border: "1px solid #E2E8F0", borderRadius: "6px", maxHeight: "180px", overflowY: "auto" }}>
+                    {lembagaList.length === 0 ? (
+                      <div style={{ gridColumn: "1 / -1", padding: "12px", textAlign: "center", color: "#94A3B8", fontSize: "12px" }}>
+                        Memuat daftar lembaga...
+                      </div>
+                    ) : lembagaList.map(l => {
+                      const checked = (form.lembaga_ids || []).includes(l.id);
+                      return (
+                        <label key={l.id} style={{
+                          display: "flex", alignItems: "center", gap: "8px",
+                          padding: "8px 10px", cursor: "pointer",
+                          borderRadius: "4px",
+                          background: checked ? "#F0FDF4" : "transparent",
+                          border: checked ? "1px solid #BBF7D0" : "1px solid transparent",
+                          transition: "all 0.15s",
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={e => {
+                              const current = form.lembaga_ids || [];
+                              const next = e.target.checked
+                                ? [...current, l.id]
+                                : current.filter(id => id !== l.id);
+                              set("lembaga_ids", next);
+                            }}
+                            style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                          />
+                          <span style={{ fontSize: "13px", color: checked ? "#166534" : "#1E293B", fontWeight: checked ? "600" : "400" }}>{l.nama}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
               {needsTenagaAhli && (
                 <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
                   <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Tenaga Ahli <span style={{ color: "#DC2626" }}>*</span></label>
                   <select className="form-input" value={form.tenaga_ahli_id} onChange={e => set("tenaga_ahli_id", e.target.value)} required>
                     <option value="">— Pilih Tenaga Ahli —</option>
-                    <option value="placeholder">Fitur tenaga ahli dalam pengembangan</option>
+                    {tenagaAhliList.map(ta => (
+                      <option key={ta.id} value={ta.id}>
+                        {ta.nama} ({ta.nomor_induk_surveior || "—"})
+                        {ta.has_akun ? " ✓ sudah punya akun" : ""}
+                        {ta.status_aktif === "Nonaktif" ? " [nonaktif]" : ""}
+                      </option>
+                    ))}
                   </select>
                   <div style={{ fontSize: "11px", color: "#F59E0B", marginTop: "4px" }}>Role {selectedRole?.nama_role} wajib terkait ke record Tenaga Ahli.</div>
                 </div>
@@ -477,7 +561,7 @@ export default function UserManagement() {
             </div>
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "8px", borderTop: "1px solid #F1F5F9", paddingTop: "20px" }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Tutup</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Menyimpan..." : editTarget ? "Simpan" : "Buat Akun"}</button>
+              <button type="submit" className="btn btn-primary" disabled={mutateAkun.isPending}>{mutateAkun.isPending ? "Menyimpan..." : editTarget ? "Simpan" : "Buat Akun"}</button>
             </div>
           </form>
         </Modal>
@@ -486,7 +570,7 @@ export default function UserManagement() {
       <ImportModal
         open={showImport}
         onClose={() => setShowImport(false)}
-        onSuccess={load}
+        onSuccess={() => {}}
         title="Import Akun dari CSV"
         downloadUrl="/master/akun/template"
         downloadName="template_akun.csv"

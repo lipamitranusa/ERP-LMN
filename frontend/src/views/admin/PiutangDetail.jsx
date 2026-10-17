@@ -1,22 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { useParams, useHistory } from "react-router-dom";
+import { useApi } from "@/hooks/useApi";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = { "Content-Type": "application/json", ...options.headers };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  if (!res.ok) {
-    throw new Error(`API error: ${res.status}`);
-  }
-  return res;
-}
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -112,28 +97,13 @@ function ProgressBar({ received, total }) {
 export default function PiutangDetail() {
   const { id } = useParams();
   const history = useHistory();
-  const [inv, setInv] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  useEffect(() => {
-    api(`/piutang/${id}`)
-      .then(r => r?.json())
-      .then(d => {
-        if (d?.data) {
-          setInv(d.data);
-        } else if (d?.message) {
-          setError(d.message);
-        }
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
-  }, [id]);
+  const { data, isLoading } = useApi(["piutang-detail", id], "/piutang/" + id);
 
-  if (loading) {
+  const inv = data?.data;
+  const error = data?.message && !inv ? data.message : "";
+
+  if (isLoading) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat detail invoice...</div>;
   }
   if (error) {

@@ -1,21 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { useParams, useHistory } from "react-router-dom";
 import { formatDate } from "../../utils/dateFormat";
-
-async function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {};
-  if (!(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/auth/login";
-    return null;
-  }
-  return res;
-}
-
+import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 const STATUS_LABELS = {
   draft: { label: "Draf", color: "#F1F5F9", text: "#475569" },
@@ -51,8 +37,6 @@ function formatBytes(bytes) {
 export default function FaskesKontrak() {
   const { id } = useParams();
   const history = useHistory();
-  const [pks, setPks] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -70,38 +54,51 @@ export default function FaskesKontrak() {
   const [showUpload, setShowUpload] = useState(false);
   const [tolakReason, setTolakReason] = useState("");
 
-  useEffect(() => {
-    if (!id) {
-      api("/pendaftaran/siklus?per_page=1")
-        .then(r => r?.json())
-        .then(d => {
-          const list = d?.data || [];
-          if (list[0]?.id) {
-            history.replace(`/faskes/kontrak/${list[0].id}`);
-          } else {
-            setPks(null);
-            setLoading(false);
-          }
-        })
-        .catch(() => { setPks(null); setLoading(false); });
-      return;
-    }
+  // Fetch siklus list when no id is present (redirect to first siklus)
+  const { data: siklusListData } = useApi(
+    "siklus-list-kontrak",
+    "/pendaftaran/siklus?per_page=1"
+  );
 
-    api(`/kontrak/by-siklus/${id}`).then(r => r?.json()).then(d => {
-      if (d?.data && d.data.length > 0) {
-        setPks(d.data[0]);
-        // Pre-fill from previous submission
-        if (d.data[0].nama_penandatangan) setNama(d.data[0].nama_penandatangan);
-        if (d.data[0].jabatan_penandatangan) setJabatan(d.data[0].jabatan_penandatangan);
-        if (d.data[0].nik_penandatangan) setNik(d.data[0].nik_penandatangan);
-      } else {
-        setPks(null);
-      }
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [id]);
+  // Redirect if no id: use first siklus id from list
+  React.useEffect(() => {
+    if (!id && siklusListData?.data?.[0]?.id) {
+      history.replace(`/faskes/kontrak/${siklusListData.data[0].id}`);
+    }
+  }, [id, siklusListData, history]);
+
+  // Fetch kontrak detail by siklus id
+  const { data: kontrakData, isLoading: loading } = useApi(
+    ["kontrak", id],
+    id ? `/kontrak/by-siklus/${id}` : "/pendaftaran/siklus?per_page=1",
+    { enabled: !!id }
+  );
+
+  const pks = kontrakData?.data?.[0] || null;
+
+  // Pre-fill form from previous submission
+  React.useEffect(() => {
+    if (pks) {
+      if (pks.nama_penandatangan) setNama(pks.nama_penandatangan);
+      if (pks.jabatan_penandatangan) setJabatan(pks.jabatan_penandatangan);
+      if (pks.nik_penandatangan) setNik(pks.nik_penandatangan);
+    }
+  }, [pks]);
+
+  const submitMutation = useMutateKeys(["kontrak", id], {
+    onSuccess: (data) => {
+      setSignedFile(null);
+      setSignedFileName("");
+      setSignedFileSize(0);
+      setShowUpload(false);
+    },
+    onError: (err) => {
+      setError(err.message);
+    },
+  });
 
   function handleDownload(type) {
+    if (!pks) return;
     setError("");
     setDownloading(type);
     const token = localStorage.getItem("token");
@@ -163,33 +160,24 @@ export default function FaskesKontrak() {
     e.preventDefault();
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault();
     setError("");
     if (!signedFile) { setError("Upload file PKS yang sudah ditandatangani terlebih dahulu."); return; }
     if (!nama.trim()) { setError("Nama penandatangan wajib diisi."); return; }
     if (!jabatan.trim()) { setError("Jabatan wajib diisi."); return; }
 
-    setSubmitting(true);
     const fd = new FormData();
     fd.append("signed_pdf", signedFile);
     fd.append("nama_penandatangan", nama.trim());
     fd.append("jabatan_penandatangan", jabatan.trim());
     if (nik.trim()) fd.append("nik_penandatangan", nik.trim());
 
-    try {
-      const res = await api(`/kontrak/${pks.id}/tanda-tangan`, { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal mengunggah.");
-      setPks(data.data);
-      setSignedFile(null);
-      setSignedFileName("");
-      setSignedFileSize(0);
-      setShowUpload(false);
-    } catch (err) {
-      setError(err.message);
-    }
-    setSubmitting(false);
+    submitMutation.mutate({
+      path: `/kontrak/${pks.id}/tanda-tangan`,
+      method: "POST",
+      body: fd,
+    });
   }
 
   async function handleDownloadSigned() {
@@ -233,6 +221,7 @@ export default function FaskesKontrak() {
   const isDitandatangani = pks.status === "ditandatangani";
   const isSelesai = pks.status === "selesai";
   const isDraft = pks.status === "draft";
+  const submittingActive = submitMutation.isPending;
 
   return (
     <div style={{ maxWidth: "760px", margin: "0 auto" }}>
@@ -438,10 +427,10 @@ export default function FaskesKontrak() {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={submitting}
+              disabled={submittingActive}
               style={{ width: "100%" }}
             >
-              {submitting ? "Mengunggah..." : "Upload & Kirim PKS yang Sudah Ditandatangani"}
+              {submittingActive ? "Mengunggah..." : "Upload & Kirim PKS yang Sudah Ditandatangani"}
             </button>
           </form>
         </div>
