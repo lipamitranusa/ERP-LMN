@@ -7,6 +7,7 @@ use App\Models\HutangPajak;
 use App\Models\LedgerEntry;
 use App\Models\PembayaranHonor;
 use Carbon\Carbon;
+use App\Services\Keuangan\SettlementJournalService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -197,6 +198,16 @@ class HutangPajakService
                 'path_bukti_setor' => $pathBukti,
                 'catatan' => $catatan ?? $hutang->catatan,
             ]);
+
+            // Settlement AP Pajak — catat jurnal umum (Dr Utang PPh 21, Cr Bank)
+            // agar kas keluar setor PPh 21 tercatat di buku besar sesuai
+            // prinsip double-entry. Idempotent: tidak membuat duplikat jika
+            // sudah pernah dipanggil untuk hutang ini.
+            $settlementService = new SettlementJournalService();
+            $settlementService->recordApPajakSettlement(
+                hutang: $hutang,
+                userId: $userId,
+            );
 
             $this->audit('hutang_pajak.paid', $hutang, $userId, [
                 'jumlah_pajak' => (float) $hutang->jumlah_pajak,

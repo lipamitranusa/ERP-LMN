@@ -37,6 +37,7 @@ use App\Http\Controllers\Api\SlipHonorNotificationController;
 use App\Http\Controllers\Api\RekomendasiController;
 use App\Http\Controllers\Api\RefundController;
 use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\Api\SettlementJournalController;
 use App\Http\Controllers\Api\SiklusAkreditasiController;
 use App\Http\Controllers\Api\SuratTugasController;
 use App\Http\Controllers\Api\SuratTugasIssuanceController;
@@ -54,7 +55,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Auth — publik
-Route::post('/auth/login', [AuthController::class, 'login']);
+Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
 // Auth — setelah login
 Route::middleware('auth:sanctum', 'lembaga')->group(function () {
@@ -716,6 +717,20 @@ Route::prefix('keuangan')->middleware(['auth:sanctum', 'lembaga'])->group(functi
         ->get('/accounting/buku-besar', [AccountingController::class, 'bukuBesar']);
     Route::middleware('privilege:Ledger/Keuangan,Lihat')
         ->get('/accounting/buku-besar/{coaId}', [AccountingController::class, 'bukuBesarDetail']);
+
+    // Settlement Journal — jurnal otomatis pelunasan AP/AR (Dr Bank, Cr Piutang/Hutang)
+    Route::middleware('privilege:Ledger/Keuangan,Lihat')
+        ->get('/settlement', [SettlementJournalController::class, 'index']);
+    Route::middleware('privilege:Ledger/Keuangan,Lihat')
+        ->get('/settlement/settings', [SettlementJournalController::class, 'getSettings']);
+    Route::middleware('privilege:Ledger/Keuangan,Lihat')
+        ->get('/settlement/source-info', [SettlementJournalController::class, 'sourceInfo']);
+    Route::middleware('privilege:Ledger/Keuangan,Lihat')
+        ->get('/settlement/{id}', [SettlementJournalController::class, 'show']);
+    Route::middleware('privilege:Ledger/Keuangan,Tambah')
+        ->post('/settlement/rebuild', [SettlementJournalController::class, 'rebuild']);
+    Route::middleware('privilege:Ledger/Keuangan,Ubah')
+        ->put('/settlement/settings', [SettlementJournalController::class, 'updateSettings']);
 });
 
 // Dasbor Rekonsiliasi Direktur (FR-5.4)

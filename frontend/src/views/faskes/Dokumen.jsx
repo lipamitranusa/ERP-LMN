@@ -7,8 +7,8 @@ import { useApi, useMutateKeys } from "@/hooks/useApi";
 const JENIS_DOKUMEN = [
   {
     key: "dfo",
-    label: "Daftar Tilik Fasilitas (DFO)",
-    desc: "Dokumen hasil observasi kelayakan fasilitas kesehatan",
+    label: "Screenshot DFO",
+    desc: "Screenshot Daftar Tilik Fasilitas (DFO) yang sudah diisi",
     icon: "clipboard",
     wajib: true,
   },

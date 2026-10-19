@@ -2,6 +2,7 @@ import React from "react";
 import { useParams, useHistory } from "react-router-dom";
 import { useApi } from "@/hooks/useApi";
 import { formatDate } from "../../utils/dateFormat";
+import SettlementJournalPanel from "@/components/SettlementJournalPanel";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -281,21 +282,34 @@ export default function PiutangDetail() {
             <tbody>
               {inv.bukti_pembayaran && inv.bukti_pembayaran.length > 0 ? (
                 inv.bukti_pembayaran.map(b => (
-                  <tr key={b.id}>
-                    <td style={{ fontSize: "12px", color: "#334155" }}>{formatDate(b.tanggal)}</td>
-                    <td style={{ fontSize: "12px", color: "#334155" }}>
-                      {b.metode === "va" ? "Virtual Account" :
-                       b.metode === "qris" ? "QRIS" :
-                       b.metode === "transfer_manual" ? "Transfer Manual" :
-                       b.metode || "—"}
-                    </td>
-                    <td style={{ textAlign: "right", fontSize: "12px", fontWeight: "600", color: "#16A34A" }}>
-                      {formatRp(b.nominal)}
-                    </td>
-                    <td><PaymentBadge status={b.status_verifikasi} /></td>
-                    <td style={{ fontSize: "12px", color: "#64748B" }}>{b.diverifikasi_oleh_nama || "—"}</td>
-                    <td style={{ fontSize: "12px", color: "#64748B" }}>{b.keterangan || "—"}</td>
-                  </tr>
+                  <React.Fragment key={b.id}>
+                    <tr>
+                      <td style={{ fontSize: "12px", color: "#334155" }}>{formatDate(b.tanggal)}</td>
+                      <td style={{ fontSize: "12px", color: "#334155" }}>
+                        {b.metode === "va" ? "Virtual Account" :
+                         b.metode === "qris" ? "QRIS" :
+                         b.metode === "transfer_manual" ? "Transfer Manual" :
+                         b.metode || "—"}
+                      </td>
+                      <td style={{ textAlign: "right", fontSize: "12px", fontWeight: "600", color: "#16A34A" }}>
+                        {formatRp(b.nominal)}
+                      </td>
+                      <td><PaymentBadge status={b.status_verifikasi} /></td>
+                      <td style={{ fontSize: "12px", color: "#64748B" }}>{b.diverifikasi_oleh_nama || "—"}</td>
+                      <td style={{ fontSize: "12px", color: "#64748B" }}>{b.keterangan || "—"}</td>
+                    </tr>
+                    {b.status_verifikasi === "diterima" && (
+                      <tr>
+                        <td colSpan="6" style={{ padding: 0, background: "#F8FAFC" }}>
+                          <SettlementJournalPanel
+                            refType="settlement_piutang"
+                            refId={b.id}
+                            title="Jurnal Penerimaan Kas"
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))
               ) : (
                 <tr>

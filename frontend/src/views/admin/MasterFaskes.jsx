@@ -1,7 +1,19 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import ImportModal from "@/components/ImportModal";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
 import { useLembaga } from "@/contexts/LembagaContext";
+
+// Debounce helper — tunda perubahan nilai sampai user berhenti mengetik
+// 300ms. Tanpa ini, setiap ketukan karakter = 1 request ke Supabase
+// (~100-200ms round-trip per karakter = pencarian terasa sangat lambat).
+function useDebounced(value, delayMs = 300) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
+}
 
 const EMPTY = {
   jenis_faskes_id: "", lembaga_id: "", nama: "", no_sertifikat: "",
@@ -46,14 +58,18 @@ export default function MasterFaskes() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [showImport, setShowImport] = useState(false);
+  const debouncedSearch = useDebounced(search, 300);
 
-  // React Query handles caching, deduplication, and auto-refetch
+  // React Query handles caching, deduplication, and auto-refetch.
+  // Pakai debouncedSearch (bukan search) — query tidak fire tiap ketukan
+  // karakter, melainkan 300ms setelah user berhenti mengetik. Tanpa ini,
+  // mengetik "optima" = 6 request ke Supabase (~600-1200ms round-trip).
   const { data: faskesData, isLoading } = useApi(
-    ["master-faskes", search],
-    `/master/faskes?q=${encodeURIComponent(search)}`
+    ["master-faskes", debouncedSearch],
+    `/master/faskes?q=${encodeURIComponent(debouncedSearch)}`
   );
-  const { data: jenisData } = useApi(["jenis-faskes"], "/master/jenis-faskes?per_page=100");
-  const { data: lembagaData } = useApi("lembaga-list-filter", "/master/lembaga?per_page=100");
+  const { data: jenisData } = useApi(["jenis-faskes"], "/master/jenis-faskes?per_page=50");
+  const { data: lembagaData } = useApi("lembaga-list-filter", "/master/lembaga?per_page=50");
   const { lembagaId: activeLembagaId } = useLembaga();
 
   const items = faskesData?.data ?? [];

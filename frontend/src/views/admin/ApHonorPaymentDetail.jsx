@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useHistory, useParams } from "react-router-dom";
 import { formatDate } from "../../utils/dateFormat";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import SettlementJournalPanel from "@/components/SettlementJournalPanel";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -401,6 +402,15 @@ export default function ApHonorPaymentDetail() {
           </div>
         </div>
       </div>
+
+      {/* Jurnal Settlement AP Honor — tampil saat pembayaran sudah disetujui */}
+      {isApproved && (
+        <SettlementJournalPanel
+          refType="settlement_ap_honor"
+          refId={id}
+          title="Jurnal Pelunasan Hutang Honor"
+        />
+      )}
 
       {/* Kirim Slip Panel */}
       {showSlipPanel && (

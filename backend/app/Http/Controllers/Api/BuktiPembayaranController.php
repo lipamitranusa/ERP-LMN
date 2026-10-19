@@ -7,6 +7,7 @@ use App\Models\BuktiPembayaran;
 use App\Models\Invoice;
 use App\Services\AttachmentService;
 use App\Services\AuditService;
+use App\Services\Keuangan\SettlementJournalService;
 use App\Services\Notification\Notifier;
 use App\Services\Payment\InvoicePaidCalculator;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +23,7 @@ class BuktiPembayaranController extends Controller
         private AuditService $audit,
         private Notifier $notifier,
         private AttachmentService $attachment,
+        private SettlementJournalService $settlementJournal,
     ) {}
 
     public function show(BuktiPembayaran $bukti): JsonResponse
@@ -172,6 +174,15 @@ class BuktiPembayaranController extends Controller
             ]);
 
             $newInvoiceStatus = $this->calculator->recalculate($invoice);
+
+            // Settlement AR — catat jurnal umum (Dr Bank, Cr Piutang Usaha)
+            // untuk setiap bukti yang diterima, tanpa memandang apakah
+            // invoice menjadi lunas / sebagian. Parsial maupun full, kas
+            // masuk dan piutang berkurang harus ter-record di buku besar.
+            $this->settlementJournal->recordArSettlement(
+                bukti: $bukti,
+                userId: $user->id,
+            );
 
             if ($data['status'] === BuktiPembayaran::STATUS_DITOLAK) {
                 Log::info('faskes.bukti_transfer.ditolak', [

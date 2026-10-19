@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AkunPengguna;
+use App\Models\Faskes;
+use App\Models\TenagaAhli;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -72,6 +74,24 @@ class AuthController extends Controller
         // Dengan prioritas ini, data inconsistency (user.lembaga_id ter-set ke
         // lembaga yang salah untuk Faskes/Surveior user) tidak lagi membuat
         // session lembaga salah.
+        //
+        // PENTING: baca faskes/tenaga_ahli TANPA global scope 'lembaga'.
+        // Global scope filter `WHERE lembaga_id = session('lembaga_id')` —
+        // session bisa berisi nilai stale (dari login user lain di browser
+        // yang sama, atau request sebelumnya) yang tidak relevan dengan
+        // faskes user ini. Tanpa bypass, $user->faskes bisa null padahal
+        // faskes-nya ada di lembaga lain, lalu defaultLembagaId salah,
+        // lalu canAccessLembaga salah menolak login.
+        $user->setRelation('faskes',
+            $user->faskes_id
+                ? Faskes::withoutGlobalScopes()->find($user->faskes_id)
+                : null
+        );
+        $user->setRelation('tenagaAhli',
+            $user->tenaga_ahli_id
+                ? TenagaAhli::withoutGlobalScopes()->find($user->tenaga_ahli_id)
+                : null
+        );
         $defaultLembagaId = $user->faskes?->lembaga_id
             ?? $user->tenagaAhli?->lembaga_id
             ?? $user->lembaga_id;
@@ -80,9 +100,23 @@ class AuthController extends Controller
         // gunakan itu — user akan kembali ke lembaga yang terakhir dipilih
         $requestedLembagaId = $data['lembaga_id'] ?? null;
 
-        // Validasi bahwa user berhak akses lembaga yang diminta
-        // (saat ini semua user bisa akses semua lembaga yang ada; batasi jika perlu)
-        $lembagaId = $requestedLembagaId ?: $defaultLembagaId;
+        // Untuk user Faskes/Surveior/Verifikator (punya faskes/TA), lembaga
+        // SELALU dipaksa ke lembaga kanonik master mereka. Abaikan request
+        // lembaga_id yang tidak cocok — biasanya ini localStorage stale dari
+        // user lain / browser yang dipakai bergantian, bukan serangan.
+        // Behavior ini konsisten dengan SetLembagaSession middleware yang
+        // memaksa lembaga user Faskes di setiap request non-login.
+        $hasFixedLembaga = (bool) ($user->faskes_id || $user->tenaga_ahli_id);
+        if ($hasFixedLembaga && $defaultLembagaId !== null) {
+            $lembagaId = $defaultLembagaId;
+        } else {
+            $lembagaId = $requestedLembagaId ?: $defaultLembagaId;
+            // Validasi bahwa user berhak akses lembaga yang diminta
+            // (saat ini semua user bisa akses semua lembaga yang ada; batasi jika perlu)
+            if ($lembagaId && ! $this->canAccessLembaga($user, $lembagaId)) {
+                throw ValidationException::withMessages(['lembaga_id' => ['Anda tidak memiliki akses ke lembaga yang dipilih.']]);
+            }
+        }
         session(['lembaga_id' => $lembagaId]);
 
         return response()->json([
@@ -110,6 +144,9 @@ class AuthController extends Controller
             'lembaga_id' => 'required|uuid|exists:lembaga,id',
         ]);
 
+        if (! $this->canAccessLembaga($request->user(), $data['lembaga_id'])) {
+            return response()->json(['message' => 'Anda tidak memiliki akses ke lembaga yang dipilih.'], 403);
+        }
         session(['lembaga_id' => $data['lembaga_id']]);
 
         $user = $request->user()->load(['role', 'faskes.jenisFaskes']);
@@ -124,16 +161,20 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
-        // Load faskes langsung tanpa global scope — user berhak lihat profilnya sendiri
-        // meskipun session lembaga berbeda dari lembaga faskes
+        // Load faskes & tenaga_ahli langsung tanpa global scope — user
+        // berhak lihat profilnya sendiri meskipun session lembaga berbeda
+        // dari lembaga faskes/TA-nya.
         if ($user->faskes_id) {
-            // Bypass global scope karena session lembaga bisa berbeda dari lembaga faskes user
-            $faskesModel = \App\Models\Faskes::withoutGlobalScope('lembaga')
-                ->find($user->faskes_id);
+            $faskesModel = Faskes::withoutGlobalScopes()->find($user->faskes_id);
             if ($faskesModel) {
-                // Load jenisFaskes juga tanpa global scope
-                $faskesModel->load(['jenisFaskes' => fn($q) => $q->withoutGlobalScope('lembaga')]);
+                $faskesModel->load(['jenisFaskes' => fn($q) => $q->withoutGlobalScopes()]);
                 $user->setRelation('faskes', $faskesModel);
+            }
+        }
+        if ($user->tenaga_ahli_id) {
+            $taModel = TenagaAhli::withoutGlobalScopes()->find($user->tenaga_ahli_id);
+            if ($taModel) {
+                $user->setRelation('tenagaAhli', $taModel);
             }
         }
         $user->load('role');
@@ -148,7 +189,7 @@ class AuthController extends Controller
         // localStorage & session tidak sinkron. Update session dari request me() adalah
         // self-heal: setiap kali frontend mount, session mengikuti localStorage.
         $requestedLembagaId = $request->query('lembaga_id') ?? $request->header('X-Lembaga-Id');
-        if (is_string($requestedLembagaId) && \App\Models\Lembaga::where('id', $requestedLembagaId)->exists()) {
+        if (is_string($requestedLembagaId) && $this->canAccessLembaga($user, $requestedLembagaId)) {
             session(['lembaga_id' => $requestedLembagaId]);
             $lembagaId = $requestedLembagaId;
         } else {
@@ -245,6 +286,37 @@ class AuthController extends Controller
                 'nama' => $l->nama,
             ])->all(),
         ];
+    }
+
+    private function canAccessLembaga(AkunPengguna $user, string $lembagaId): bool
+    {
+        // Bypass global scope 'lembaga' saat membaca faskes/tenaga_ahli.
+        // Alasan sama dengan yang di login(): session('lembaga_id') bisa
+        // berisi nilai stale dari request lain, sehingga query ter-filter
+        // dan faskes/TA jadi null padahal sebenarnya ada.
+        if ($user->faskes_id) {
+            $faskes = Faskes::withoutGlobalScopes()->find($user->faskes_id);
+            if ($faskes && $faskes->lembaga_id === $lembagaId) {
+                return true;
+            }
+        }
+        if ($user->tenaga_ahli_id) {
+            $ta = TenagaAhli::withoutGlobalScopes()->find($user->tenaga_ahli_id);
+            if ($ta && $ta->lembaga_id === $lembagaId) {
+                return true;
+            }
+        }
+        // User terikat ke faskes/TA tapi lembaga tidak cocok → tolak.
+        // (Tanpa baris ini, user Faskes akan jatuh ke branch Admin di bawah
+        // dan bisa saja lolos kalau user.lembaga_id kebetulan cocok.)
+        if ($user->faskes_id || $user->tenaga_ahli_id) {
+            return false;
+        }
+        // Admin Lembaga / Superadmin tanpa faskes/TA: boleh akses jika
+        // role Administrator, user.lembaga_id cocok, atau ada di pivot.
+        return $user->role?->nama_role === 'Administrator'
+            || $user->lembaga_id === $lembagaId
+            || $user->lembagas()->whereKey($lembagaId)->exists();
     }
 
     private function menuActionsFor(AkunPengguna $user): array

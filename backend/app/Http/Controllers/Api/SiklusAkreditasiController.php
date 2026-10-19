@@ -25,8 +25,21 @@ class SiklusAkreditasiController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $query = SiklusAkreditasi::with(['faskes', 'lembaga', 'dokumen', 'pks', 'invoice', 'suratTugas'])
-            ->withCount('catatanRevisi');
+        // Eager load invoice + identitas Lembaga — N+1 sebelumnya: tiap siklus
+        // trigger lazy load invoice + 1 query cekSurveiSelesai. Untuk 15
+        // baris × ~100ms latency Supabase = ~3s, ini sumber utama "loading
+        // lambat" yang dirasakan Faskes.
+        $query = SiklusAkreditasi::with([
+            'faskes:id,nama',
+            'lembaga:id,nama',
+            'invoice:id,siklus_id,status',
+        ])->withCount('catatanRevisi');
+
+        if ($request->filled('q')) {
+            $term = $request->string('q')->toString();
+            $query->where(fn ($q) => $q->whereHas('faskes', fn ($fq) => $fq->where('nama', 'like', '%' . $term . '%'))
+                ->orWhere('status', 'like', '%' . $term . '%'));
+        }
 
         // Faskes hanya bisa lihat miliknya
         if ($user->faskes_id) {
@@ -46,9 +59,14 @@ class SiklusAkreditasiController extends Controller
         $perPage = min((int) $request->integer('per_page', 15), 50);
         $items = $query->orderBy('tanggal_pengajuan', 'desc')->paginate($perPage);
 
-        // Tambahkan flag survei_selesai ke setiap siklus
-        $items->getCollection()->transform(function ($siklus) {
-            $siklus->survei_selesai = $this->cekSurveiSelesai($siklus->id);
+        // Batch cekSurveiSelesai — 1 query untuk semua siklus di page,
+        // bukan 1 query per siklus. Ambil daftar siklus_id yang punya
+        // laporan_pengerjaan jenis survei, lalu set flag in-memory.
+        $siklusIds = $items->getCollection()->pluck('id')->all();
+        $selesaiIds = $this->batchCekSurveiSelesai($siklusIds);
+
+        $items->getCollection()->transform(function ($siklus) use ($selesaiIds) {
+            $siklus->survei_selesai = in_array($siklus->id, $selesaiIds, true);
             $siklus->invoice_belum_lunas = $siklus->invoice
                 && ! in_array($siklus->invoice->status, ['lunas', 'dibayar'], true);
             return $siklus;
@@ -269,5 +287,30 @@ class SiklusAkreditasiController extends Controller
             $q->where('siklus_id', $siklusId)
               ->where('jenis', Penugasan::JENIS_SURVEI);
         })->exists();
+    }
+
+    /**
+     * Batch version: cekSurveiSelesai untuk banyak siklus sekaligus.
+     * Mengembalikan array id siklus yang survei-nya sudah selesai.
+     * 1 query saja, bukan 1 query per siklus (menghemat ~14 query di
+     * halaman paginated 15 baris).
+     */
+    private function batchCekSurveiSelesai(array $siklusIds): array
+    {
+        if (empty($siklusIds)) {
+            return [];
+        }
+        return \App\Models\LaporanPengerjaan::query()
+            ->whereHas('penugasan', function ($q) use ($siklusIds) {
+                $q->whereIn('siklus_id', $siklusIds)
+                  ->where('jenis', Penugasan::JENIS_SURVEI);
+            })
+            ->with('penugasan:siklus_id')
+            ->get()
+            ->pluck('penugasan.siklus_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 }

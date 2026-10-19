@@ -13,7 +13,7 @@ const queryClient = new QueryClient({
       staleTime: 5 * 60 * 1000,  // 5 menit — data fresh dianggap valid
       gcTime: 10 * 60 * 1000,     // 10 menit — cached di memory sebelum GC
       retry: 1,                      // retry sekali jika gagal
-      refetchOnWindowFocus: true,   // aktifkan lagi — refresh saat tab di-focus
+      refetchOnWindowFocus: false,   // aktifkan lagi — refresh saat tab di-focus
       refetchOnReconnect: true,
     },
     mutations: {

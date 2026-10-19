@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useHistory, useParams } from "react-router-dom";
 import { formatDate } from "../../utils/dateFormat";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import SettlementJournalPanel from "@/components/SettlementJournalPanel";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -268,6 +269,15 @@ export default function HutangPajakDetail() {
             </div>
           </form>
         </div>
+      )}
+
+      {/* Jurnal Settlement AP Pajak — tampil saat sudah dibayar */}
+      {!isBelum && (
+        <SettlementJournalPanel
+          refType="settlement_ap_pajak"
+          refId={id}
+          title="Jurnal Setor PPh 21"
+        />
       )}
     </div>
   );

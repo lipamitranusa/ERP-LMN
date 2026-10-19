@@ -29,6 +29,12 @@ class CoaSeeder extends Seeder
             ['nama' => 'Pengeluaran Operasional', 'jenis' => 'pengeluaran', 'urutan' => 2],
             ['nama' => 'Pengeluaran Non Operasional', 'jenis' => 'pengeluaran', 'urutan' => 3],
             ['nama' => 'Adjustment / Koreksi', 'jenis' => 'adjustment', 'urutan' => 4],
+            // Settlement journals (FR-5.x) — auto-generated dari BuktiPembayaran,
+            // PembayaranHonor, dan HutangPajak. Lihat SettlementJournalService.
+            ['nama' => 'Bank Masuk (BKM)',       'jenis' => 'bkm', 'urutan' => 9],
+            ['nama' => 'Bank Keluar (BKK)',      'jenis' => 'bkk', 'urutan' => 10],
+            ['nama' => 'Kas Kecil Masuk (KKM)',  'jenis' => 'kkm', 'urutan' => 11],
+            ['nama' => 'Kas Kecil Keluar (KKK)', 'jenis' => 'kkk', 'urutan' => 12],
         ];
 
         foreach ($kategoriList as $k) {

@@ -17,6 +17,7 @@ import FaskesKontrak from "@/views/faskes/Kontrak";
 import FaskesTagihan from "@/views/faskes/Tagihan";
 import FaskesTagihanDetail from "@/views/faskes/TagihanDetail";
 import FaskesDokumen from "@/views/faskes/Dokumen";
+import FaskesChangePassword from "@/views/faskes/ChangePassword";
 import RefundApproval from "@/views/keuangan/RefundApproval";
 import LedgerJournal from "@/views/keuangan/LedgerJournal";
 import SlipHonorarium from "@/views/keuangan/SlipHonorarium";
@@ -39,6 +40,7 @@ import BankReceipt from "@/views/accounting/BankReceipt";
 import BankDisbursement from "@/views/accounting/BankDisbursement";
 import CashReceipt from "@/views/accounting/CashReceipt";
 import CashDisbursement from "@/views/accounting/CashDisbursement";
+import SettlementList from "@/views/accounting/SettlementList";
 import MasterLembaga from "@/views/admin/MasterLembaga";
 import MasterJenisFaskes from "@/views/admin/MasterJenisFaskes";
 import MasterFaskes from "@/views/admin/MasterFaskes";
@@ -107,6 +109,13 @@ var routes = [
     component: FaskesTagihanDetail,
     layout: "/faskes",
     hideInSidebar: true,
+  },
+  {
+    path: "/ganti-password",
+    name: "Ganti Password",
+    icon: NavIcon({ name: "lock" }),
+    component: FaskesChangePassword,
+    layout: "/faskes",
   },
 
   // ─── Admin internal (route prefix /admin) ──────────────────────────────
@@ -339,6 +348,14 @@ var routes = [
         name: "Buku Besar",
         icon: NavIcon({ name: "book" }),
         component: AccountingBukuBesar,
+        layout: "/admin",
+        privilege: ["Ledger/Keuangan", "Lihat"],
+      },
+      {
+        path: "/accounting/settlement",
+        name: "Jurnal Settlement",
+        icon: NavIcon({ name: "balance" }),
+        component: SettlementList,
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },

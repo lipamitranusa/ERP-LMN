@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useLembaga } from "@/contexts/LembagaContext";
 
 /**
  * useQuery wrapper — auto-attaches auth token via centralized api().
@@ -8,8 +9,9 @@ import { api } from "@/lib/api";
  * @param {object} options - React Query options (enabled, onSuccess, etc.)
  */
 export function useApi(key, path, options = {}) {
+  const { lembagaId } = useLembaga();
   return useQuery({
-    queryKey: Array.isArray(key) ? key : [key],
+    queryKey: [...(Array.isArray(key) ? key : [key]), lembagaId || "global"],
     queryFn: () => api(path),
     ...options,
   });

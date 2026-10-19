@@ -55,6 +55,10 @@ class SetLembagaSession
             $hasFixedLembaga = $user->faskes_id || $user->tenaga_ahli_id;
 
             if ($hasFixedLembaga && $canonicalLembagaId !== null) {
+                $requested = $request->query('lembaga_id') ?? $request->header('X-Lembaga-Id');
+                if ($requested && $requested !== $canonicalLembagaId) {
+                    return response()->json(['message' => 'Scope lembaga tidak valid.'], 403);
+                }
                 if (session('lembaga_id') !== $canonicalLembagaId) {
                     session(['lembaga_id' => $canonicalLembagaId]);
                 }
@@ -64,7 +68,8 @@ class SetLembagaSession
                 // self-heal. Fallback ke canonical jika session masih null.
                 $requestedLembagaId = $request->query('lembaga_id') ?? $request->header('X-Lembaga-Id');
                 if (is_string($requestedLembagaId) && $requestedLembagaId !== session('lembaga_id')) {
-                    if (\App\Models\Lembaga::where('id', $requestedLembagaId)->exists()) {
+                    $allowed = $user->role?->nama_role === 'Administrator' || $user->lembaga_id === $requestedLembagaId || $user->lembagas()->whereKey($requestedLembagaId)->exists();
+                    if ($allowed) {
                         session(['lembaga_id' => $requestedLembagaId]);
                     }
                 }

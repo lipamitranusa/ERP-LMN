@@ -5,7 +5,7 @@ import { formatDate } from "../../utils/dateFormat";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
 
 const DOKUMEN_LABELS = {
-  dfo: "Daftar Tilik Fasilitas (DFO)",
+  dfo: "Screenshot DFO",
   sisdmk: "Sisdmk",
   aspak: "ASPak",
   inm: "INM",

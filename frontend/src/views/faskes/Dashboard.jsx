@@ -390,7 +390,7 @@ function StatusView({ siklus }) {
             <div style={{ fontSize: "13px", fontWeight: "600", color: "#1E293B" }}>Unggah Dokumen</div>
           </div>
           <div style={{ fontSize: "11px", color: "#64748B" }}>
-            {siklus.status_kelengkapan === "lengkap" ? "Semua dokumen lengkap" : "DFO, Surat Permohonan, Self Assessment"}
+            {siklus.status_kelengkapan === "lengkap" ? "Semua dokumen lengkap" : "Screenshot DFO, Surat Permohonan, Self Assessment"}
           </div>
         </button>
         {tahap >= 3 && (

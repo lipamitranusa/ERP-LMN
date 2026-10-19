@@ -9,6 +9,7 @@ use App\Models\PembayaranHonorDetail;
 use App\Models\TenagaAhli;
 use App\Services\AttachmentService;
 use App\Services\Keuangan\HutangPajakService;
+use App\Services\Keuangan\SettlementJournalService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -380,6 +381,15 @@ class ApHonorService
             // Buat hutang pajak PPh 21 untuk setiap penerima honor
             $hutangService = new HutangPajakService();
             $hutangService->createFromPembayaran($p, $userId);
+
+            // Settlement AP Honor — catat jurnal umum (Dr Utang Honor, Cr Bank)
+            // agar kas keluar dan pelunasan hutang honor tercatat di buku besar
+            // sesuai prinsip double-entry.
+            $settlementService = new SettlementJournalService();
+            $settlementService->recordApHonorSettlement(
+                pembayaran: $p,
+                userId: $userId,
+            );
 
             $this->audit('ap_honor.payment_approved', $p, $userId, [
                 'nomor_pembayaran' => $p->nomor_pembayaran,

@@ -28,6 +28,8 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Support\Facades\RateLimiter;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -40,6 +42,13 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // ── Perf safety net: throw kalau ada lazy load di non-production ──
+        // Mengubah N+1 yang tidak terlihat menjadi exception yang langsung
+        // menunjuk ke controller/model yang harus di-fix dengan with()/withCount().
+        // Di production di-skip agar tidak menambah overhead runtime.
+        \Illuminate\Database\Eloquent\Model::preventLazyLoading(! app()->isProduction());
+
+        RateLimiter::for('login', fn (Request $request) => Limit::perMinute(10)->by(strtolower((string) $request->input('login')).'|'.$request->ip()));
         // UUID route model binding
         Route::model('akun', AkunPengguna::class);
         Route::model('role', Role::class);
