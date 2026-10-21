@@ -13,7 +13,7 @@ class RoleController extends Controller
 {
     public function index(): JsonResponse
     {
-        $roles = Role::with(['privileges' => fn ($q) => $q->where('diizinkan', true)])
+        $roles = Role::with(['privileges' => fn ($q) => $q->where('diizinkan', true), 'privileges.menuAction'])
             ->orderBy('is_default', 'desc')
             ->orderBy('nama_role')
             ->get()
@@ -22,7 +22,10 @@ class RoleController extends Controller
                 'nama_role' => $role->nama_role,
                 'is_default' => $role->is_default,
                 'guard_name' => 'web',
-                'privileges' => $role->privileges->map(fn ($p) => $p->menuAction?->modul . '/' . $p->menuAction?->action),
+                'privileges' => $role->privileges
+                    ->map(fn ($p) => optional($p->menuAction)->modul . '/' . optional($p->menuAction)->action)
+                    ->filter()
+                    ->values(),
             ]);
 
         return response()->json(['data' => $roles]);

@@ -1,36 +1,48 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useHistory } from "react-router-dom";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { AlertCircle, Loader2 } from "lucide-react";
 
-const LMNIcon = () => (
-  <svg viewBox="0 0 36 36" width="48" height="48" fill="none">
-    <circle cx="18" cy="18" r="15" stroke="#4CAF50" strokeWidth="3" strokeDasharray="22 73" strokeDashoffset="0" strokeLinecap="round"/>
-    <path d="M18 11v14M12 18h12" stroke="#4CAF50" strokeWidth="3" strokeLinecap="round"/>
-    <circle cx="18" cy="3.5" r="2" fill="#7E57C2"/>
-    <circle cx="29.5" cy="9.5" r="2" fill="#EF5350"/>
-    <circle cx="32" cy="20" r="2" fill="#FF9800"/>
-    <circle cx="26" cy="30" r="2" fill="#FFEB3B"/>
-    <circle cx="10" cy="30" r="2" fill="#42A5F5"/>
-  </svg>
-);
+function LMNIcon() {
+  return (
+    <svg viewBox="0 0 36 36" width="48" height="48" fill="none">
+      <circle cx="18" cy="18" r="15" stroke="#4CAF50" strokeWidth="3" strokeDasharray="22 73" strokeDashoffset="0" strokeLinecap="round"/>
+      <path d="M18 11v14M12 18h12" stroke="#4CAF50" strokeWidth="3" strokeLinecap="round"/>
+      <circle cx="18" cy="3.5" r="2" fill="#7E57C2"/>
+      <circle cx="29.5" cy="9.5" r="2" fill="#EF5350"/>
+      <circle cx="32" cy="20" r="2" fill="#FF9800"/>
+      <circle cx="26" cy="30" r="2" fill="#FFEB3B"/>
+      <circle cx="10" cy="30" r="2" fill="#42A5F5"/>
+    </svg>
+  );
+}
 
 async function apiLogin(path, options = {}) {
   const res = await fetch(`/api${path}`, options);
   return res;
 }
 
-function Login() {
+export default function Login() {
   const history = useHistory();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
     setError("");
     try {
-      // Ambil lembaga_id terakhir dipilih dari localStorage agar posisi persist
       const lastLembagaId = localStorage.getItem("lembaga_id");
 
       const res = await apiLogin("/auth/login", {
@@ -50,17 +62,20 @@ function Login() {
       if (data.menu_actions) {
         localStorage.setItem("menu_actions", JSON.stringify(data.menu_actions));
       }
-      // Simpan lembaga_id dari response (backend bisa mengembalikan last selected)
       if (data.lembaga_id) {
         localStorage.setItem("lembaga_id", data.lembaga_id);
       }
-      // Simpan tipe_faskes agar langsung tersedia tanpa harus fetch auth/me
+      if (data.lembaga_nama) {
+        localStorage.setItem("lembaga_name", data.lembaga_nama);
+      }
+      if (data.lembaga_logo_url) {
+        localStorage.setItem("lembaga_logo", data.lembaga_logo_url);
+      }
       const tipeFaskes = data.user?.faskes?.jenis_faskes?.nama
         || data.user?.faskes?.tipe_faskes
         || "";
       localStorage.setItem("tipe_faskes", tipeFaskes);
 
-      // Role-based redirect after login
       const role = data.user?.role;
       if (role === "Faskes") {
         history.push("/faskes/");
@@ -76,102 +91,84 @@ function Login() {
         history.push("/admin/dashboard");
       }
     } catch (err) {
+      if (!mountedRef.current) return;
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }
 
   return (
-    <div style={{ width: "100%", maxWidth: "400px" }}>
-      {/* Card */}
-      <div className="card" style={{ overflow: "hidden" }}>
-        <div style={{ padding: "32px 32px 24px", borderBottom: "1px solid #F1F5F9", textAlign: "center" }}>
-          <div style={{ marginBottom: "16px" }}>
+    <div className="w-full max-w-[400px]">
+      <Card className="overflow-hidden">
+        <div className="px-8 pt-8 pb-6 border-b border-slate-100 text-center">
+          <div className="mb-4 flex justify-center">
             <LMNIcon />
           </div>
-          <h1 style={{ margin: "0 0 6px", fontSize: "20px", fontWeight: "700", color: "#1E293B" }}>
+          <h1 className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-1.5">
             LIPA MITRA NUSA
           </h1>
-          <p style={{ margin: 0, fontSize: "13px", color: "#64748B" }}>
+          <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
             Sistem ERP Akreditasi Faskes
           </p>
         </div>
 
-        <div style={{ padding: "28px 32px 32px" }}>
-          <h2 style={{ margin: "0 0 24px", fontSize: "16px", fontWeight: "600", color: "#1E293B" }}>
+        <div className="px-8 py-7">
+          <h2 className="text-base font-semibold text-slate-800 dark:text-slate-200 mb-5">
             Masuk ke akun Anda
           </h2>
 
           {error && (
-            <div style={{
-              padding: "10px 14px",
-              background: "#FEE2E2",
-              border: "1px solid #FECACA",
-              borderRadius: "6px",
-              color: "#991B1B",
-              fontSize: "13px",
-              marginBottom: "20px",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
+            <div className="mb-5 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm flex items-start gap-2">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: "16px" }}>
-              <label className="form-label" htmlFor="login">Email / Username / NIK</label>
-              <input
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="login">Email / Username / NIK</Label>
+              <Input
                 id="login"
                 type="text"
-                className="form-input"
                 value={login}
                 onChange={e => setLogin(e.target.value)}
                 autoComplete="username"
                 placeholder="email@domain.com"
                 required
+                disabled={loading}
               />
             </div>
 
-            <div style={{ marginBottom: "24px" }}>
-              <label className="form-label" htmlFor="password">Kata sandi</label>
-              <input
+            <div className="space-y-1.5">
+              <Label htmlFor="password">Kata sandi</Label>
+              <Input
                 id="password"
                 type="password"
-                className="form-input"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 autoComplete="current-password"
                 placeholder="••••••••"
                 required
+                disabled={loading}
               />
             </div>
 
-            <button
+            <Button
               type="submit"
-              className="btn btn-primary"
-              style={{ width: "100%", padding: "10px", fontSize: "14px", fontWeight: "500" }}
+              className="w-full mt-2"
               disabled={loading}
             >
               {loading ? (
                 <>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" style={{ animation: "spin 1s linear infinite" }}>
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-                  </svg>
+                  <Loader2 size={16} className="animate-spin" />
                   Memproses...
                 </>
               ) : "Masuk"}
-            </button>
+            </Button>
           </form>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
-
-export default Login;

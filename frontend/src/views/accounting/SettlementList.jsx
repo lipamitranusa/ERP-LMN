@@ -98,10 +98,10 @@ export default function SettlementList() {
     <div>
       <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>
+          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "hsl(var(--foreground))" }}>
             Jurnal Settlement AP/AR
           </h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
+          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "hsl(var(--muted-foreground))" }}>
             Pencatatan kas otomatis saat piutang (AR) dan hutang (AP) dilunasi
           </p>
         </div>
@@ -123,20 +123,20 @@ export default function SettlementList() {
 
       {/* Pengaturan Akun Kas/Bank Default */}
       <div style={{
-        background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px",
+        background: "var(--card)", border: "1px solid hsl(var(--border))", borderRadius: "8px",
         padding: "14px 18px", marginBottom: "16px",
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
           <div>
-            <div style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", textTransform: "uppercase", marginBottom: "4px" }}>
+            <div style={{ fontSize: "11px", fontWeight: "600", color: "hsl(var(--muted-foreground))", textTransform: "uppercase", marginBottom: "4px" }}>
               Akun Kas/Bank Default
             </div>
             {settings?.data?.default_bank_coa ? (
-              <div style={{ fontSize: "14px", fontWeight: 600, color: "#1E293B" }}>
+              <div style={{ fontSize: "14px", fontWeight: 600, color: "hsl(var(--foreground))" }}>
                 {settings.data.default_bank_coa.kode} — {settings.data.default_bank_coa.nama}
               </div>
             ) : (
-              <div style={{ fontSize: "13px", color: "#94A3B8" }}>
+              <div style={{ fontSize: "13px", color: "hsl(var(--muted-foreground))" }}>
                 Belum diatur — akan fallback ke Bank BCA (1102) atau Kas (1101)
               </div>
             )}
@@ -188,7 +188,7 @@ export default function SettlementList() {
                 onClick={() => setEditBank(false)}
                 style={{
                   padding: "6px 14px", fontSize: "12px", fontWeight: 600,
-                  background: "#FFFFFF", color: "#64748B", border: "1px solid #CBD5E1",
+                  background: "var(--card)", color: "hsl(var(--muted-foreground))", border: "1px solid #CBD5E1",
                   borderRadius: "6px", cursor: "pointer",
                 }}
               >
@@ -213,7 +213,7 @@ export default function SettlementList() {
       {/* Filter Bar */}
       <div style={{
         display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px",
-        background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px",
+        background: "var(--card)", border: "1px solid hsl(var(--border))", borderRadius: "8px",
         padding: "10px 14px",
       }}>
         <select
@@ -248,14 +248,14 @@ export default function SettlementList() {
         />
       </div>
 
-      {isLoading && <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat…</div>}
+      {isLoading && <div style={{ padding: "40px", textAlign: "center", color: "hsl(var(--muted-foreground))" }}>Memuat…</div>}
       {error && <div style={{ padding: "20px", color: "#DC2626", fontSize: "13px" }}>Gagal memuat: {error.message}</div>}
 
       {!isLoading && !error && (
-        <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px", overflow: "hidden" }}>
+        <div style={{ background: "var(--card)", border: "1px solid hsl(var(--border))", borderRadius: "8px", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
             <thead>
-              <tr style={{ background: "#F8FAFC", color: "#475569" }}>
+              <tr style={{ background: "var(--muted)", color: "hsl(var(--muted-foreground))" }}>
                 <th style={th}>Nomor Jurnal</th>
                 <th style={th}>Tanggal</th>
                 <th style={th}>Tipe Settlement</th>
@@ -267,7 +267,7 @@ export default function SettlementList() {
             <tbody>
               {entries.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ padding: "32px", textAlign: "center", color: "#94A3B8" }}>
+                  <td colSpan={6} style={{ padding: "32px", textAlign: "center", color: "hsl(var(--muted-foreground))" }}>
                     Belum ada jurnal settlement. Settlement jurnal otomatis dibuat setiap kali
                     bukti pembayaran Faskes diterima atau pembayaran hutang dilakukan.
                   </td>
@@ -276,7 +276,7 @@ export default function SettlementList() {
               {entries.map((e) => {
                 const ref = REF_TYPE_LABEL[e.ref_type] || { label: e.ref_type, color: "#F1F5F9", text: "#475569" };
                 return (
-                  <tr key={e.id} style={{ borderTop: "1px solid #E2E8F0" }}>
+                  <tr key={e.id} style={{ borderTop: "1px solid hsl(var(--border))" }}>
                     <td style={{ ...td, fontFamily: "monospace" }}>{e.nomor}</td>
                     <td style={td}>{formatDate(e.tanggal)}</td>
                     <td style={td}>
@@ -286,7 +286,7 @@ export default function SettlementList() {
                         background: ref.color, color: ref.text,
                       }}>{ref.label}</span>
                     </td>
-                    <td style={{ ...td, color: "#475569" }}>{e.keterangan}</td>
+                    <td style={{ ...td, color: "hsl(var(--muted-foreground))" }}>{e.keterangan}</td>
                     <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
                       {formatRp(e.total_debit)}
                     </td>
@@ -310,7 +310,7 @@ export default function SettlementList() {
 
 const th = {
   padding: "10px 14px", textAlign: "left", fontSize: "11px",
-  fontWeight: 600, color: "#475569", textTransform: "uppercase",
-  letterSpacing: "0.05em", borderBottom: "1px solid #E2E8F0",
+  fontWeight: 600, color: "hsl(var(--muted-foreground))", textTransform: "uppercase",
+  letterSpacing: "0.05em", borderBottom: "1px solid hsl(var(--border))",
 };
-const td = { padding: "10px 14px", color: "#1E293B" };
+const td = { padding: "10px 14px", color: "hsl(var(--foreground))" };

@@ -113,7 +113,7 @@ class Fase1ExitCriteriaTest extends TestCase
         $siklus = SiklusAkreditasi::findOrFail($respPermohonan->json('data.id'));
 
         // ── E1.2: Faskes upload dokumen (FR-1.2 + versioning) ────────────────
-        $jenisDokumen = ['dfo', 'sisdmk', 'aspak', 'inm', 'ikp'];
+        $jenisDokumen = ['dfo', 'surat_permohonan', 'self_assessment', 'sisdmk', 'aspak', 'inm', 'ikp'];
         foreach ($jenisDokumen as $jenis) {
             $file = UploadedFile::fake()->create("{$jenis}.pdf", 512, 'application/pdf');
             $this->actingAsFaskes()->postJson("/api/pendaftaran/siklus/{$siklus->id}/dokumen", [

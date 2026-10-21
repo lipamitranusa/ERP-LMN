@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
 import { formatDate, formatDateTime } from "../../utils/dateFormat";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 
 const STATUS_BADGE = {
   menunggu:   { label: "Menunggu Rekomendasi",  bg: "#FEF3C7", text: "#92400E" },
@@ -267,12 +269,9 @@ export default function RekomendasiWorkspace() {
                       <td style={{ color: "#64748B", fontSize: "12px" }}>{formatDateTime(item.finalized_at)}</td>
                       <td><StatusBadge status={item.status_rekomendasi} /></td>
                       <td>
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => openDetail(item)}
-                        >
+                        <Button size="sm" onClick={() => openDetail(item)}>
                           Review
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                   );
@@ -315,8 +314,7 @@ export default function RekomendasiWorkspace() {
 
                 {canSetujui && detailData?.status_rekomendasi === "menunggu" && (
                   <Section title="Catatan Rekomendator (opsional)">
-                    <textarea
-                      className="form-input"
+                    <Textarea
                       rows={3}
                       value={catatan}
                       onChange={e => setCatatan(e.target.value)}
@@ -335,27 +333,25 @@ export default function RekomendasiWorkspace() {
             )}
           </div>
           <div style={{ padding: "12px 24px", borderTop: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", gap: "8px", flexShrink: 0 }}>
-            <button className="btn btn-secondary" onClick={closeDetail} disabled={actionLoading}>
+            <Button variant="outline" onClick={closeDetail} disabled={actionLoading}>
               Tutup
-            </button>
+            </Button>
             {canSetujui && detailData?.status_rekomendasi === "menunggu" && (
               <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  className="btn btn-primary"
+                <Button
                   style={{ background: "#DC2626", borderColor: "#DC2626" }}
                   onClick={handleTolak}
                   disabled={actionLoading}
                 >
                   Tolak
-                </button>
-                <button
-                  className="btn btn-primary"
+                </Button>
+                <Button
                   style={{ background: "#16A34A", borderColor: "#16A34A" }}
                   onClick={handleSetujui}
                   disabled={actionLoading}
                 >
                   {actionLoading ? "Memproses..." : "Setujui"}
-                </button>
+                </Button>
               </div>
             )}
           </div>

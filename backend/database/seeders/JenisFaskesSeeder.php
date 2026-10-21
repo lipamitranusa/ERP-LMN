@@ -71,16 +71,33 @@ class JenisFaskesSeeder extends Seeder
             ],
         ];
 
+        $mapKodeToId = [
+            'RS'     => 'jf-0001',
+            'KLINIK' => 'jf-0002',
+            'PUSKESMAS' => 'jf-0003',
+            'LAB'    => 'jf-0004',
+            'APOTEK' => 'jf-0005',
+            'OPTIK'  => 'jf-0006',
+            'BALAI'  => 'jf-0007',
+            'DLL'    => 'jf-0008',
+        ];
+
         foreach ($data as $row) {
-            JenisFaskes::withoutGlobalScope('lembaga')->updateOrCreate(
-                ['id' => $row['id']],
-                array_merge($row, ['lembaga_id' => $lembagaId]),
-            );
+            $targetId = $mapKodeToId[$row['kode']] ?? $row['id'];
+            $existing = JenisFaskes::withoutGlobalScope('lembaga')->find($targetId);
+            if ($existing) {
+                $existing->update(array_merge($row, ['id' => $targetId, 'lembaga_id' => $lembagaId]));
+            } else {
+                JenisFaskes::withoutGlobalScope('lembaga')->updateOrCreate(
+                    ['id' => $row['id']],
+                    array_merge($row, ['lembaga_id' => $lembagaId]),
+                );
+            }
         }
     }
 
     private function defaultLembagaId(): ?string
     {
-        return Lembaga::query()->orderBy('created_at')->value('id');
+        return Lembaga::query()->value('id');
     }
 }

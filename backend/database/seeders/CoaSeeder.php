@@ -16,7 +16,6 @@ class CoaSeeder extends Seeder
     private function getDefaultLembagaId(): string
     {
         return \App\Models\Lembaga::query()
-            ->orderBy('created_at')
             ->value('id')
             ?? Str::uuid()->toString();
     }
@@ -102,7 +101,7 @@ class CoaSeeder extends Seeder
             ['kode' => '5201', 'nama' => 'Beban Gaji Karyawan', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 60],
             ['kode' => '5202', 'nama' => 'Beban THR & Bonus', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 61],
             ['kode' => '5203', 'nama' => 'Beban BPJS Kesehatan', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 62],
-            ['kode' => '5204', 'nема' => 'Beban BPJS Ketenagakerjaan', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 63],
+            ['kode' => '5204', 'nama' => 'Beban BPJS Ketenagakerjaan', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 63],
             ['kode' => '5301', 'nama' => 'Beban Listrik & Air', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 70],
             ['kode' => '5302', 'nama' => 'Beban Internet & Telepon', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 71],
             ['kode' => '5303', 'nama' => 'Beban Sewa Kantor', 'jenis' => 'beban', 'kelompok' => 'debit', 'urutan' => 72],

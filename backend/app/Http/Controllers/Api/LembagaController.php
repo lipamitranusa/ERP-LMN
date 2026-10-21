@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Lembaga;
+use App\Services\AttachmentService;
 use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,10 @@ use Illuminate\Support\Str;
  */
 class LembagaController extends Controller
 {
-    public function __construct(private AuditService $audit) {}
+    public function __construct(
+        private AuditService $audit,
+        private AttachmentService $attachments,
+    ) {}
 
     /**
      * GET /api/master/lembaga
@@ -164,19 +168,54 @@ class LembagaController extends Controller
         ]);
     }
 
-    /**
-     * Simpan file logo ke disk public, mengembalikan path relatif.
-     */
+    public function getLogo(string $lembaga): \Illuminate\Http\Response
+    {
+        $lembagaModel = \App\Models\Lembaga::find($lembaga);
+        if (! $lembagaModel) {
+            abort(404, 'Lembaga tidak ditemukan.');
+        }
+        if (! $lembagaModel->logo_path) {
+            abort(404, 'Logo path kosong.');
+        }
+
+        $disk = \Illuminate\Support\Facades\Storage::disk('r2');
+
+        if (! $disk->exists($lembagaModel->logo_path)) {
+            \Log::channel('single')->warning('Logo not found in R2', [
+                'path' => $lembagaModel->logo_path,
+                'lembaga_id' => $lembaga,
+            ]);
+            abort(404, 'File logo tidak ditemukan di storage.');
+        }
+
+        try {
+            $content = $disk->get($lembagaModel->logo_path);
+            $mime = $disk->mimeType($lembagaModel->logo_path) ?? 'image/jpeg';
+
+            return response($content, 200, [
+                'Content-Type' => $mime,
+                'Cache-Control' => 'public, max-age=86400',
+            ]);
+        } catch (\Throwable $e) {
+            \Log::channel('single')->error('R2 logo fetch failed', [
+                'path' => $lembagaModel->logo_path,
+                'error' => $e->getMessage(),
+            ]);
+            abort(500, 'Gagal mengambil file logo: ' . $e->getMessage());
+        }
+    }
     private function storeLogo(\Illuminate\Http\UploadedFile $file, string $lembagaId): string
     {
-        $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-        $name = "lembaga/logos/{$lembagaId}.{$ext}";
-        $file->storeAs(dirname($name), basename($name), 'public');
-        return $name;
+        // Use AttachmentService with module 'lembaga/logo' so path format stays
+        // consistent: {module}/{yyyy}/{mm}/{uuid}_{filename}
+        return $this->attachments->store($file, 'lembaga/logo');
     }
 
+    /**
+     * Hapus file logo dari R2.
+     */
     private function deleteLogo(string $path): void
     {
-        \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
+        $this->attachments->delete($path);
     }
 }

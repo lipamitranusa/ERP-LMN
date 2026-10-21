@@ -13,6 +13,7 @@ export function useApi(key, path, options = {}) {
   return useQuery({
     queryKey: [...(Array.isArray(key) ? key : [key]), lembagaId || "global"],
     queryFn: () => api(path),
+    enabled: options.enabled !== false && Boolean(path),
     ...options,
   });
 }
@@ -45,7 +46,7 @@ export function useMutate(options = {}) {
  */
 export function useMutateKeys(invalidateKeys, options = {}) {
   const queryClient = useQueryClient();
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: ({ path, method = "POST", body }) =>
       api(path, { method, body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined }),
     onSuccess: (data, vars, ctx) => {
@@ -60,4 +61,7 @@ export function useMutateKeys(invalidateKeys, options = {}) {
     },
     onError: options.onError,
   });
+
+  // Spread all mutation state so callers can react to isSuccess/isError directly
+  return { ...mutation };
 }

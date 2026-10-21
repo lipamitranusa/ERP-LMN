@@ -51,7 +51,9 @@ class Lembaga extends Model
     public function getLogoUrlAttribute(): ?string
     {
         if (! $this->logo_path) return null;
-        return asset('storage/' . ltrim($this->logo_path, '/'));
+        // Relative path so the browser uses the same origin/proxy as the API calls.
+        // Vite proxy forwards /api/* to the Laravel backend.
+        return "/api/master/lembaga/{$this->id}/logo";
     }
 
     public function siklusAkreditasi(): HasMany

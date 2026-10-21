@@ -30,7 +30,7 @@ class AkunPenggunaController extends Controller
         // user multi-lembaga (yang lembaga_id default ≠ lembaga aktif tapi
         // ada di pivot) tetap muncul di list.
         $query = AkunPengguna::withoutGlobalScope('lembaga')
-            ->with(['role', 'faskes:id,nama,kota', 'tenagaAhli:id,nama', 'lembagas:id,nama'])
+            ->with(['role', 'faskes:id,nama,kota', 'tenagaAhli:id,nama', 'lembagas:id,nama', 'lembaga:id,nama'])
             ->orderBy('created_at', 'desc');
 
         // Auto-scope ke lembaga aktif session: lembaga_id default ATAU ada di pivot
@@ -65,9 +65,13 @@ class AkunPenggunaController extends Controller
         $perPage = min((int) $request->integer('per_page', 25), 50);
         $items = $query->paginate($perPage);
 
-        // Tambahkan lembaga_ids + lembagas ke setiap item
+        // Tambahkan lembaga_ids + lembagas + lembaga (singular) ke setiap item
         $items->getCollection()->transform(function ($u) {
             $u->lembaga_ids = $u->lembagas->pluck('id')->all();
+            // Jika lembagas (pivot) kosong, fallback ke lembaga_id tunggal
+            if (empty($u->lembaga_ids) && $u->lembaga_id) {
+                $u->lembaga_ids = [$u->lembaga_id];
+            }
             return $u;
         });
 
@@ -138,8 +142,11 @@ class AkunPenggunaController extends Controller
         $id = $this->resolveId($request, $akun);
         $akun = AkunPengguna::withoutGlobalScope('lembaga')->findOrFail($id);
         $this->ensureLembagaAccess($akun);
-        $akun->load(['role', 'lembagas']);
+        $akun->load(['role', 'lembagas', 'lembaga']);
         $akun->lembaga_ids = $akun->lembagas->pluck('id')->all();
+        if (empty($akun->lembaga_ids) && $akun->lembaga_id) {
+            $akun->lembaga_ids = [$akun->lembaga_id];
+        }
         return response()->json(['data' => $akun]);
     }
 
@@ -147,8 +154,17 @@ class AkunPenggunaController extends Controller
     {
         // Bypass trait scope + manual lookup agar user multi-lembaga bisa di-edit
         $id = $this->resolveId($request, $akun);
+
+        \Log::info('UPDATE AKUN', [
+            'route_akun' => $akun,
+            'resolved_id' => $id,
+            'request_all' => $request->all(),
+        ]);
+
         $akun = AkunPengguna::withoutGlobalScope('lembaga')->findOrFail($id);
         $this->ensureLembagaAccess($akun);
+
+        \Log::info('UPDATE AKUN FOUND', ['akun_id' => $akun->id]);
 
         $data = $request->validate($this->rules($akun->id));
 
@@ -238,17 +254,39 @@ class AkunPenggunaController extends Controller
 
     private function rules(?string $ignoreId = null): array
     {
-        $uniqueEmail = $ignoreId
-            ? "required|email|unique:akun_pengguna,email,{$ignoreId}"
-            : 'required|email|unique:akun_pengguna,email';
-        $uniqueUsername = $ignoreId
-            ? "nullable|string|max:50|unique:akun_pengguna,username,{$ignoreId}"
-            : 'nullable|string|max:50|unique:akun_pengguna,username';
-
         return [
             'nama' => 'required|string|max:255',
-            'username' => $uniqueUsername,
-            'email' => $uniqueEmail,
+            'username' => [
+                'nullable',
+                'string',
+                'max:50',
+                function ($attribute, $value, $fail) use ($ignoreId) {
+                    if (!$value) return;
+                    $query = AkunPengguna::withoutGlobalScope('lembaga')
+                        ->where('username', $value);
+                    if ($ignoreId) {
+                        $query->where('id', '!=', $ignoreId);
+                    }
+                    if ($query->exists()) {
+                        $fail('Username sudah digunakan oleh akun lain.');
+                    }
+                },
+            ],
+            'email' => [
+                'required',
+                'email',
+                function ($attribute, $value, $fail) use ($ignoreId) {
+                    \Log::info('EMAIL VALIDATION', ['ignoreId' => $ignoreId, 'value' => $value]);
+                    $query = AkunPengguna::withoutGlobalScope('lembaga')
+                        ->where('email', $value);
+                    if ($ignoreId) {
+                        $query->where('id', '!=', $ignoreId);
+                    }
+                    if ($query->exists()) {
+                        $fail('Email sudah digunakan oleh akun lain.');
+                    }
+                },
+            ],
             'role_id' => 'required|uuid|exists:roles,id',
             'faskes_id' => 'nullable|uuid|exists:faskes,id',
             'tenaga_ahli_id' => 'nullable|uuid|exists:tenaga_ahli,id',

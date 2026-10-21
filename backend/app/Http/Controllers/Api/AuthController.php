@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AkunPengguna;
 use App\Models\Faskes;
+use App\Models\Lembaga;
 use App\Models\TenagaAhli;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -119,10 +120,14 @@ class AuthController extends Controller
         }
         session(['lembaga_id' => $lembagaId]);
 
+        $lembaga = $lembagaId ? Lembaga::find($lembagaId) : null;
+
         return response()->json([
             'token' => $token,
             'user' => $this->payload($user->load(['role', 'faskes.jenisFaskes'])),
             'lembaga_id' => $lembagaId,
+            'lembaga_nama' => $lembaga?->nama,
+            'lembaga_logo_url' => $lembaga?->logo_url,
             'menu_actions' => $this->menuActionsFor($user),
         ]);
     }
@@ -150,9 +155,12 @@ class AuthController extends Controller
         session(['lembaga_id' => $data['lembaga_id']]);
 
         $user = $request->user()->load(['role', 'faskes.jenisFaskes']);
+        $lembaga = Lembaga::find($data['lembaga_id']);
         return response()->json([
             'user' => $this->payload($user),
             'lembaga_id' => $data['lembaga_id'],
+            'lembaga_nama' => $lembaga?->nama,
+            'lembaga_logo_url' => $lembaga?->logo_url,
             'menu_actions' => $this->menuActionsFor($user),
         ]);
     }

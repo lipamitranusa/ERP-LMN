@@ -1,7 +1,33 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* ─── Design tokens (CSS custom properties) ─── */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── shadcn design tokens — MUST be on :root (outside @layer) for body/hsl() to resolve ─── */
 :root {
+  --background: 0 0% 100%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 122 47% 47%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 214 32% 91%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 214 32% 91%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 214 32% 91%;
+  --accent-foreground: 222 47% 11%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 122 47% 47%;
+  --radius: 0.5rem;
+
+  /* Legacy tokens */
   --color-primary: #4CAF50;
   --color-primary-light: #E8F5E9;
   --color-primary-dark: #2E7D32;
@@ -13,23 +39,49 @@
   --color-slate-200: #E2E8F0;
   --color-border: #E2E8F0;
   --color-white: #FFFFFF;
-
-  /* Brand status colors */
   --color-brand-ungu: #7E57C2;
   --color-brand-merah: #EF5350;
   --color-brand-orange: #FF9800;
   --color-brand-kuning: #FFEB3B;
   --color-brand-biru: #42A5F5;
-
-  /* Semantic */
   --color-danger: #DC2626;
   --color-warning: #F59E0B;
   --color-info: #2563EB;
   --color-success: #16A34A;
-
   --sidebar-width: 240px;
   --sidebar-collapsed-width: 72px;
   --header-height: 64px;
+}
+
+/* ─── Dark mode tokens — override on .dark class */
+.dark {
+  --background: 222 47% 7%;
+  --foreground: 210 40% 98%;
+  --card: 222 47% 9%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222 47% 9%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 122 47% 47%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 215 28% 17%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 215 28% 17%;
+  --muted-foreground: 215 20% 64%;
+  --accent: 215 28% 17%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 215 28% 22%;
+  --input: 215 28% 22%;
+  --ring: 122 47% 47%;
+  --color-slate-800: #E2E8F0;
+  --color-slate-700: #CBD5E1;
+  --color-slate-900: #F8FAFC;
+  --color-slate-50: #0F172A;
+  --color-slate-100: #1E293B;
+  --color-slate-200: #334155;
+  --color-border: #334155;
+  --color-white: #1E293B;
 }
 
 /* ─── Base ─── */
@@ -37,9 +89,9 @@
 
 html { scroll-behavior: smooth; }
 
-body {
-  background-color: var(--color-slate-50);
-  color: #1E293B;
+html, body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-size: 14px;
   line-height: 1.5;
@@ -53,6 +105,9 @@ body {
 ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 
+.dark ::-webkit-scrollbar-thumb { background: #334155; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
 /* ─── Text selection ─── */
 ::selection { background: #C8E6C9; color: #1B5E20; }
 
@@ -63,7 +118,8 @@ body {
   border-radius: 4px;
 }
 
-/* ─── Sidebar ─── */
+/* ─── Dark mode scrollbar ─── */
+
 .sidebar {
   position: fixed;
   top: 0;
@@ -343,3 +399,337 @@ body {
 
 /* File preview modal scroll lock when open */
 body.modal-open { overflow: hidden; }
+
+/* ─── Shadcn animation helpers ─── */
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ─── Dark mode overrides for legacy classes ─── */
+.dark .card {
+  background: #1E293B;
+  border-color: #334155;
+}
+.dark .card-header {
+  border-color: #334155;
+}
+.dark .data-table thead th {
+  background: #0F172A;
+  color: #94A3B8;
+  border-color: #334155;
+}
+.dark .data-table tbody td {
+  border-color: #1E293B;
+  color: #CBD5E1;
+}
+.dark .data-table tbody tr:hover td {
+  background: #1E293B;
+}
+.dark .status-lengkap, .dark .status-selesai, .dark .status-aktif,
+.dark .status-disetujui, .dark .status-final, .dark .status-success {
+  background: #14532D; color: #86EFAC;
+}
+.dark .status-menunggu, .dark .status-menunggu_dokumen,
+.dark .status-menunggu_tindakan, .dark .status-menunggu_persetujuan,
+.dark .status-aktifasi_akun, .dark .status-warning {
+  background: #451A03; color: #FDE68A;
+}
+.dark .status-ditolak, .dark .status-dibatalkan,
+.dark .status-danger, .dark .status-gagal {
+  background: #450A0A; color: #FCA5A5;
+}
+.dark .status-draft, .dark .status-secondary {
+  background: #1E293B; color: #94A3B8;
+}
+.dark .status-terkirim, .dark .status-info {
+  background: #1E3A5F; color: #93C5FD;
+}
+.dark .btn-secondary {
+  background: #334155; color: #E2E8F0; border-color: #475569;
+}
+.dark .btn-secondary:hover:not(:disabled) {
+  background: #475569; border-color: #64748B;
+}
+.dark .btn-ghost {
+  color: #94A3B8;
+}
+.dark .btn-ghost:hover:not(:disabled) {
+  background: #334155; color: #E2E8F0;
+}
+.dark .form-input {
+  background: #1E293B;
+  border-color: #475567;
+  color: #E2E8F0;
+}
+.dark .form-input:focus {
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.15);
+}
+.dark .form-input::placeholder { color: #64748B; }
+.dark .form-label { color: #CBD5E1; }
+.dark .page-title { color: #F1F5F9; }
+.dark .page-subtitle { color: #94A3B8; }
+.dark .stat-card { background: #1E293B; border-color: #334155; }
+.dark .sidebar-nav-item:hover { background: rgba(51, 65, 85, 0.7); color: rgba(255,255,255,0.9); }
+
+/* ─── Dark mode — Sidebar ─── */
+.dark .sidebar {
+  background: #0F172A;
+  border-color: #1E293B;
+}
+.dark .sidebar .sidebar-group-label {
+  color: #64748B;
+}
+.dark .sidebar-nav-item {
+  color: rgba(255,255,255,0.6);
+}
+.dark .sidebar-nav-item.active {
+  background: rgba(76, 175, 80, 0.12);
+  color: #FFFFFF;
+  border-left-color: #4CAF50;
+}
+
+/* ─── Dark mode — Admin Header ─── */
+.dark header {
+  background: #1E293B;
+  border-color: #334155;
+}
+.dark header .breadcrumb-text {
+  color: #94A3B8;
+}
+.dark header .breadcrumb-sep {
+  color: #475569;
+}
+.dark header .text-slate-700 {
+  color: #CBD5E1;
+}
+.dark header .text-slate-500 {
+  color: #64748B;
+}
+.dark header .text-slate-400 {
+  color: #94A3B8;
+}
+
+/* ─── Dark mode — Card headers & table section headers ─── */
+.dark .card-header {
+  background: transparent;
+  border-color: #334155;
+}
+.dark .card-section-title {
+  color: #CBD5E1;
+}
+.dark .card-section-meta {
+  color: #64748B;
+}
+
+/* ─── Dark mode — KpiCard inline variants (ApHonorDashboard) ─── */
+.dark .kpi-warn {
+  background: #1C1400 !important;
+  border-color: #713F12 !important;
+}
+.dark .kpi-warn * {
+  color: #FDE68A !important;
+}
+.dark .kpi-success {
+  background: #052E16 !important;
+  border-color: #14532D !important;
+}
+.dark .kpi-success * {
+  color: #86EFAC !important;
+}
+.dark .kpi-info {
+  background: #172554 !important;
+  border-color: #1E3A5F !important;
+}
+.dark .kpi-info * {
+  color: #93C5FD !important;
+}
+.dark .kpi-danger {
+  background: #1C0000 !important;
+  border-color: #7F1D1D !important;
+}
+.dark .kpi-danger * {
+  color: #FCA5A5 !important;
+}
+
+/* ─── Dark mode — Table sticky headers ─── */
+.dark .bg-slate-50.sticky,
+.dark .sticky.top-0 {
+  background: #0F172A !important;
+}
+.dark .sticky.top-0 th {
+  color: #94A3B8 !important;
+  border-color: #334155 !important;
+}
+
+/* ─── Dark mode — Hover rows ─── */
+.dark .hover\:bg-slate-50\/50:hover td {
+  background: #1E293B !important;
+}
+
+/* ─── Dark mode — Global text color overrides for legacy hardcoded slate-* classes ─── */
+.dark .text-slate-900 { color: #F1F5F9 !important; }
+.dark .text-slate-800 { color: #E2E8F0 !important; }
+.dark .text-slate-700 { color: #CBD5E1 !important; }
+.dark .text-slate-600 { color: #CBD5E1 !important; }
+.dark .text-slate-500 { color: #94A3B8 !important; }
+.dark .text-slate-400 { color: #94A3B8 !important; }
+.dark .text-slate-300 { color: #94A3B8 !important; }
+
+.dark .border-slate-200 { border-color: #334155 !important; }
+.dark .border-slate-100 { border-color: #334155 !important; }
+.dark .border-slate-300 { border-color: #475569 !important; }
+
+.dark .bg-slate-50 { background-color: #0F172A !important; }
+.dark .bg-slate-100 { background-color: #1E293B !important; }
+.dark .bg-slate-200 { background-color: #334155 !important; }
+.dark .bg-white { background-color: #1E293B !important; }
+
+/* ─── Dark mode — Soft accent background variants (light pastel → dim dark equivalents) ─── */
+.dark .bg-green-50 { background-color: rgba(20, 83, 45, 0.4) !important; }
+.dark .bg-blue-50 { background-color: rgba(30, 58, 138, 0.4) !important; }
+.dark .bg-yellow-50 { background-color: rgba(133, 77, 14, 0.35) !important; }
+.dark .bg-amber-50 { background-color: rgba(120, 53, 15, 0.4) !important; }
+.dark .bg-red-50 { background-color: rgba(127, 29, 29, 0.4) !important; }
+.dark .bg-purple-50 { background-color: rgba(88, 28, 135, 0.4) !important; }
+.dark .bg-orange-50 { background-color: rgba(124, 45, 18, 0.4) !important; }
+.dark .bg-indigo-50 { background-color: rgba(49, 46, 129, 0.4) !important; }
+.dark .bg-cyan-50 { background-color: rgba(22, 78, 99, 0.4) !important; }
+.dark .bg-emerald-50 { background-color: rgba(6, 78, 59, 0.4) !important; }
+.dark .bg-rose-50 { background-color: rgba(136, 19, 55, 0.4) !important; }
+.dark .bg-sky-50 { background-color: rgba(12, 74, 110, 0.4) !important; }
+
+/* ─── Dark mode — Tinted colors (text-only) keep readable hue in dark ─── */
+.dark .text-green-700 { color: #86EFAC !important; }
+.dark .text-blue-700 { color: #93C5FD !important; }
+.dark .text-amber-700 { color: #FCD34D !important; }
+.dark .text-yellow-700 { color: #FDE047 !important; }
+.dark .text-red-700 { color: #FCA5A5 !important; }
+.dark .text-purple-700 { color: #D8B4FE !important; }
+.dark .text-orange-700 { color: #FDBA74 !important; }
+.dark .text-green-600 { color: #86EFAC !important; }
+.dark .text-blue-600 { color: #93C5FD !important; }
+.dark .text-red-600 { color: #FCA5A5 !important; }
+
+/* ─── Dark mode — Soft borders on accent variants ─── */
+.dark .border-green-200 { border-color: #166534 !important; }
+.dark .border-blue-200 { border-color: #1E40AF !important; }
+.dark .border-amber-200 { border-color: #92400E !important; }
+.dark .border-yellow-200 { border-color: #854D0E !important; }
+.dark .border-red-200 { border-color: #991B1B !important; }
+.dark .border-purple-200 { border-color: #6B21A8 !important; }
+.dark .border-orange-200 { border-color: #9A3412 !important; }
+
+/* ─── Dark mode — Generic `bg-card`/`bg-background` semantics ─── */
+.dark .shadow-card { box-shadow: 0 1px 3px 0 rgba(0,0,0,0.4) !important; }
+
+/* ─── Dark mode — Headings (h1-h6) auto-inherit foreground color ─── */
+.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 { color: #F1F5F9 !important; }
+
+/* ─── Dark mode — Inputs with raw Tailwind classes ─── */
+.dark input[type="text"],
+.dark input[type="search"],
+.dark input[type="email"],
+.dark input[type="password"],
+.dark input[type="number"],
+.dark textarea,
+.dark select {
+  background-color: #1E293B !important;
+  border-color: #475569 !important;
+  color: #E2E8F0 !important;
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748B !important;
+}
+
+/* ─── Dark mode — Inline style with hex color "#FFFFFF" or "#1E293B" — handled per-component. The CSS rules above catch class-based patterns. ─── */
+
+/* ─── Dark mode — Generic table elements (raw <table> tags) ─── */
+.dark table { color: #E2E8F0; }
+.dark thead { background-color: #0F172A !important; }
+.dark thead th { color: #94A3B8 !important; }
+.dark tbody tr:nth-child(even) { background-color: rgba(30, 41, 59, 0.5) !important; }
+.dark tbody tr:nth-child(odd) { background-color: transparent !important; }
+.dark tbody tr:hover { background-color: rgba(51, 65, 85, 0.5) !important; }
+
+/* ─── Dark mode — Custom checkboxes and decorative SVG colors ─── */
+.dark svg [stroke="#CBD5E1"] { stroke: #475569 !important; }
+.dark svg [stroke="#94A3B8"] { stroke: #64748B !important; }
+
+/* ─── Dark mode — Table cell & row backgrounds ─── */
+.dark .data-table tbody td {
+  background-color: transparent !important;
+}
+.dark .data-table thead th {
+  background: #0F172A !important;
+  color: #94A3B8 !important;
+  border-color: #334155 !important;
+}
+
+/* ─── Dark mode — Form inputs (legacy .form-input class) ─── */
+.dark .form-input {
+  background-color: #1E293B !important;
+  border-color: #475569 !important;
+  color: #E2E8F0 !important;
+}
+.dark .form-input:focus {
+  border-color: #4CAF50 !important;
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.15) !important;
+}
+
+/* ─── Dark mode — Borders around content (legacy .card) ─── */
+.dark .card {
+  background-color: #1E293B !important;
+  border-color: #334155 !important;
+}
+.dark .card-header {
+  background-color: transparent !important;
+  border-color: #334155 !important;
+}
+.dark .card-body {
+  color: #E2E8F0;
+}
+
+/* ─── Dark mode — Stat Cards ─── */
+.dark .stat-card {
+  background-color: #1E293B !important;
+  border-color: #334155 !important;
+}
+.dark .stat-card .stat-card-icon {
+  /* keep tone-colored backgrounds */
+}
+
+/* ─── Dark mode — Page title & subtitle ─── */
+.dark .page-title { color: #F1F5F9 !important; }
+.dark .page-subtitle { color: #94A3B8 !important; }
+
+/* ─── Dark mode — Link primary color stays vivid ─── */
+.dark a.text-primary { color: #22C55E !important; }
+.dark .text-primary { color: #22C55E !important; }
+
+/* ─── Dark mode — Select native dropdown ─── */
+.dark select.form-input,
+.dark select {
+  background-color: #1E293B;
+  border-color: #475567;
+  color: #E2E8F0;
+}
+
+/* ─── Dark mode — Table zebra / borders ─── */
+.dark .data-table tbody tr:last-child td {
+  border-color: #1E293B;
+}
+.dark .data-table tbody td {
+  border-color: #1E293B;
+}
+
+/* ─── Dark mode — Breadcrumb text ─── */
+.dark .breadcrumb-current {
+  color: #CBD5E1;
+}
+.dark .breadcrumb-sep {
+  color: #475569;
+}
+

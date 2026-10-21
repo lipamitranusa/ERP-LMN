@@ -35,8 +35,11 @@ class PenugasanController extends Controller
             'tenagaAhli' => fn($q) => $q->withoutGlobalScope('lembaga'),
             'siklus' => fn($q) => $q->withoutGlobalScope('lembaga'),
             'siklus.faskes' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'siklus.faskes.jenisFaskes' => fn($q) => $q->withoutGlobalScope('lembaga'),
             'siklus.lembaga',
             'suratTugas',
+            'laporanKendala',
+            'laporanPengerjaan',
         ]);
 
         // Rekomendator tidak lagi memakai baris penugasan — direkomendator
@@ -137,6 +140,23 @@ class PenugasanController extends Controller
         }
 
         return response()->json(['data' => $query->limit(100)->get()]);
+    }
+
+    /**
+     * GET /api/penugasan/laporan-pengerjaan/{laporan}/download
+     * Download file laporan pengerjaan (otentikasi via Sanctum).
+     */
+    public function downloadLaporan(\App\Models\LaporanPengerjaan $laporan, AttachmentService $attachment)
+    {
+        if (! $laporan->path_file) {
+            abort(404, 'File tidak ditemukan.');
+        }
+
+        return $attachment->response(
+            $laporan->path_file,
+            $laporan->nama_file_asli ?? 'laporan_pengerjaan',
+            true // inline, untuk preview di browser
+        );
     }
 
     /**
@@ -271,6 +291,8 @@ class PenugasanController extends Controller
         $penugasan = Penugasan::with([
             'tenagaAhli' => fn($q) => $q->withoutGlobalScope('lembaga'),
             'suratTugas',
+            'laporanKendala',
+            'laporanPengerjaan',
         ])
             ->where('siklus_id', $siklus->id)
             ->orderBy('jenis')

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const API_BASE = '/api';
 
@@ -14,6 +14,12 @@ export function useAuth() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   async function login(email, password) {
     setLoading(true);
@@ -53,6 +59,8 @@ export function useAuth() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('menu_actions');
+    localStorage.removeItem('lembaga_name');
+    localStorage.removeItem('lembaga_logo');
     // JANGAN hapus lembaga_id — simpan untuk auto-restore saat login ulang
     // (lihat Login.jsx yang membaca lembaga_id dari localStorage)
   }
@@ -64,6 +72,7 @@ export function useAuth() {
     });
     if (res.status === 401) { logout(); return; }
     const data = await res.json();
+    if (!mountedRef.current) return;
     setUser(data.user);
     setMenuActions(data.menu_actions || []);
     localStorage.setItem('user', JSON.stringify(data.user));

@@ -1,5 +1,11 @@
 import React, { useState } from "react";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 function formatRp(n) {
   return `Rp ${Number(n).toLocaleString("id-ID")}`;
@@ -20,10 +26,14 @@ function extFromPath(path) {
   return m ? m[1].toLowerCase() : "";
 }
 
+const verifySchema = z.object({
+  alasan: z.string().default(""),
+});
+
 function BuktiPreviewModal({ bukti, onClose }) {
   const [blobUrl, setBlobUrl] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const ext = extFromPath(bukti?.path_bukti);
   const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
   const isPdf = ext === "pdf";
@@ -33,7 +43,7 @@ function BuktiPreviewModal({ bukti, onClose }) {
     if (!bukti) return;
     let cancelled = false;
     setLoading(true);
-    setError("");
+    setLoadError("");
 
     fetch(`/api/bukti/${bukti.id}/view`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -51,7 +61,7 @@ function BuktiPreviewModal({ bukti, onClose }) {
       })
       .catch(err => {
         if (!cancelled) {
-          setError(err.message);
+          setLoadError(err.message);
           setLoading(false);
         }
       });
@@ -103,24 +113,17 @@ function BuktiPreviewModal({ bukti, onClose }) {
             </div>
           </div>
           <div style={{ display: "flex", gap: "8px" }}>
-            <button
-              onClick={handleDownload}
-              className="btn btn-secondary btn-sm"
-              style={{ display: "flex", alignItems: "center", gap: "4px" }}
-            >
+            <Button variant="secondary" size="sm" onClick={handleDownload}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
               Download
-            </button>
-            <button
-              onClick={onClose}
-              style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", color: "#94A3B8" }}
-            >
+            </Button>
+            <Button variant="ghost" size="icon" onClick={onClose}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -130,7 +133,7 @@ function BuktiPreviewModal({ bukti, onClose }) {
           minHeight: "300px",
         }}>
           {loading && <div style={{ color: "#94A3B8" }}>Memuat bukti...</div>}
-          {error && <div style={{ color: "#DC2626" }}>{error}</div>}
+          {loadError && <div style={{ color: "#DC2626" }}>{loadError}</div>}
           {blobUrl && isImage && (
             <img
               src={blobUrl}
@@ -148,7 +151,7 @@ function BuktiPreviewModal({ bukti, onClose }) {
           {blobUrl && !isImage && !isPdf && (
             <div style={{ textAlign: "center", color: "#475569" }}>
               <p>Preview tidak tersedia untuk tipe file ini.</p>
-              <button onClick={handleDownload} className="btn btn-primary">Download File</button>
+              <Button variant="primary" onClick={handleDownload}>Download File</Button>
             </div>
           )}
         </div>
@@ -157,29 +160,57 @@ function BuktiPreviewModal({ bukti, onClose }) {
   );
 }
 
+function VerifikasiModal({ bukti, onClose, mutateVerify }) {
+  const { register, handleSubmit, formState: { errors } } = useForm({
+    resolver: zodResolver(verifySchema),
+    defaultValues: { alasan: "" },
+  });
+
+  const onSubmit = (data) => {
+    mutateVerify.mutate({
+      path: `/bukti/${bukti.id}/verifikasi`,
+      method: "POST",
+      body: { status: "ditolak", alasan_penolakan: data.alasan || null },
+    });
+    onClose();
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "8px", maxWidth: "480px", width: "100%", padding: "24px" }}>
+        <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "600", color: "#1E293B" }}>Verifikasi Bukti Transfer</h3>
+        <div style={{ marginTop: "16px", padding: "12px", background: "#F8FAFC", borderRadius: "6px", fontSize: "12px", color: "#475569" }}>
+          <div>Faskes: <strong>{bukti.invoice?.siklus?.faskes?.nama || "—"}</strong></div>
+          <div>Nominal: <strong>{formatRp(bukti.nominal)}</strong></div>
+          <div>Referensi: <strong>{bukti.nomor_referensi || "—"}</strong></div>
+          <div>Dari: {bukti.dari_rekening || "—"}</div>
+        </div>
+
+        <div style={{ marginTop: "16px" }}>
+          <label className="form-label">Alasan penolakan</label>
+          <Textarea rows="3" {...register("alasan")} placeholder="Contoh: Nominal tidak sesuai dengan tagihan." />
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", marginTop: "20px" }}>
+          <Button variant="outline" onClick={onClose} style={{ flex: 1 }}>Batal</Button>
+          <Button variant="destructive" onClick={onSubmit} disabled={mutateVerify.isPending} style={{ flex: 1 }}>Tolak</Button>
+          <Button onClick={() => { mutateVerify.mutate({ path: `/bukti/${bukti.id}/verifikasi`, method: "POST", body: { status: "diterima", alasan_penolakan: null } }); onClose(); }} disabled={mutateVerify.isPending} style={{ flex: 1 }}>Terima</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function VerifikasiPembayaran() {
   const [selectedBukti, setSelectedBukti] = useState(null);
-  const [alasanTolak, setAlasanTolak] = useState("");
   const [previewBukti, setPreviewBukti] = useState(null);
 
   const { data, isLoading } = useApi("verifikasi-pembayaran", "/bukti/antrian");
   const mutateVerify = useMutateKeys(["verifikasi-pembayaran"], {
-    onSuccess: () => { setSelectedBukti(null); setAlasanTolak(""); },
+    onSuccess: () => setSelectedBukti(null),
   });
 
   const bukti = data?.data || [];
-
-  function handleVerifikasi(buktiId, status) {
-    if (status === "ditolak" && !alasanTolak.trim()) {
-      alert("Alasan penolakan wajib diisi.");
-      return;
-    }
-    mutateVerify.mutate({
-      path: `/bukti/${buktiId}/verifikasi`,
-      method: "POST",
-      body: { status, alasan_penolakan: status === "ditolak" ? alasanTolak : null },
-    });
-  }
 
   if (isLoading) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>;
@@ -248,41 +279,27 @@ export default function VerifikasiPembayaran() {
                     </td>
                     <td>
                       <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => setPreviewBukti(b)}
-                          title="Lihat bukti"
-                          style={{ color: "#4CAF50", padding: "4px 8px", fontSize: "12px" }}
-                        >
+                        <Button variant="ghost" size="sm" onClick={() => setPreviewBukti(b)} title="Lihat bukti" style={{ color: "#4CAF50", padding: "4px 8px", fontSize: "12px" }}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
                           </svg>
-                        </button>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => {
-                            const token = localStorage.getItem("token");
-                            const link = document.createElement("a");
-                            link.href = `/api/bukti/${b.id}/download?token=${token}`;
-                            link.style.display = "none";
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                          }}
-                          title="Download bukti"
-                          style={{ color: "#475569", padding: "4px 8px", fontSize: "12px" }}
-                        >
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => {
+                          const token = localStorage.getItem("token");
+                          const link = document.createElement("a");
+                          link.href = `/api/bukti/${b.id}/download?token=${token}`;
+                          link.style.display = "none";
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }} title="Download bukti" style={{ color: "#475569", padding: "4px 8px", fontSize: "12px" }}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                           </svg>
-                        </button>
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => setSelectedBukti(b)}
-                          style={{ padding: "4px 12px", fontSize: "12px" }}
-                        >
+                        </Button>
+                        <Button size="sm" onClick={() => setSelectedBukti(b)} style={{ padding: "4px 12px", fontSize: "12px" }}>
                           Verifikasi
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -293,41 +310,12 @@ export default function VerifikasiPembayaran() {
         </div>
       </div>
 
-      {/* Preview bukti modal */}
       {previewBukti && (
         <BuktiPreviewModal bukti={previewBukti} onClose={() => setPreviewBukti(null)} />
       )}
 
-      {/* Verifikasi modal */}
       {selectedBukti && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }} onClick={() => setSelectedBukti(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "8px", maxWidth: "480px", width: "100%", padding: "24px" }}>
-            <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "600", color: "#1E293B" }}>Verifikasi Bukti Transfer</h3>
-            <div style={{ marginTop: "16px", padding: "12px", background: "#F8FAFC", borderRadius: "6px", fontSize: "12px", color: "#475569" }}>
-              <div>Faskes: <strong>{selectedBukti.invoice?.siklus?.faskes?.nama || "—"}</strong></div>
-              <div>Nominal: <strong>{formatRp(selectedBukti.nominal)}</strong></div>
-              <div>Referensi: <strong>{selectedBukti.nomor_referensi || "—"}</strong></div>
-              <div>Dari: {selectedBukti.dari_rekening || "—"}</div>
-            </div>
-
-            <div style={{ marginTop: "16px" }}>
-              <label className="form-label">Alasan penolakan (wajib jika ditolak)</label>
-              <textarea
-                className="form-input"
-                rows="3"
-                value={alasanTolak}
-                onChange={e => setAlasanTolak(e.target.value)}
-                placeholder="Contoh: Nominal tidak sesuai dengan tagihan."
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: "8px", marginTop: "20px" }}>
-              <button className="btn btn-secondary" onClick={() => setSelectedBukti(null)} style={{ flex: 1 }}>Batal</button>
-              <button className="btn btn-danger" onClick={() => handleVerifikasi(selectedBukti.id, "ditolak")} disabled={mutateVerify.isPending} style={{ flex: 1 }}>Tolak</button>
-              <button className="btn btn-primary" onClick={() => handleVerifikasi(selectedBukti.id, "diterima")} disabled={mutateVerify.isPending} style={{ flex: 1 }}>Terima</button>
-            </div>
-          </div>
-        </div>
+        <VerifikasiModal bukti={selectedBukti} onClose={() => setSelectedBukti(null)} mutateVerify={mutateVerify} />
       )}
     </div>
   );

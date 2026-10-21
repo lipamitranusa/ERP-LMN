@@ -1,5 +1,7 @@
 import React from "react";
 import { useApi } from "@/hooks/useApi";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -11,89 +13,91 @@ export default function AccountingDashboard() {
   const b = dash?.bulan_ini || {};
 
   if (!dash) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat dasbor akuntansi...</div>;
+    return <div className="p-10 text-center text-muted-foreground">Memuat dasbor akuntansi...</div>;
   }
 
+  const labaRugi = b.laba_rugi_bulan ?? 0;
+  const isLaba = labaRugi >= 0;
+
   return (
-    <div>
-      <div style={{ marginBottom: "24px" }}>
-        <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Dasbor Akuntansi</h1>
-        <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
+    <div className="space-y-5">
+      <div className="page-header">
+        <h1 className="page-title">Dasbor Akuntansi</h1>
+        <p className="page-subtitle">
           Ringkasan posisi keuangan — {dash?.tanggal_snapshot}
         </p>
       </div>
 
       {/* KPI Row 1 */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "16px" }}>
-        <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "16px 20px" }}>
-          <div style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", textTransform: "uppercase", marginBottom: "4px" }}>Saldo Kas &amp; Bank</div>
-          <div style={{ fontSize: "22px", fontWeight: "700", color: "#1E293B" }}>{formatRp(b.saldo_kas_bank)}</div>
-          <div style={{ fontSize: "11px", color: "#64748B", marginTop: "4px" }}>Aset lancar</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+          <div className="text-[11px] font-semibold text-muted-foreground uppercase mb-1">Saldo Kas &amp; Bank</div>
+          <div className="text-[22px] font-bold text-foreground">{formatRp(b.saldo_kas_bank)}</div>
+          <div className="text-[11px] text-muted-foreground mt-1">Aset lancar</div>
         </div>
-        <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "16px 20px" }}>
-          <div style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", textTransform: "uppercase", marginBottom: "4px" }}>Pendapatan Bulan Ini</div>
-          <div style={{ fontSize: "22px", fontWeight: "700", color: "#166534" }}>{formatRp(b.total_pendapatan)}</div>
-          <div style={{ fontSize: "11px", color: "#64748B", marginTop: "4px" }}>Bulan berjalan</div>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+          <div className="text-[11px] font-semibold text-muted-foreground uppercase mb-1">Pendapatan Bulan Ini</div>
+          <div className="text-[22px] font-bold text-green-700 dark:text-green-400">{formatRp(b.total_pendapatan)}</div>
+          <div className="text-[11px] text-muted-foreground mt-1">Bulan berjalan</div>
         </div>
-        <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "16px 20px" }}>
-          <div style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", textTransform: "uppercase", marginBottom: "4px" }}>Beban Bulan Ini</div>
-          <div style={{ fontSize: "22px", fontWeight: "700", color: "#991B1B" }}>{formatRp(b.total_beban)}</div>
-          <div style={{ fontSize: "11px", color: "#64748B", marginTop: "4px" }}>Bulan berjalan</div>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+          <div className="text-[11px] font-semibold text-muted-foreground uppercase mb-1">Beban Bulan Ini</div>
+          <div className="text-[22px] font-bold text-red-700 dark:text-red-400">{formatRp(b.total_beban)}</div>
+          <div className="text-[11px] text-muted-foreground mt-1">Bulan berjalan</div>
         </div>
-        <div style={{
-          background: "#FFFFFF",
-          border: "1px solid #E2E8F0",
-          borderRadius: "8px",
-          padding: "16px 20px",
-          borderColor: (b.laba_rugi_bulan ?? 0) >= 0 ? "#BBF7D0" : "#FECACA",
-        }}>
-          <div style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", textTransform: "uppercase", marginBottom: "4px" }}>Laba / (Rugi)</div>
-          <div style={{ fontSize: "22px", fontWeight: "700", color: (b.laba_rugi_bulan ?? 0) >= 0 ? "#166534" : "#991B1B" }}>
-            {formatRp(b.laba_rugi_bulan)}
+        <div className={cn(
+          "bg-white dark:bg-slate-900 border rounded-lg p-4",
+          isLaba ? "border-green-200 dark:border-green-900" : "border-red-200 dark:border-red-900"
+        )}>
+          <div className="text-[11px] font-semibold text-muted-foreground uppercase mb-1">Laba / (Rugi)</div>
+          <div className={cn("text-[22px] font-bold", isLaba ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400")}>
+            {formatRp(labaRugi)}
           </div>
-          <div style={{ fontSize: "11px", color: "#64748B", marginTop: "4px" }}>Bulan berjalan</div>
+          <div className="text-[11px] text-muted-foreground mt-1">Bulan berjalan</div>
         </div>
       </div>
 
       {/* KPI Row 2 */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "16px" }}>
-        <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "14px 20px" }}>
-          <div style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", textTransform: "uppercase", marginBottom: "4px" }}>Akun Perkiraan (COA)</div>
-          <div style={{ fontSize: "20px", fontWeight: "700", color: "#475569" }}>{dash?.jumlah_coa ?? 0}</div>
-          <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "4px" }}>Akun aktif</div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3.5">
+          <div className="text-[11px] font-semibold text-muted-foreground uppercase mb-1">Akun Perkiraan (COA)</div>
+          <div className="text-[20px] font-bold text-slate-600 dark:text-slate-300">{dash?.jumlah_coa ?? 0}</div>
+          <div className="text-[11px] text-muted-foreground mt-1">Akun aktif</div>
         </div>
-        <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "14px 20px" }}>
-          <div style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", textTransform: "uppercase", marginBottom: "4px" }}>Jurnal Bulan Ini</div>
-          <div style={{ fontSize: "20px", fontWeight: "700", color: "#475569" }}>{b.jumlah_jurnal ?? 0}</div>
-          <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "4px" }}>Transaksi</div>
+        <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3.5">
+          <div className="text-[11px] font-semibold text-muted-foreground uppercase mb-1">Jurnal Bulan Ini</div>
+          <div className="text-[20px] font-bold text-slate-600 dark:text-slate-300">{b.jumlah_jurnal ?? 0}</div>
+          <div className="text-[11px] text-muted-foreground mt-1">Transaksi</div>
         </div>
-        <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "14px 20px" }}>
-          <div style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", textTransform: "uppercase", marginBottom: "4px" }}>Total Debit / Kredit</div>
-          <div style={{ fontSize: "14px", fontWeight: "600", color: "#475569" }}>D: {formatRp(b.total_debit)}</div>
-          <div style={{ fontSize: "14px", fontWeight: "600", color: "#475569" }}>K: {formatRp(b.total_kredit)}</div>
-          <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "4px" }}>Bulan berjalan</div>
+        <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3.5">
+          <div className="text-[11px] font-semibold text-muted-foreground uppercase mb-1">Total Debit / Kredit</div>
+          <div className="text-[14px] font-semibold text-slate-600 dark:text-slate-300">D: {formatRp(b.total_debit)}</div>
+          <div className="text-[14px] font-semibold text-slate-600 dark:text-slate-300">K: {formatRp(b.total_kredit)}</div>
+          <div className="text-[11px] text-muted-foreground mt-1">Bulan berjalan</div>
         </div>
       </div>
 
       {/* Quick info */}
-      <div className="card" style={{ padding: "20px" }}>
-        <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>Navigasi Modul Akuntansi</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+      <Card className="p-5">
+        <h3 className="m-0 mb-3 text-[14px] font-semibold text-foreground">Navigasi Modul Akuntansi</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { label: "Chart of Accounts", desc: "Master akun perkiraan", path: "/admin/accounting/coa" },
             { label: "Kategori Jurnal", desc: "Jenis transaksi jurnal", path: "/admin/accounting/kategori-jurnal" },
             { label: "Jurnal Umum", desc: "Input transaksi non-survei", path: "/admin/accounting/jurnal" },
             { label: "Buku Besar", desc: "Saldo & mutasi per akun", path: "/admin/accounting/buku-besar" },
           ].map((item, i) => (
-            <div key={i} onClick={() => { window.location.href = item.path; }} style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "6px", padding: "12px", cursor: "pointer", transition: "border-color 0.15s" }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = "#2563EB"}
-              onMouseLeave={e => e.currentTarget.style.borderColor = "#E2E8F0"}>
-              <div style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>{item.label}</div>
-              <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>{item.desc}</div>
-            </div>
+            <a
+              key={i}
+              href={item.path}
+              className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md p-3 cursor-pointer transition-colors hover:border-blue-500 block no-underline"
+            >
+              <div className="text-[13px] font-semibold text-slate-700 dark:text-slate-200">{item.label}</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">{item.desc}</div>
+            </a>
           ))}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

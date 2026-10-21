@@ -1,50 +1,37 @@
 import React, { useState } from "react";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card } from "@/components/ui/card";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
 }
 
-function Modal({ title, children, onClose, wide }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
-      <div style={{ background: "#fff", borderRadius: "8px", maxWidth: wide ? "900px" : "560px", width: "95vw", maxHeight: "92vh", overflowY: "auto" }}>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "600" }}>{title}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "#64748B" }}>×</button>
-        </div>
-        <div style={{ padding: "20px" }}>{children}</div>
-      </div>
-    </div>
-  );
-}
+const schema = z.object({
+  tanggal: z.string().min(1, "Tanggal wajib diisi"),
+  ref: z.string().default(""),
+  akun_kas_bank: z.string().min(1, "Akun Kas/Bank wajib dipilih"),
+  keterangan: z.string().default(""),
+});
 
-/**
- * props: {
- *   type: 'bkm' | 'bkk' | 'kkm' | 'kkk',
- *   title: string,
- *   subtitle: string,
- *   color: { bg, border, badge, badgeText, accent },
- *   icon: string,
- *   jenis: string,
- * }
- */
 export default function KasBankForm({ type, title, subtitle, color, icon, jenis }) {
   const [showForm, setShowForm] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  // Form fields
-  const [form, setForm] = useState({
-    tanggal: new Date().toISOString().split("T")[0],
-    ref: "",                          // Nomor referensi manual
-    akun_kas_bank: "",               // Type: akun Kas/Bank yang dipilih
-    details: [{ coa_id: "", deskripsi: "", nominal: 0 }], // Baris detail
-    keterangan: "",
-  });
-
-  // ── Load COA + history ──────────────────────────────────────────────────
   const { data: coaData, isLoading: loading } = useApi("coa-accounting", "/keuangan/accounting/coa");
   const coaList = coaData?.data || [];
 
@@ -52,55 +39,70 @@ export default function KasBankForm({ type, title, subtitle, color, icon, jenis 
   const { data: historyData } = useApi(["history", type], historyQs);
   const records = (historyData?.data || []).slice(0, 50);
 
-  const saveMutation = useMutateKeys(["history", type], {
-    onSuccess: (data) => {
-      setSuccessMsg(`${jenis} berhasil direkam — ${data.data.nomor}`);
-      setShowForm(false);
-      setForm({
-        tanggal: new Date().toISOString().split("T")[0],
-        ref: "",
-        akun_kas_bank: "",
-        details: [{ coa_id: "", deskripsi: "", nominal: 0 }],
-        keterangan: "",
-      });
-      setTimeout(() => setSuccessMsg(""), 5000);
-    },
-    onError: (err) => { setFormError(err.message); setSubmitting(false); },
-  });
-
-  // ── Akun dropdown options ──────────────────────────────────────────────
   const bankAccounts = coaList.filter(a =>
     a.jenis === "aktiva_lancar" && a.kode.match(/^110[1-4]/)
   );
   const counterpartAccounts = coaList;
 
-  // ── Detail row helpers ──────────────────────────────────────────────────
-  const updateDetail = (i, field, val) => {
-    const rows = [...form.details];
+  const isDebit = ["bkm", "kkm"].includes(type);
+
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      tanggal: new Date().toISOString().split("T")[0],
+      ref: "",
+      akun_kas_bank: "",
+      keterangan: "",
+    },
+  });
+
+  const [details, setDetails] = useState([{ coa_id: "", deskripsi: "", nominal: 0 }]);
+  const watchedAkunKasBank = watch("akun_kas_bank");
+  const selectedBank = bankAccounts.find(a => a.id === watchedAkunKasBank);
+
+  const saveMutation = useMutateKeys(["history", type], {
+    onSuccess: (data) => {
+      setSuccessMsg(`${jenis} berhasil direkam — ${data.data.nomor}`);
+      setShowForm(false);
+      reset({
+        tanggal: new Date().toISOString().split("T")[0],
+        ref: "",
+        akun_kas_bank: "",
+        keterangan: "",
+      });
+      setDetails([{ coa_id: "", deskripsi: "", nominal: 0 }]);
+      setTimeout(() => setSuccessMsg(""), 5000);
+    },
+    onError: (err) => { setFormError(err.message); },
+  });
+
+  const totalNominal = details.reduce((s, r) => s + (parseFloat(r.nominal) || 0), 0);
+
+  function updateDetail(i, field, val) {
+    const rows = [...details];
     rows[i][field] = val;
-    setForm(f => ({ ...f, details: rows }));
-  };
-  const addDetail = () => setForm(f => ({ ...f, details: [...f.details, { coa_id: "", deskripsi: "", nominal: 0 }] }));
-  const removeDetail = (i) => setForm(f => ({ ...f, details: f.details.filter((_, idx) => idx !== i) }));
+    setDetails(rows);
+  }
 
-  const totalNominal = form.details.reduce((s, r) => s + (parseFloat(r.nominal) || 0), 0);
+  function addDetail() {
+    setDetails(prev => [...prev, { coa_id: "", deskripsi: "", nominal: 0 }]);
+  }
 
-  // ── Submit ──────────────────────────────────────────────────────────────
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  function removeDetail(i) {
+    setDetails(prev => prev.filter((_, idx) => idx !== i));
+  }
+
+  const onSubmit = (formData) => {
     setFormError("");
-
-    if (!form.akun_kas_bank) { setFormError("Type (Akun Kas/Bank) wajib dipilih."); return; }
-    const validDetails = form.details.filter(r => r.coa_id && parseFloat(r.nominal) > 0);
+    const validDetails = details.filter(r => r.coa_id && parseFloat(r.nominal) > 0);
     if (validDetails.length === 0) { setFormError("Minimal 1 baris detail dengan akun dan nominal."); return; }
 
-    setSubmitting(true);
     const fd = new FormData();
     fd.append("jenis", type);
-    fd.append("tanggal", form.tanggal);
-    fd.append("ref", form.ref || "");
-    fd.append("akun_kas_bank", form.akun_kas_bank);
-    fd.append("keterangan", form.keterangan || "");
+    fd.append("tanggal", formData.tanggal);
+    fd.append("ref", formData.ref || "");
+    fd.append("akun_kas_bank", formData.akun_kas_bank);
+    fd.append("keterangan", formData.keterangan || "");
     validDetails.forEach((r, i) => {
       fd.append(`details[${i}][coa_id]`, r.coa_id);
       fd.append(`details[${i}][nominal]`, r.nominal);
@@ -109,46 +111,40 @@ export default function KasBankForm({ type, title, subtitle, color, icon, jenis 
     saveMutation.mutate({ path: "/keuangan/accounting/auto-jurnal", method: "POST", body: fd });
   };
 
-  const openNew = () => {
-    setForm({
+  function openNew() {
+    reset({
       tanggal: new Date().toISOString().split("T")[0],
       ref: "",
       akun_kas_bank: "",
-      details: [{ coa_id: "", deskripsi: "", nominal: 0 }],
       keterangan: "",
     });
+    setDetails([{ coa_id: "", deskripsi: "", nominal: 0 }]);
     setFormError("");
     setShowForm(true);
-  };
-
-  const isDebit = ["bkm", "kkm"].includes(type);
-  const selectedBank = bankAccounts.find(a => a.id === form.akun_kas_bank);
+  }
 
   return (
     <div>
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div className="mb-6 flex justify-between items-start">
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+          <div className="flex items-center gap-2 mb-1">
             <span style={{ fontSize: "22px" }}>{icon}</span>
-            <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>{title}</h1>
+            <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-200">{title}</h1>
           </div>
-          <p style={{ margin: 0, fontSize: "13px", color: "#64748B" }}>{subtitle}</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">{subtitle}</p>
         </div>
-        <button className="btn btn-primary" onClick={openNew} style={{ background: color.accent }}>
+        <Button onClick={openNew} style={{ background: color.accent }}>
           + Entri {jenis}
-        </button>
+        </Button>
       </div>
 
-      {/* ── Success message ─────────────────────────────────────────────── */}
       {successMsg && (
-        <div style={{ background: "#DCFCE7", color: "#166534", padding: "10px 16px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", border: "1px solid #BBF7D0" }}>
+        <div className="mb-4 px-4 py-3 rounded-md text-sm font-medium" style={{ background: "#DCFCE7", color: "oklch(0.75 0.15 145)", border: "1px solid #BBF7D0" }}>
           <strong>Berhasil!</strong> {successMsg}
         </div>
       )}
 
-      {/* ── Tabel history ──────────────────────────────────────────────── */}
-      <div className="card" style={{ padding: 0 }}>
+      <Card className="overflow-hidden">
         <table className="data-table">
           <thead>
             <tr>
@@ -161,9 +157,9 @@ export default function KasBankForm({ type, title, subtitle, color, icon, jenis 
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="5" style={{ textAlign: "center", color: "#94A3B8", padding: "32px" }}>Memuat...</td></tr>
+              <tr><td colSpan="5" style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: "32px" }}>Memuat...</td></tr>
             ) : records.length === 0 ? (
-              <tr><td colSpan="5" style={{ textAlign: "center", color: "#94A3B8", padding: "32px" }}>Belum ada data {jenis}.</td></tr>
+              <tr><td colSpan="5" style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: "32px" }}>Belum ada data {jenis}.</td></tr>
             ) : records.map(r => (
               <tr key={r.id}>
                 <td>
@@ -178,7 +174,7 @@ export default function KasBankForm({ type, title, subtitle, color, icon, jenis 
                 <td style={{ fontSize: "12px" }}>
                   {r.details?.[0]?.coa?.kode} {r.details?.[0]?.coa?.nama}
                 </td>
-                <td style={{ fontSize: "12px", color: "#64748B" }}>{r.keterangan || "-"}</td>
+                <td style={{ fontSize: "12px", color: "hsl(var(--muted-foreground))" }}>{r.keterangan || "-"}</td>
                 <td style={{ fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace", fontWeight: "600" }}>
                   {formatRp(r.total_debit)}
                 </td>
@@ -186,91 +182,101 @@ export default function KasBankForm({ type, title, subtitle, color, icon, jenis 
             ))}
           </tbody>
         </table>
-      </div>
+      </Card>
 
-      {/* ── Form Modal ─────────────────────────────────────────────────── */}
-      {showForm && (
-        <Modal title={`Entri ${jenis}`} onClose={() => setShowForm(false)} wide>
-          <form onSubmit={handleSubmit}>
+      <Dialog open={showForm} onOpenChange={v => { if (!saveMutation.isPending) setShowForm(v); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Entri {jenis}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {formError && (
-              <div style={{ background: "#FEE2E2", color: "#991B1B", padding: "8px 12px", borderRadius: "4px", marginBottom: "12px", fontSize: "13px" }}>
+              <div className="px-3 py-2 rounded-md text-sm" style={{ background: "#FEE2E2", color: "oklch(0.70 0.20 25)" }}>
                 {formError}
               </div>
             )}
 
-            {/* ── Header fields ───────────────────────────────────────── */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "16px" }}>
-              <div>
-                <label className="form-label">Tanggal *</label>
-                <input className="form-input" type="date" value={form.tanggal}
-                  onChange={e => setForm(f => ({ ...f, tanggal: e.target.value }))} required />
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="kb-tanggal">Tanggal *</Label>
+                <Input id="kb-tanggal" type="date" {...register("tanggal")} />
+                {errors.tanggal && <p className="text-xs text-red-500 mt-1">{errors.tanggal.message}</p>}
               </div>
-              <div>
-                <label className="form-label">No. Referensi</label>
-                <input className="form-input" value={form.ref}
-                  onChange={e => setForm(f => ({ ...f, ref: e.target.value }))}
-                  placeholder="mis. RV-2026-001" />
+              <div className="space-y-1.5">
+                <Label htmlFor="kb-ref">No. Referensi</Label>
+                <Input id="kb-ref" {...register("ref")} placeholder="mis. RV-2026-001" />
               </div>
-              <div>
-                <label className="form-label">Type — Akun Kas/Bank *</label>
-                <select className="form-input" value={form.akun_kas_bank}
-                  onChange={e => setForm(f => ({ ...f, akun_kas_bank: e.target.value }))} required>
+              <div className="space-y-1.5">
+                <Label htmlFor="kb-akun">Akun Kas/Bank *</Label>
+                <select
+                  id="kb-akun"
+                  className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+                  {...register("akun_kas_bank")}
+                >
                   <option value="">— Pilih Akun —</option>
                   {bankAccounts.map(a => (
                     <option key={a.id} value={a.id}>{a.kode} — {a.nama}</option>
                   ))}
                 </select>
+                {errors.akun_kas_bank && <p className="text-xs text-red-500 mt-1">{errors.akun_kas_bank.message}</p>}
               </div>
             </div>
 
-            {/* ── Detail table ────────────────────────────────────────── */}
-            <div style={{ marginBottom: "8px", fontSize: "12px", fontWeight: "600", color: "#64748B" }}>
-              Rincian — kas/bank akan di-{isDebit ? "DEBIT" : "KREDIT"} dari {selectedBank ? `${selectedBank.kode} ${selectedBank.nama}` : "akun yang dipilih"}
+            <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500">
+              Kas/bank akan di-{isDebit ? "DEBIT" : "KREDIT"} dari{" "}
+              {selectedBank ? `${selectedBank.kode} ${selectedBank.nama}` : "akun yang dipilih"}
             </div>
-            <div style={{ overflowX: "auto", marginBottom: "12px" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E2E8F0", borderRadius: "6px", overflow: "hidden" }}>
+
+            <div className="overflow-x-auto">
+              <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid hsl(var(--border))", borderRadius: "6px", overflow: "hidden" }}>
                 <thead>
-                  <tr style={{ background: "#F8FAFC" }}>
-                    <th style={{ padding: "6px 10px", fontSize: "11px", textAlign: "left", borderBottom: "1px solid #E2E8F0", width: "40px" }}>#</th>
-                    <th style={{ padding: "6px 10px", fontSize: "11px", textAlign: "left", borderBottom: "1px solid #E2E8F0", minWidth: "200px" }}>Akun Counterpart</th>
-                    <th style={{ padding: "6px 10px", fontSize: "11px", textAlign: "left", borderBottom: "1px solid #E2E8F0" }}>Deskripsi / Keterangan</th>
-                    <th style={{ padding: "6px 10px", fontSize: "11px", textAlign: "right", borderBottom: "1px solid #E2E8F0", width: "150px" }}>
+                  <tr style={{ background: "var(--muted)" }}>
+                    <th style={{ padding: "6px 10px", fontSize: "11px", textAlign: "left", borderBottom: "1px solid hsl(var(--border))", width: "40px" }}>#</th>
+                    <th style={{ padding: "6px 10px", fontSize: "11px", textAlign: "left", borderBottom: "1px solid hsl(var(--border))", minWidth: "200px" }}>Akun Counterpart</th>
+                    <th style={{ padding: "6px 10px", fontSize: "11px", textAlign: "left", borderBottom: "1px solid hsl(var(--border))" }}>Deskripsi / Keterangan</th>
+                    <th style={{ padding: "6px 10px", fontSize: "11px", textAlign: "right", borderBottom: "1px solid hsl(var(--border))", width: "150px" }}>
                       {isDebit ? "KREDIT (Rp)" : "DEBIT (Rp)"}
                     </th>
-                    <th style={{ padding: "6px 10px", fontSize: "11px", borderBottom: "1px solid #E2E8F0", width: "36px" }}></th>
+                    <th style={{ padding: "6px 10px", fontSize: "11px", borderBottom: "1px solid hsl(var(--border))", width: "36px" }}></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {form.details.map((row, i) => (
+                  {details.map((row, i) => (
                     <tr key={i}>
-                      <td style={{ padding: "4px 8px", textAlign: "center", fontSize: "12px", color: "#94A3B8" }}>{i + 1}</td>
+                      <td style={{ padding: "4px 8px", textAlign: "center", fontSize: "12px", color: "hsl(var(--muted-foreground))" }}>{i + 1}</td>
                       <td style={{ padding: "4px 4px" }}>
-                        <select className="form-input" style={{ fontSize: "13px" }}
+                        <select
+                          className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
                           value={row.coa_id}
-                          onChange={e => updateDetail(i, "coa_id", e.target.value)}>
+                          onChange={e => updateDetail(i, "coa_id", e.target.value)}
+                        >
                           <option value="">— Pilih Akun —</option>
-                          {counterpartAccounts.filter(a => a.id !== form.akun_kas_bank).map(a => (
+                          {counterpartAccounts.filter(a => a.id !== watchedAkunKasBank).map(a => (
                             <option key={a.id} value={a.id}>{a.kode} — {a.nama}</option>
                           ))}
                         </select>
                       </td>
                       <td style={{ padding: "4px 4px" }}>
-                        <input className="form-input" style={{ fontSize: "13px" }}
+                        <Input
                           value={row.deskripsi}
                           onChange={e => updateDetail(i, "deskripsi", e.target.value)}
-                          placeholder="Keterangan baris..." />
+                          placeholder="Keterangan baris..."
+                          className="text-sm"
+                        />
                       </td>
                       <td style={{ padding: "4px 4px" }}>
-                        <input className="form-input" style={{ fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}
-                          type="text"
+                        <Input
+                          className="text-right font-mono"
                           value={row.nominal > 0 ? row.nominal.toLocaleString("id-ID") : ""}
                           onChange={e => updateDetail(i, "nominal", parseInt(e.target.value.replace(/\D/g, "")) || 0)}
-                          placeholder="0" />
+                          placeholder="0"
+                        />
                       </td>
                       <td style={{ padding: "4px 4px", textAlign: "center" }}>
-                        {form.details.length > 1 && (
-                          <button type="button" onClick={() => removeDetail(i)}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "#DC2626", fontSize: "16px" }}>×</button>
+                        {details.length > 1 && (
+                          <button type="button" onClick={() => removeDetail(i)} className="bg-none border-none cursor-pointer text-red-600 text-base hover:text-red-800">
+                            ×
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -278,10 +284,10 @@ export default function KasBankForm({ type, title, subtitle, color, icon, jenis 
                 </tbody>
                 <tfoot>
                   <tr style={{ background: isDebit ? "#FEF2F2" : "#F0FDF4", fontWeight: "700" }}>
-                    <td colSpan="3" style={{ padding: "8px 10px", fontSize: "13px", textAlign: "right", color: "#475569" }}>
+                    <td colSpan="3" style={{ padding: "8px 10px", fontSize: "13px", textAlign: "right", color: "hsl(var(--muted-foreground))" }}>
                       Kas/Bank — {selectedBank ? `${selectedBank.kode} ${selectedBank.nama}` : "—"} [{isDebit ? "DEBIT" : "KREDIT"}]
                     </td>
-                    <td style={{ padding: "8px 10px", fontSize: "14px", textAlign: "right", fontFamily: "ui-monospace", color: "#1E293B" }}>
+                    <td style={{ padding: "8px 10px", fontSize: "14px", textAlign: "right", fontFamily: "ui-monospace", color: "hsl(var(--foreground))" }}>
                       {formatRp(totalNominal)}
                     </td>
                     <td></td>
@@ -290,39 +296,36 @@ export default function KasBankForm({ type, title, subtitle, color, icon, jenis 
               </table>
             </div>
 
-            <button type="button" onClick={addDetail}
-              style={{ background: "none", border: "1px dashed #CBD5E1", borderRadius: "4px", padding: "5px 12px", fontSize: "12px", color: "#64748B", cursor: "pointer", width: "100%", marginBottom: "12px" }}>
+            <Button type="button" variant="outline" size="sm" onClick={addDetail}
+              style={{ width: "100%", borderStyle: "dashed" }}>
               + Tambah Baris
-            </button>
+            </Button>
 
-            <div style={{ marginBottom: "16px" }}>
-              <label className="form-label">Keterangan / Catatan</label>
-              <textarea className="form-input" rows={2} value={form.keterangan}
-                onChange={e => setForm(f => ({ ...f, keterangan: e.target.value }))}
-                placeholder="Catatan umum transaksi..." />
+            <div className="space-y-1.5">
+              <Label htmlFor="kb-keterangan">Keterangan / Catatan</Label>
+              <Textarea id="kb-keterangan" rows={2} {...register("keterangan")} placeholder="Catatan umum transaksi..." />
             </div>
 
-            {/* ── Total & balance check ─────────────────────────────────── */}
-            <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "16px", padding: "10px 14px", background: "#F8FAFC", borderRadius: "6px", border: "1px solid #E2E8F0" }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: "11px", color: "#64748B" }}>Jumlah Baris</div>
-                <div style={{ fontSize: "16px", fontWeight: "700", color: "#1E293B" }}>{form.details.filter(r => r.coa_id && r.nominal > 0).length} transaksi</div>
+            <div className="flex gap-3 items-center p-3 rounded-md" style={{ background: "var(--muted)", border: "1px solid hsl(var(--border))" }}>
+              <div className="flex-1">
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">Jumlah Baris</div>
+                <div className="text-base font-bold text-slate-800 dark:text-slate-200">{details.filter(r => r.coa_id && r.nominal > 0).length} transaksi</div>
               </div>
               <div>
-                <div style={{ fontSize: "11px", color: "#64748B" }}>Total {isDebit ? "KREDIT" : "DEBIT"}</div>
-                <div style={{ fontSize: "16px", fontWeight: "700", fontFamily: "ui-monospace", color: "#1E293B" }}>{formatRp(totalNominal)}</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">Total {isDebit ? "KREDIT" : "DEBIT"}</div>
+                <div className="text-base font-bold font-mono text-slate-800 dark:text-slate-200">{formatRp(totalNominal)}</div>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Batal</button>
-              <button type="submit" className="btn btn-primary" disabled={submitting} style={{ background: color.accent }}>
-                {submitting ? "Menyimpan..." : `Simpan ${jenis}`}
-              </button>
-            </div>
+            <DialogFooter className="gap-2 sm:gap-0 border-t pt-4">
+              <Button type="button" variant="outline" onClick={() => setShowForm(false)} disabled={saveMutation.isPending}>Batal</Button>
+              <Button type="submit" disabled={saveMutation.isPending} style={{ background: color.accent }}>
+                {saveMutation.isPending ? "Menyimpan..." : `Simpan ${jenis}`}
+              </Button>
+            </DialogFooter>
           </form>
-        </Modal>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

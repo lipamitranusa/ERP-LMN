@@ -1,11 +1,35 @@
 import React, { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import ImportModal from "@/components/ImportModal";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
 import { useLembaga } from "@/contexts/LembagaContext";
+import { PageHeader } from "@/components/PageHeader";
+import { StatusBadge } from "@/components/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card } from "@/components/ui/card";
+import { Search, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
-// Debounce helper — tunda perubahan nilai sampai user berhenti mengetik
-// 300ms. Tanpa ini, setiap ketukan karakter = 1 request ke Supabase
-// (~100-200ms round-trip per karakter = pencarian terasa sangat lambat).
 function useDebounced(value, delayMs = 300) {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -15,7 +39,7 @@ function useDebounced(value, delayMs = 300) {
   return debounced;
 }
 
-const EMPTY = {
+const EMPTY_FORM = {
   jenis_faskes_id: "", lembaga_id: "", nama: "", no_sertifikat: "",
   nomor_surat_faskes: "",
   alamat: "", kota: "", provinsi: "", kode_pos: "",
@@ -24,59 +48,51 @@ const EMPTY = {
   deskripsi: "", status: "aktif",
 };
 
-function Modal({ title, onClose, children }) {
-  return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 200,
-      background: "rgba(15,23,42,0.5)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: "20px",
-    }} onClick={onClose}>
-      <div style={{
-        background: "#fff", borderRadius: "12px", width: "100%", maxWidth: "680px",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.15)", overflow: "hidden", maxHeight: "90vh", overflowY: "auto",
-      }} onClick={e => e.stopPropagation()}>
-        <div style={{ padding: "20px 24px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
-          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600", color: "#1E293B" }}>{title}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", color: "#94A3B8" }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
+const schema = z.object({
+  jenis_faskes_id: z.string().default(""),
+  lembaga_id: z.string().default(""),
+  nama: z.string().min(1, "Nama faskes wajib diisi"),
+  no_sertifikat: z.string().default(""),
+  nomor_surat_faskes: z.string().default(""),
+  alamat: z.string().default(""),
+  kota: z.string().default(""),
+  provinsi: z.string().default(""),
+  kode_pos: z.string().default(""),
+  telepon: z.string().default(""),
+  email: z.string().email("Format email tidak valid").or(z.literal("")).default(""),
+  website: z.string().default(""),
+  nama_pimpinan: z.string().default(""),
+  telepon_pimpinan: z.string().default(""),
+  deskripsi: z.string().default(""),
+  status: z.string().default("aktif"),
+});
 
 export default function MasterFaskes() {
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
-  const [form, setForm] = useState(EMPTY);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [showImport, setShowImport] = useState(false);
   const debouncedSearch = useDebounced(search, 300);
+  const { lembagaId: activeLembagaId } = useLembaga();
 
-  // React Query handles caching, deduplication, and auto-refetch.
-  // Pakai debouncedSearch (bukan search) — query tidak fire tiap ketukan
-  // karakter, melainkan 300ms setelah user berhenti mengetik. Tanpa ini,
-  // mengetik "optima" = 6 request ke Supabase (~600-1200ms round-trip).
   const { data: faskesData, isLoading } = useApi(
     ["master-faskes", debouncedSearch],
     `/master/faskes?q=${encodeURIComponent(debouncedSearch)}`
   );
   const { data: jenisData } = useApi(["jenis-faskes"], "/master/jenis-faskes?per_page=50");
   const { data: lembagaData } = useApi("lembaga-list-filter", "/master/lembaga?per_page=50");
-  const { lembagaId: activeLembagaId } = useLembaga();
 
   const items = faskesData?.data ?? [];
   const jenisList = jenisData?.data ?? [];
   const lembagaList = lembagaData?.data ?? [];
 
-  const selectedJenis = jenisList.find(j => j.id === form.jenis_faskes_id) || null;
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: EMPTY_FORM,
+  });
+
+  const watchedJenisId = watch("jenis_faskes_id");
+  const selectedJenis = jenisList.find(j => j.id === watchedJenisId) || null;
   const filteredLembagaList = selectedJenis?.lembaga_id
     ? lembagaList.filter(l => l.id === selectedJenis.lembaga_id)
     : lembagaList;
@@ -85,292 +101,240 @@ export default function MasterFaskes() {
 
   function handleJenisChange(id) {
     const jenis = jenisList.find(j => j.id === id);
-    setForm(f => ({
-      ...f,
-      jenis_faskes_id: id,
-      // Auto-cascade lembaga to the jenis's owning lembaga
-      lembaga_id: jenis?.lembaga_id || f.lembaga_id,
-    }));
+    setValue("jenis_faskes_id", id, { shouldValidate: true });
+    if (jenis?.lembaga_id) setValue("lembaga_id", jenis.lembaga_id);
   }
 
   function openAdd() {
     setEditTarget(null);
-    setForm({ ...EMPTY, lembaga_id: activeLembagaId || "" });
-    setError("");
+    reset({ ...EMPTY_FORM, lembaga_id: activeLembagaId || "" });
     setShowModal(true);
   }
 
   function openEdit(item) {
     setEditTarget(item);
-    setForm({
+    reset({
       jenis_faskes_id: item.jenis_faskes_id ?? "",
       lembaga_id: item.lembaga_id || activeLembagaId || "",
       nama: item.nama || "",
       no_sertifikat: item.no_sertifikat || "",
       nomor_surat_faskes: item.nomor_surat_faskes || "",
-      alamat: item.alamat || "",
-      kota: item.kota || "",
-      provinsi: item.provinsi || "",
-      kode_pos: item.kode_pos || "",
-      telepon: item.telepon || "",
-      email: item.email || "",
+      alamat: item.alamat || "", kota: item.kota || "",
+      provinsi: item.provinsi || "", kode_pos: item.kode_pos || "",
+      telepon: item.telepon || "", email: item.email || "",
       website: item.website || "",
       nama_pimpinan: item.nama_pimpinan || "",
       telepon_pimpinan: item.telepon_pimpinan || "",
       deskripsi: item.deskripsi || "",
       status: (item.status || "aktif").toLowerCase(),
     });
-    setError("");
     setShowModal(true);
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    setSaving(true);
-    try {
-      const payload = { ...form };
-      if (payload.jenis_faskes_id === "") payload.jenis_faskes_id = null;
-      if (payload.lembaga_id === "") payload.lembaga_id = null;
-      payload.status = (payload.status || "aktif").toLowerCase();
-      await mutate.mutateAsync({
-        path: editTarget ? `/master/faskes/${editTarget.id}` : "/master/faskes",
-        method: editTarget ? "PUT" : "POST",
-        body: payload,
-      });
-      setShowModal(false);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
+  const onSubmit = (data) => {
+    const payload = { ...data };
+    if (payload.jenis_faskes_id === "") payload.jenis_faskes_id = null;
+    if (payload.lembaga_id === "") payload.lembaga_id = null;
+    payload.status = (payload.status || "aktif").toLowerCase();
+    mutate.mutate({
+      path: editTarget ? `/master/faskes/${editTarget.id}` : "/master/faskes",
+      method: editTarget ? "PUT" : "POST",
+      body: payload,
+      onSuccess: () => setShowModal(false),
+      onError: err => alert(err.message),
+    });
+  };
 
   async function handleDelete(item) {
     if (!confirm(`Hapus faskes "${item.nama}"?`)) return;
     try {
-      await mutate.mutateAsync({
-        path: `/master/faskes/${item.id}`,
-        method: "DELETE",
-      });
+      await mutate.mutateAsync({ path: `/master/faskes/${item.id}`, method: "DELETE" });
     } catch (err) {
       alert(err.message);
     }
   }
 
-  function set(key, value) {
-    setForm(f => ({ ...f, [key]: value }));
-  }
-
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Master Data — Faskes</h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>{items.length} faskes terdaftar</p>
-        </div>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            Import CSV
-          </button>
-          <button className="btn btn-primary" onClick={openAdd}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Tambah Faskes
-          </button>
+    <div className="space-y-5">
+      <PageHeader
+        title="Master Data — Faskes"
+        subtitle={`${items.length} faskes terdaftar`}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowImport(true)}>
+              <Upload size={16} />
+              Import CSV
+            </Button>
+            <Button onClick={openAdd}>
+              <Plus size={16} />
+              Tambah Faskes
+            </Button>
+          </div>
+        }
+      />
+
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          <Input
+            placeholder="Cari nama, kota, email..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-9"
+          />
         </div>
       </div>
 
-      <div style={{ marginBottom: "16px" }}>
-        <div style={{ position: "relative", maxWidth: "320px" }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16"
-            style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}>
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input type="text" className="form-input" placeholder="Cari nama, kota, email..."
-            value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: "38px" }} />
-        </div>
-      </div>
-
-      <div className="card" style={{ padding: 0 }}>
-        <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Nama Faskes</th>
-                <th>Jenis</th>
-                <th>Lembaga</th>
-                <th>Kota</th>
-                <th>Kontak</th>
-                <th>Status</th>
-                <th style={{ width: "100px" }}>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
-              ) : items.length === 0 ? (
-                <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>
+      <Card className="overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-50 dark:bg-slate-800/50">
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Nama Faskes</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Jenis</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Lembaga</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Kota</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Kontak</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Status</TableHead>
+              <TableHead className="w-[100px] text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Aksi</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">Memuat...</TableCell>
+              </TableRow>
+            ) : items.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">
                   {search ? "Tidak ada hasil" : "Belum ada data."}
-                </td></tr>
-              ) : items.map(item => (
-                <tr key={item.id}>
-                  <td style={{ fontWeight: "500", color: "#1E293B", maxWidth: "220px" }}>
-                    <div>{item.nama}</div>
-                    {item.alamat && <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>{item.alamat}</div>}
-                  </td>
-                  <td>
-                    <span style={{ fontSize: "12px", fontWeight: "500", color: "#4CAF50" }}>
-                      {item.jenis_faskes ? `${item.jenis_faskes.kode || ""} — ${item.jenis_faskes.nama}` : "—"}
-                    </span>
-                  </td>
-                  <td style={{ color: "#64748B", fontSize: "13px" }}>{item.lembaga?.nama || "—"}</td>
-                  <td style={{ color: "#64748B", fontSize: "13px" }}>{item.kota || "—"}</td>
-                  <td style={{ color: "#64748B", fontSize: "13px" }}>{item.telepon || item.email || "—"}</td>
-                  <td>
-                    <span style={{
-                      display: "inline-block", padding: "2px 8px", borderRadius: "20px",
-                      fontSize: "11px", fontWeight: "600",
-                      background: (item.status || "aktif").toLowerCase() === "aktif" ? "#DCFCE7" : "#FEE2E2",
-                      color: (item.status || "aktif").toLowerCase() === "aktif" ? "#166534" : "#991B1B",
-                    }}>
-                      {(item.status || "aktif").toLowerCase() === "aktif" ? "Aktif" : "Nonaktif"}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: "4px" }}>
-                      <button className="btn btn-ghost btn-sm" style={{ color: "#4CAF50", padding: "4px 8px", fontSize: "12px" }} onClick={() => openEdit(item)}>Ubah</button>
-                      <button className="btn btn-ghost btn-sm" style={{ color: "#EF4444", padding: "4px 8px", fontSize: "12px" }} onClick={() => handleDelete(item)}>Hapus</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </TableCell>
+              </TableRow>
+            ) : items.map(item => (
+              <TableRow key={item.id} className="hover:bg-slate-50/50">
+                <TableCell className="font-medium text-slate-900 dark:text-slate-100 text-sm max-w-[200px]">
+                  <div>{item.nama}</div>
+                  {item.alamat && <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{item.alamat}</div>}
+                </TableCell>
+                <TableCell>
+                  <span className="text-sm font-medium text-green-600">
+                    {item.jenis_faskes ? `${item.jenis_faskes.kode || ""} — ${item.jenis_faskes.nama}` : "—"}
+                  </span>
+                </TableCell>
+                <TableCell className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">{item.lembaga?.nama || "—"}</TableCell>
+                <TableCell className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">{item.kota || "—"}</TableCell>
+                <TableCell className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">{item.telepon || item.email || "—"}</TableCell>
+                <TableCell>
+                  <StatusBadge status={item.status === "aktif" ? "lengkap" : "ditolak"} />
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-primary" onClick={() => openEdit(item)}>
+                      <Pencil size={13} />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-red-500" onClick={() => handleDelete(item)}>
+                      <Trash2 size={13} />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
 
-      {showModal && (
-        <Modal title={editTarget ? "Ubah Faskes" : "Tambah Faskes Baru"} onClose={() => setShowModal(false)}>
-          <form onSubmit={handleSubmit} style={{ padding: "24px" }}>
-            {error && (
-              <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: "6px", color: "#991B1B", fontSize: "13px" }}>{error}</div>
-            )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-              <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Nama Faskes <span style={{ color: "#DC2626" }}>*</span></label>
-                <input className="form-input" value={form.nama} onChange={e => set("nama", e.target.value)} required placeholder="cth: RSUD Dr. Soetomo" />
+      <Dialog open={showModal} onOpenChange={v => { setShowModal(v); if (!v) reset(EMPTY_FORM); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editTarget ? "Ubah Faskes" : "Tambah Faskes Baru"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 space-y-1.5">
+                <Label htmlFor="faskes-nama">Nama Faskes <span className="text-red-500">*</span></Label>
+                <Input id="faskes-nama" {...register("nama")} placeholder="cth: RSUD Dr. Soetomo" />
+                {errors.nama && <p className="text-xs text-red-500 mt-1">{errors.nama.message}</p>}
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Jenis Faskes</label>
-                <select className="form-input" value={form.jenis_faskes_id} onChange={e => handleJenisChange(e.target.value)}>
+              <div className="space-y-1.5">
+                <Label htmlFor="faskes-jenis">Jenis Faskes</Label>
+                <select id="faskes-jenis" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={watchedJenisId} onChange={e => handleJenisChange(e.target.value)}>
                   <option value="">— Pilih Jenis —</option>
                   {jenisList.map(j => <option key={j.id} value={j.id}>{j.kode ? `${j.kode} — ` : ""}{j.nama}</option>)}
                 </select>
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>No. Sertifikat</label>
-                <input className="form-input" value={form.no_sertifikat} onChange={e => set("no_sertifikat", e.target.value)} placeholder="cth: 1234/SK/2024" />
+              <div className="space-y-1.5">
+                <Label htmlFor="faskes-sertifikat">No. Sertifikat</Label>
+                <Input id="faskes-sertifikat" {...register("no_sertifikat")} placeholder="cth: 1234/SK/2024" />
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>No. Surat Faskes</label>
-                <input className="form-input" value={form.nomor_surat_faskes} onChange={e => set("nomor_surat_faskes", e.target.value)} placeholder="cth: 123/SURAT/2024" />
+              <div className="space-y-1.5">
+                <Label htmlFor="faskes-no-surat">No. Surat Faskes</Label>
+                <Input id="faskes-no-surat" {...register("nomor_surat_faskes")} placeholder="cth: 123/SURAT/2024" />
               </div>
-
-              <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Lembaga</label>
-                <select
-                  className="form-input"
-                  value={form.lembaga_id}
-                  onChange={e => set("lembaga_id", e.target.value)}
-                  disabled={!!selectedJenis?.lembaga_id && filteredLembagaList.length === 1}
-                >
+              <div className="col-span-2 space-y-1.5">
+                <Label htmlFor="faskes-lembaga">Lembaga</Label>
+                <select id="faskes-lembaga" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register("lembaga_id")} disabled={!!selectedJenis?.lembaga_id && filteredLembagaList.length === 1}>
                   <option value="">— Pilih Lembaga —</option>
-                  {filteredLembagaList.map(l => (
-                    <option key={l.id} value={l.id}>
-                      {l.nama}{l.id === activeLembagaId ? " (Aktif)" : ""}
-                    </option>
-                  ))}
+                  {filteredLembagaList.map(l => <option key={l.id} value={l.id}>{l.nama}{l.id === activeLembagaId ? " (Aktif)" : ""}</option>)}
                 </select>
-                {selectedJenis?.lembaga_id && (
-                  <div style={{ fontSize: "11px", color: "#64748B", marginTop: "4px" }}>
-                    Lembaga otomatis terikat dengan jenis faskes "{selectedJenis.nama}".
-                  </div>
-                )}
+                {selectedJenis?.lembaga_id && <p className="text-[11px] text-slate-400 dark:text-slate-500">Lembaga otomatis terikat dengan jenis faskes "{selectedJenis.nama}".</p>}
               </div>
-
-              <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Alamat</label>
-                <input className="form-input" value={form.alamat} onChange={e => set("alamat", e.target.value)} placeholder="Jl. ..." />
+              <div className="col-span-2 space-y-1.5">
+                <Label htmlFor="faskes-alamat">Alamat</Label>
+                <Input id="faskes-alamat" {...register("alamat")} placeholder="Jl. ..." />
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Kota</label>
-                <input className="form-input" value={form.kota} onChange={e => set("kota", e.target.value)} placeholder="cth: Jakarta Selatan" />
+              <div className="space-y-1.5">
+                <Label htmlFor="faskes-kota">Kota</Label>
+                <Input id="faskes-kota" {...register("kota")} placeholder="cth: Jakarta Selatan" />
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Provinsi</label>
-                <input className="form-input" value={form.provinsi} onChange={e => set("provinsi", e.target.value)} placeholder="cth: DKI Jakarta" />
+              <div className="space-y-1.5">
+                <Label htmlFor="faskes-prov">Provinsi</Label>
+                <Input id="faskes-prov" {...register("provinsi")} placeholder="cth: DKI Jakarta" />
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Kode Pos</label>
-                <input className="form-input" value={form.kode_pos} onChange={e => set("kode_pos", e.target.value)} placeholder="cth: 12510" />
+              <div className="space-y-1.5">
+                <Label htmlFor="faskes-kodepos">Kode Pos</Label>
+                <Input id="faskes-kodepos" {...register("kode_pos")} placeholder="cth: 12510" />
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Telepon</label>
-                <input className="form-input" value={form.telepon} onChange={e => set("telepon", e.target.value)} placeholder="(021) xxx-xxxx" />
+              <div className="space-y-1.5">
+                <Label htmlFor="faskes-telepon">Telepon</Label>
+                <Input id="faskes-telepon" {...register("telepon")} placeholder="(021) xxx-xxxx" />
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Email</label>
-                <input className="form-input" type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="info@faskes.id" />
+              <div className="space-y-1.5">
+                <Label htmlFor="faskes-email">Email</Label>
+                <Input id="faskes-email" type="email" {...register("email")} placeholder="info@faskes.id" />
+                {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>}
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Website</label>
-                <input className="form-input" value={form.website} onChange={e => set("website", e.target.value)} placeholder="https://" />
+              <div className="space-y-1.5">
+                <Label htmlFor="faskes-website">Website</Label>
+                <Input id="faskes-website" {...register("website")} placeholder="https://" />
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Nama Pimpinan</label>
-                <input className="form-input" value={form.nama_pimpinan} onChange={e => set("nama_pimpinan", e.target.value)} placeholder="Nama pimpinan faskes" />
+              <div className="space-y-1.5">
+                <Label htmlFor="faskes-pimpinan">Nama Pimpinan</Label>
+                <Input id="faskes-pimpinan" {...register("nama_pimpinan")} placeholder="Nama pimpinan faskes" />
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Telepon Pimpinan</label>
-                <input className="form-input" value={form.telepon_pimpinan} onChange={e => set("telepon_pimpinan", e.target.value)} placeholder="08xx-xxxx-xxxx" />
+              <div className="space-y-1.5">
+                <Label htmlFor="faskes-tlp-pimpinan">Telepon Pimpinan</Label>
+                <Input id="faskes-tlp-pimpinan" {...register("telepon_pimpinan")} placeholder="08xx-xxxx-xxxx" />
               </div>
-
-              <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Deskripsi</label>
-                <textarea className="form-input" rows={2} value={form.deskripsi} onChange={e => set("deskripsi", e.target.value)} placeholder="Deskripsi singkat..." style={{ resize: "vertical" }} />
-              </div>
-
-              <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Status</label>
-                <select className="form-input" value={form.status} onChange={e => set("status", e.target.value)} required>
+              <div className="space-y-1.5">
+                <Label htmlFor="faskes-status">Status</Label>
+                <select id="faskes-status" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register("status")}>
                   <option value="aktif">Aktif</option>
                   <option value="nonaktif">Nonaktif</option>
                 </select>
               </div>
+              <div className="col-span-2 space-y-1.5">
+                <Label htmlFor="faskes-desc">Deskripsi</Label>
+                <Textarea id="faskes-desc" rows={2} {...register("deskripsi")} placeholder="Deskripsi singkat..." />
+              </div>
             </div>
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "8px", borderTop: "1px solid #F1F5F9", paddingTop: "20px" }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Menyimpan..." : editTarget ? "Simpan" : "Tambah"}</button>
-            </div>
+            <DialogFooter className="gap-2 sm:gap-0 border-t pt-4">
+              <Button type="button" variant="outline" onClick={() => { setShowModal(false); reset(EMPTY_FORM); }}>Batal</Button>
+              <Button type="submit" disabled={mutate.isPending}>
+                {mutate.isPending ? "Menyimpan..." : editTarget ? "Simpan" : "Tambah"}
+              </Button>
+            </DialogFooter>
           </form>
-        </Modal>
-      )}
+        </DialogContent>
+      </Dialog>
 
       <ImportModal
         open={showImport}
@@ -380,11 +344,9 @@ export default function MasterFaskes() {
         downloadUrl="/master/faskes/template"
         downloadName="template_faskes.csv"
         uploadUrl="/master/faskes/import"
-        description="Upload file CSV berisi data faskes. Gunakan nama jenis faskes yang sudah ada di sistem."
+        description="Upload file CSV berisi data faskes."
         successNote="Daftar faskes telah diperbarui."
-        resultColumns={[
-          { key: "nama", label: "Nama Faskes" },
-        ]}
+        resultColumns={[{ key: "nama", label: "Nama Faskes" }]}
       />
     </div>
   );

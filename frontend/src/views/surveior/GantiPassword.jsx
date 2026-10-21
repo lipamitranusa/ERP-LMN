@@ -1,130 +1,133 @@
 import React, { useState } from "react";
 import { useMutateKeys } from "@/hooks/useApi";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { CheckCircle2 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+const schema = z.object({
+  current_password: z.string().min(1, "Password saat ini wajib diisi"),
+  new_password: z.string().min(8, "Password baru minimal 8 karakter"),
+  new_password_confirmation: z.string(),
+}).refine(data => data.new_password === data.new_password_confirmation, {
+  message: "Konfirmasi password baru tidak cocok",
+  path: ["new_password_confirmation"],
+});
 
 export default function GantiPassword() {
-  const [form, setForm] = useState({
-    current_password: "",
-    new_password: "",
-    new_password_confirmation: "",
-  });
   const [success, setSuccess] = useState("");
-  const [localError, setLocalError] = useState("");
 
-  const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      current_password: "",
+      new_password: "",
+      new_password_confirmation: "",
+    },
+  });
 
   const submitMutate = useMutateKeys([], {
     onSuccess: () => {
       setSuccess("Password berhasil diubah.");
-      setForm({ current_password: "", new_password: "", new_password_confirmation: "" });
+      reset();
     },
   });
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setLocalError("");
-    setSuccess("");
-
-    if (!form.current_password) {
-      setLocalError("Password saat ini wajib diisi.");
-      return;
-    }
-    if (form.new_password.length < 8) {
-      setLocalError("Password baru minimal 8 karakter.");
-      return;
-    }
-    if (form.new_password !== form.new_password_confirmation) {
-      setLocalError("Konfirmasi password baru tidak cocok.");
-      return;
-    }
-    if (form.current_password === form.new_password) {
-      setLocalError("Password baru tidak boleh sama dengan password lama.");
-      return;
-    }
-
+  const onSubmit = (formData) => {
     submitMutate.mutate({
       path: "/auth/password",
       method: "PUT",
       body: {
-        current_password: form.current_password,
-        new_password: form.new_password,
-        new_password_confirmation: form.new_password_confirmation,
+        current_password: formData.current_password,
+        new_password: formData.new_password,
+        new_password_confirmation: formData.new_password_confirmation,
       },
     });
-  }
+  };
 
   const isPending = submitMutate.isPending;
-  const errorMsg = localError || submitMutate.error?.message || "";
+  const errorMsg = submitMutate.error?.message || "";
 
   return (
-    <div style={{ maxWidth: "480px" }}>
-      <div style={{ marginBottom: "24px" }}>
-        <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>
+    <div className="max-w-[480px]">
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-1">
           Ganti Password
         </h2>
-        <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
+        <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
           Ubah password akun Anda. Password baru minimal 8 karakter.
         </p>
       </div>
 
-      <div className="card" style={{ padding: "24px" }}>
+      <Card className="p-6">
         {success && (
-          <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#DCFCE7", color: "#166534", borderRadius: "8px", fontSize: "13px" }}>
+          <div className="mb-4 p-3 rounded-md bg-green-50 border border-green-200 text-green-800 text-sm flex items-center gap-2">
+            <CheckCircle2 size={16} />
             {success}
           </div>
         )}
 
         {errorMsg && (
-          <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#FEE2E2", color: "#991B1B", borderRadius: "8px", fontSize: "13px" }}>
+          <div className="mb-4 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
             {errorMsg}
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: "16px" }}>
-            <label className="form-label">Password Saat Ini</label>
-            <input
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="current_password">Password Saat Ini *</Label>
+            <Input
+              id="current_password"
               type="password"
-              className="form-input"
-              value={form.current_password}
-              onChange={e => set("current_password", e.target.value)}
+              {...register("current_password")}
               placeholder="Masukkan password saat ini"
               autoComplete="current-password"
-              required
+              disabled={isPending}
             />
+            {errors.current_password && (
+              <p className="text-xs text-red-600">{errors.current_password.message}</p>
+            )}
           </div>
 
-          <div style={{ marginBottom: "16px" }}>
-            <label className="form-label">Password Baru</label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="new_password">Password Baru *</Label>
+            <Input
+              id="new_password"
               type="password"
-              className="form-input"
-              value={form.new_password}
-              onChange={e => set("new_password", e.target.value)}
+              {...register("new_password")}
               placeholder="Minimal 8 karakter"
               autoComplete="new-password"
-              required
-              minLength={8}
+              disabled={isPending}
             />
+            {errors.new_password && (
+              <p className="text-xs text-red-600">{errors.new_password.message}</p>
+            )}
           </div>
 
-          <div style={{ marginBottom: "24px" }}>
-            <label className="form-label">Konfirmasi Password Baru</label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="new_password_confirmation">Konfirmasi Password Baru *</Label>
+            <Input
+              id="new_password_confirmation"
               type="password"
-              className="form-input"
-              value={form.new_password_confirmation}
-              onChange={e => set("new_password_confirmation", e.target.value)}
+              {...register("new_password_confirmation")}
               placeholder="Ulangi password baru"
               autoComplete="new-password"
-              required
+              disabled={isPending}
             />
+            {errors.new_password_confirmation && (
+              <p className="text-xs text-red-600">{errors.new_password_confirmation.message}</p>
+            )}
           </div>
 
-          <button type="submit" className="btn btn-primary" disabled={isPending}>
+          <Button type="submit" disabled={isPending} className="mt-2">
             {isPending ? "Menyimpan..." : "Simpan Password Baru"}
-          </button>
+          </Button>
         </form>
-      </div>
+      </Card>
     </div>
   );
 }

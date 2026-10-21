@@ -79,6 +79,6 @@ class BiayaPerJenisFaskesSeeder extends Seeder
 
     private function defaultLembagaId(): ?string
     {
-        return Lembaga::query()->orderBy('created_at')->value('id');
+        return Lembaga::query()->value('id');
     }
 }

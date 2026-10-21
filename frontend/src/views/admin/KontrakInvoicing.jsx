@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { useApi, useMutateKeys, useMutate } from "@/hooks/useApi";
 import InvoiceStatusCard from "@/components/InvoiceStatusCard";
 import { formatDate } from "../../utils/dateFormat";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 
 const formatRp = (n) => `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
 const SATUAN_LABEL = {
@@ -304,18 +306,18 @@ function DetailPanel({ pksId, onClose }) {
             {editingNomor ? (
               <div style={{ display: "flex", gap: "8px" }}>
                 <input className="form-input" value={editNomorPks} onChange={e => setEditNomorPks(e.target.value)} style={{ flex: 1 }} />
-                <button className="btn btn-primary btn-sm" onClick={handleUpdateNomorPks} disabled={savingNomor}>{savingNomor ? "..." : "Simpan"}</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setEditingNomor(false)}>Batal</button>
+                <Button size="sm" onClick={handleUpdateNomorPks} disabled={savingNomor}>{savingNomor ? "..." : "Simpan"}</Button>
+                <Button variant="outline" size="sm" onClick={() => setEditingNomor(false)}>Batal</Button>
               </div>
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <div style={{ fontSize: "15px", fontWeight: "600", color: "#1E293B" }}>{pks.nomor_pks || "—"}</div>
                 {pks.status === "draft" && (
-                  <button className="btn btn-ghost btn-sm" onClick={startEditNomor} title="Edit">
+                  <Button variant="ghost" size="icon" onClick={startEditNomor} title="Edit">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                     </svg>
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
@@ -370,12 +372,12 @@ function DetailPanel({ pksId, onClose }) {
 
           {pks.status === "draft" && (
             <div style={{ marginBottom: "16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <button className="btn btn-primary" onClick={() => { setKirimOpen(true); setError(""); setLampiranFile(null); setKirimMode("template"); }}>
+              <Button onClick={() => { setKirimOpen(true); setError(""); setLampiranFile(null); setKirimMode("template"); }}>
                 Kirim via Template PKS
-              </button>
-              <button className="btn btn-secondary" onClick={() => { setKirimOpen(true); setError(""); setLampiranFile(null); setKirimMode("upload"); }}>
+              </Button>
+              <Button variant="outline" onClick={() => { setKirimOpen(true); setError(""); setLampiranFile(null); setKirimMode("upload"); }}>
                 Kirim dengan Lampiran
-              </button>
+              </Button>
             </div>
           )}
 
@@ -553,21 +555,10 @@ function DetailPanel({ pksId, onClose }) {
                   </div>
 
                   <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => setKirimOpen(false)}
-                      disabled={kirimLoading}
-                    >
+                    <Button variant="outline" onClick={() => setKirimOpen(false)} disabled={kirimLoading}>
                       Batal
-                    </button>
-                    <button
-                      className="btn btn-primary"
-                      onClick={handleKirimSubmit}
-                      disabled={
-                        kirimLoading ||
-                        (kirimMode === "upload" && !lampiranFile)
-                      }
-                    >
+                    </Button>
+                    <Button onClick={handleKirimSubmit} disabled={kirimLoading || (kirimMode === "upload" && !lampiranFile)}>
                       {kirimLoading ? (
                         <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ animation: "spin 1s linear infinite" }}>
@@ -575,10 +566,8 @@ function DetailPanel({ pksId, onClose }) {
                           </svg>
                           Mengirim...
                         </span>
-                      ) : (
-                        "Kirim ke Faskes"
-                      )}
-                    </button>
+                      ) : "Kirim ke Faskes"}
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -622,9 +611,9 @@ function DetailPanel({ pksId, onClose }) {
                             {tagihanResult.message || "Gagal mengirim tagihan."}
                           </div>
                         )}
-                        <button className="btn btn-secondary" style={{ marginTop: "12px" }} onClick={() => { setTagihanPanelOpen(false); setTagihanResult(null); setTagihanInvId(null); }}>
+                        <Button variant="outline" style={{ marginTop: "12px" }} onClick={() => { setTagihanPanelOpen(false); setTagihanResult(null); setTagihanInvId(null); }}>
                           Tutup
-                        </button>
+                        </Button>
                       </div>
                     ) : (
                       <>
@@ -661,13 +650,13 @@ function DetailPanel({ pksId, onClose }) {
                         </div>
 
                         <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-                          <button className="btn btn-secondary" onClick={() => { setTagihanPanelOpen(false); setTagihanResult(null); setTagihanInvId(null); }}>
+                          <Button variant="outline" onClick={() => { setTagihanPanelOpen(false); setTagihanResult(null); setTagihanInvId(null); }}>
                             Batal
-                          </button>
-                          <button className="btn btn-primary" onClick={handleSendTagihan} disabled={tagihanSending}
+                          </Button>
+                          <Button onClick={handleSendTagihan} disabled={tagihanSending}
                             style={{ background: "#7C3AED", borderColor: "#7C3AED" }}>
                             {tagihanSending ? "Mengirim..." : "Kirim Tagihan"}
-                          </button>
+                          </Button>
                         </div>
                       </>
                     )}
@@ -694,9 +683,9 @@ function DetailPanel({ pksId, onClose }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexShrink: 0 }}>
                   <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#1E293B" }}>Preview Tagihan</h3>
                   <div style={{ display: "flex", gap: "8px" }}>
-                    <button className="btn btn-secondary btn-sm" onClick={() => { if (slipIframeRef.current && slipIframeRef.current.contentWindow?.print) slipIframeRef.current.contentWindow.print(); }}>
+                    <Button variant="outline" size="sm" onClick={() => { if (slipIframeRef.current && slipIframeRef.current.contentWindow?.print) slipIframeRef.current.contentWindow.print(); }}>
                       Cetak
-                    </button>
+                    </Button>
                     <button onClick={() => setTagihanPrintOpen(false)}
                       style={{ background: "none", border: "none", cursor: "pointer", fontSize: "20px", color: "#94A3B8", lineHeight: 1 }}>
                       ×
@@ -718,17 +707,17 @@ function DetailPanel({ pksId, onClose }) {
               <div style={{ fontSize: "13px", fontWeight: "600", color: "#92400E", marginBottom: "6px" }}>PKS Ditandatangani — Perlu Validasi</div>
               <div style={{ fontSize: "12px", color: "#B45309", marginBottom: "12px" }}>Faskes telah mengupload PKS yang sudah ditandatangani. Silakan verifikasi sebelum memvalidasi.</div>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => handleDownloadSignedPdf(true)} disabled={!pks.path_signed_pdf}>Preview</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => handleDownloadSignedPdf(false)} disabled={!pks.path_signed_pdf}>Download</button>
-                <button className="btn btn-primary btn-sm" onClick={handleValidateSigned} disabled={validating}>{validating ? "Memvalidasi..." : "Validasi & Setujui"}</button>
-                <button className="btn btn-ghost btn-sm" style={{ color: "#DC2626" }} onClick={() => setTolakOpen(!tolakOpen)}>Tolak</button>
+                <Button variant="outline" size="sm" onClick={() => handleDownloadSignedPdf(true)} disabled={!pks.path_signed_pdf}>Preview</Button>
+                <Button variant="outline" size="sm" onClick={() => handleDownloadSignedPdf(false)} disabled={!pks.path_signed_pdf}>Download</Button>
+                <Button size="sm" onClick={handleValidateSigned} disabled={validating}>{validating ? "Memvalidasi..." : "Validasi & Setujui"}</Button>
+                <Button variant="ghost" size="sm" style={{ color: "#DC2626" }} onClick={() => setTolakOpen(!tolakOpen)}>Tolak</Button>
               </div>
               {tolakOpen && (
                 <div style={{ marginTop: "12px", borderTop: "1px solid #FDE68A", paddingTop: "12px" }}>
-                  <textarea className="form-input" value={tolakAlasan} onChange={e => setTolakAlasan(e.target.value)} placeholder="Alasan penolakan..." rows={3} style={{ fontSize: "12px", marginBottom: "8px", resize: "vertical" }} />
+                  <Textarea value={tolakAlasan} onChange={e => setTolakAlasan(e.target.value)} placeholder="Alasan penolakan..." rows={3} className="mb-2" style={{ fontSize: "12px", resize: "vertical" }} />
                   <div style={{ display: "flex", gap: "8px" }}>
-                    <button className="btn btn-sm" style={{ background: "#DC2626", color: "#fff", border: "none" }} onClick={handleTolakSigned} disabled={submittingTolak || !tolakAlasan.trim()}>{submittingTolak ? "Menolak..." : "Kirim Penolakan"}</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => { setTolakOpen(false); setTolakAlasan(""); }}>Batal</button>
+                    <Button size="sm" style={{ background: "#DC2626", borderColor: "#DC2626" }} onClick={handleTolakSigned} disabled={submittingTolak || !tolakAlasan.trim()}>{submittingTolak ? "Menolak..." : "Kirim Penolakan"}</Button>
+                    <Button variant="outline" size="sm" onClick={() => { setTolakOpen(false); setTolakAlasan(""); }}>Batal</Button>
                   </div>
                 </div>
               )}
@@ -740,8 +729,8 @@ function DetailPanel({ pksId, onClose }) {
               <div style={{ fontSize: "13px", fontWeight: "600", color: "#166534", marginBottom: "6px" }}>PKS Selesai Divalidasi</div>
               <div style={{ fontSize: "12px", color: "#15803D", marginBottom: "12px" }}>PKS sudah divalidasi. Invoice telah diterbitkan.</div>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => handleDownloadSignedPdf(true)} disabled={!pks.path_signed_pdf}>Preview</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => handleDownloadSignedPdf(false)} disabled={!pks.path_signed_pdf}>Download</button>
+                <Button variant="outline" size="sm" onClick={() => handleDownloadSignedPdf(true)} disabled={!pks.path_signed_pdf}>Preview</Button>
+                <Button variant="outline" size="sm" onClick={() => handleDownloadSignedPdf(false)} disabled={!pks.path_signed_pdf}>Download</Button>
               </div>
             </div>
           )}
@@ -756,8 +745,9 @@ function DetailPanel({ pksId, onClose }) {
                     <InvoiceStatusCard invoice={inv} />
                     <InvoiceItems inv={inv} />
                     <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={async () => {
                           const token = localStorage.getItem("token");
                           setTagihanPreviewHtml("");
@@ -772,13 +762,14 @@ function DetailPanel({ pksId, onClose }) {
                         }}
                       >
                         Cetak Tagihan
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-sm"
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleOpenTagihan(inv.id)}
                       >
                         Kirim Tagihan
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -889,12 +880,12 @@ export default function KontrakInvoicing() {
           <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Kontrak & Invoicing</h1>
           <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>Daftar Perjanjian Kerja Sama (PKS) dan invoice yang terkait.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setShowAddModal(true); setSelectedSiklus(null); setNomorPksInput(""); setError(""); }}>
+        <Button onClick={() => { setShowAddModal(true); setSelectedSiklus(null); setNomorPksInput(""); setError(""); }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
           Tambah PKS
-        </button>
+        </Button>
       </div>
 
       {/* Stats */}
@@ -986,13 +977,9 @@ export default function KontrakInvoicing() {
                   </td>
                   <td style={{ color: "#64748B", fontSize: "12px" }}>{formatDate(p.created_at)}</td>
                   <td>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={e => { e.stopPropagation(); setSelectedPks(p.id); }}
-                      style={{ padding: "4px 12px", fontSize: "12px" }}
-                    >
+                    <Button size="sm" onClick={e => { e.stopPropagation(); setSelectedPks(p.id); }}>
                       Detail
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -1007,17 +994,9 @@ export default function KontrakInvoicing() {
               Menampilkan {items.length} dari {total} PKS
             </span>
             <div style={{ display: "flex", gap: "4px" }}>
-              <button
-                className="btn btn-ghost btn-sm"
-                disabled={page <= 1}
-                onClick={() => setPage(p => p - 1)}
-              >‹ Sebelumnya</button>
+              <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>‹ Sebelumnya</Button>
               <span style={{ padding: "4px 12px", fontSize: "12px", color: "#475569" }}>{page} / {lastPage}</span>
-              <button
-                className="btn btn-ghost btn-sm"
-                disabled={page >= lastPage}
-                onClick={() => setPage(p => p + 1)}
-              >Selanjutnya ›</button>
+              <Button variant="ghost" size="sm" disabled={page >= lastPage} onClick={() => setPage(p => p + 1)}>Selanjutnya ›</Button>
             </div>
           </div>
         )}
@@ -1124,20 +1103,12 @@ export default function KontrakInvoicing() {
               )}
 
               <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setShowAddModal(false)}
-                  disabled={creating}
-                >
+                <Button variant="outline" onClick={() => setShowAddModal(false)} disabled={creating}>
                   Batal
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleCreateDraft}
-                  disabled={creating || !selectedSiklus}
-                >
+                </Button>
+                <Button onClick={handleCreateDraft} disabled={creating || !selectedSiklus}>
                   {creating ? "Membuat..." : "Buat Draf PKS"}
-                </button>
+                </Button>
               </div>
             </div>
           </div>

@@ -43,11 +43,26 @@ class ChecklistValidasi extends Model
     public const STATUS_TIDAK_LENGKAP = 'tidak_lengkap';
 
     public const JENIS_DOKUMEN = [
-        'dfo' => 'DFO (Dokumen Formulir Observasi)',
+        'dfo' => 'Screenshot DFO',
+        'surat_permohonan' => 'Surat Permohonan',
+        'self_assessment' => 'Self Assessment',
         'sisdmk' => 'SISDMK',
         'aspak' => 'ASPAK',
         'inm' => 'INM',
         'ikp' => 'IKP',
+    ];
+
+    /**
+     * Dokumen wajib: bila ketiganya `lengkap`, siklus dianggap tervalidasi
+     * dan boleh lanjut ke tahap Kontrak & Invoicing.
+     *
+     * SISDMK/ASPAK/INM/IKP adalah dokumen pendukung — boleh dilengkapi
+     * menyusul tanpa menghalangi advance tahap.
+     */
+    public const JENIS_WAJIB = [
+        'dfo',
+        'surat_permohonan',
+        'self_assessment',
     ];
 
     public function siklus(): BelongsTo

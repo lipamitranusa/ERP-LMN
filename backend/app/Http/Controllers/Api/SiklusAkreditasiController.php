@@ -270,6 +270,7 @@ class SiklusAkreditasiController extends Controller
             ->get()
             ->map(function ($s) {
                 $s->faskes_nama = $s->faskes?->nama;
+                $s->jenis_faskes = $s->faskes?->jenisFaskes?->nama;
                 $s->lembaga_nama = $s->lembaga?->nama;
                 return $s;
             });
@@ -305,7 +306,10 @@ class SiklusAkreditasiController extends Controller
                 $q->whereIn('siklus_id', $siklusIds)
                   ->where('jenis', Penugasan::JENIS_SURVEI);
             })
-            ->with('penugasan:siklus_id')
+            // Kolom id wajib ikut dipilih: relasi penugasan adalah BelongsTo
+            // yang dicocokkan via primary key, jadi tanpa id relasinya tidak
+            // ter-resolve dan pluck('penugasan.siklus_id') mengembalikan null.
+            ->with('penugasan:id,siklus_id')
             ->get()
             ->pluck('penugasan.siklus_id')
             ->filter()

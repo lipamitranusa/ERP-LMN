@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useApi, useMutate } from "@/hooks/useApi";
+import { Button } from "@/components/ui/button";
 
 function Modal({ title, onClose, children }) {
   return (
@@ -145,21 +146,13 @@ export default function RekomendasiSettings() {
                   {isRekomendator && current?.user_id === user.id && " Anda sudah menjadi default rekomendator."}
                 </div>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={openEdit}
-                    disabled={setDefaultMutate.isPending}
-                  >
+                  <Button variant="outline" onClick={openEdit} disabled={setDefaultMutate.isPending}>
                     Edit
-                  </button>
+                  </Button>
                   {isRekomendator && (
-                    <button
-                      className="btn btn-primary"
-                      onClick={handleSetAsDefault}
-                      disabled={setDefaultMutate.isPending}
-                    >
+                    <Button onClick={handleSetAsDefault} disabled={setDefaultMutate.isPending}>
                       {setDefaultMutate.isPending ? "Menyetel..." : "Jadikan Saya Default"}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -233,12 +226,12 @@ export default function RekomendasiSettings() {
             </div>
           </div>
           <div style={{ padding: "12px 24px", borderTop: "1px solid #F1F5F9", display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-            <button className="btn btn-secondary" onClick={() => setEditOpen(false)} disabled={setEditMutate.isPending}>
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={setEditMutate.isPending}>
               Batal
-            </button>
-            <button className="btn btn-primary" onClick={submitEdit} disabled={setEditMutate.isPending || !editSelected}>
+            </Button>
+            <Button onClick={submitEdit} disabled={setEditMutate.isPending || !editSelected}>
               {setEditMutate.isPending ? "Menyimpan..." : "Simpan"}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}

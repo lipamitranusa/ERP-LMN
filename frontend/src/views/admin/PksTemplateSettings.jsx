@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 /**
  * Default template text with marker format.
@@ -268,30 +276,48 @@ const BUNDLED_BLADES = [
   { blade: "pks", label: "Generic Default" },
 ];
 
+const schema = z.object({
+  nama: z.string().min(1, "Nama template wajib diisi"),
+  blade: z.string().min(1, "Blade wajib dipilih"),
+  jenis_faskes_id: z.string().default(""),
+  aktif: z.boolean().default(true),
+  is_default: z.boolean().default(false),
+});
+
 export default function PksTemplateSettings() {
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [viewTarget, setViewTarget] = useState(null);
-  const [form, setForm] = useState({ nama: "", blade: "", jenis_faskes_id: "", aktif: true, is_default: false, kontenText: DEFAULT_TEXT });
-  const [error, setError] = useState("");
+  const [kontenText, setKontenText] = useState(DEFAULT_TEXT);
+  const [serverError, setServerError] = useState("");
   const editorRef = useRef(null);
 
-  const { data, isLoading, refetch } = useApi("pks-templates", "/master/pks-templates");
+  const { data, isLoading } = useApi("pks-templates", "/master/pks-templates");
   const templates = data?.data || [];
   const jenisFaskesOptions = data?.jenis_faskes_options || [];
   const availableVariables = data?.available_variables || [];
 
-  const saveMutation = useMutateKeys(["pks-templates"], {
-    onError: (err) => setError(err?.message || "Terjadi kesalahan."),
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      nama: "",
+      blade: "",
+      jenis_faskes_id: "",
+      aktif: true,
+      is_default: false,
+    },
   });
+
+  const saveMutation = useMutateKeys(["pks-templates"]);
   const deleteMutation = useMutateKeys(["pks-templates"]);
   const resetMutation = useMutateKeys(["pks-templates"]);
   const toggleMutation = useMutateKeys(["pks-templates"]);
 
   function openAdd() {
     setEditTarget(null);
-    setForm({ nama: "", blade: "", jenis_faskes_id: "", aktif: true, is_default: false, kontenText: DEFAULT_TEXT });
-    setError("");
+    setKontenText(DEFAULT_TEXT);
+    reset({ nama: "", blade: "", jenis_faskes_id: "", aktif: true, is_default: false });
+    setServerError("");
     setShowModal(true);
   }
 
@@ -324,15 +350,15 @@ export default function PksTemplateSettings() {
       kontenText = structured ? kontenToText(structured) : DEFAULT_TEXT;
     }
 
-    setForm({
+    setKontenText(kontenText);
+    reset({
       nama: item.nama || "",
       blade: item.blade || "",
       jenis_faskes_id: item.jenis_faskes_id || "",
       aktif: item.aktif !== false,
       is_default: !!item.is_default,
-      kontenText,
     });
-    setError("");
+    setServerError("");
     setShowModal(true);
   }
 
@@ -343,8 +369,8 @@ export default function PksTemplateSettings() {
   function insertPasal() {
     const ta = editorRef.current;
     if (!ta) return;
-    const pasalnya = parseTextToKonten(form.kontenText).pasalnya;
-    const nextNum = pasalnya.length + 1;
+    const parsed = parseTextToKonten(kontenText).pasalnya;
+    const nextNum = parsed.length + 1;
     const judul = [
       "Maksud dan Tujuan", "Ruang Lingkup", "Pelaksanaan Survei",
       "Hak dan Kewajiban PIHAK PERTAMA", "Hak dan Kewajiban PIHAK KEDUA",
@@ -353,7 +379,7 @@ export default function PksTemplateSettings() {
     const text = `\n\n[PASAL:${nextNum}|${judul}]\nIsi ${judul} di sini...\n[/PASAL]`;
     const start = ta.selectionStart;
     const newVal = ta.value.substring(0, start) + text + ta.value.substring(ta.selectionEnd);
-    setForm(f => ({ ...f, kontenText: newVal }));
+    setKontenText(newVal);
     requestAnimationFrame(() => {
       ta.focus();
       ta.setSelectionRange(start + text.length, start + text.length);
@@ -366,12 +392,12 @@ function getSelection(ta) {
   return { start: ta.selectionStart, end: ta.selectionEnd };
 }
 
-function wrapSelection(ta, before, after, setForm) {
+function wrapSelection(ta, before, after, setKontenText) {
   const { start, end } = getSelection(ta);
   const sel = ta.value.substring(start, end);
   const replacement = sel ? `${before}${sel}${after}` : `${before}teks${after}`;
   const newVal = ta.value.substring(0, start) + replacement + ta.value.substring(end);
-  setForm(f => ({ ...f, kontenText: newVal }));
+  setKontenText(newVal);
   requestAnimationFrame(() => {
     ta.focus();
     if (sel) {
@@ -383,13 +409,12 @@ function wrapSelection(ta, before, after, setForm) {
   });
 }
 
-function insertAtLineStart(ta, prefix, setForm) {
+function insertAtLineStart(ta, prefix, setKontenText) {
   const { start, end } = getSelection(ta);
   const before = ta.value.substring(0, start);
-  // find start of current line
   const lineStart = before.lastIndexOf('\n') + 1;
   const newVal = ta.value.substring(0, lineStart) + prefix + ta.value.substring(lineStart);
-  setForm(f => ({ ...f, kontenText: newVal }));
+  setKontenText(newVal);
   requestAnimationFrame(() => {
     ta.focus();
     ta.setSelectionRange(start + prefix.length, end + prefix.length);
@@ -431,7 +456,7 @@ function ToolbarDivider() {
   );
 }
 
-function EditorToolbar({ editorRef, form, setForm, onInsertPasal, allVars }) {
+function EditorToolbar({ editorRef, kontenText, setKontenText, onInsertPasal, allVars }) {
   const [ta, setTa] = useState(null);
   useEffect(() => {
     // Wait for textarea to mount, then grab the ref
@@ -444,7 +469,7 @@ function EditorToolbar({ editorRef, form, setForm, onInsertPasal, allVars }) {
     const sel = ta.value.substring(start, end);
     const replacement = sel ? `${before}${sel}${after}` : `${before}teks${after}`;
     const newVal = ta.value.substring(0, start) + replacement + ta.value.substring(end);
-    setForm(f => ({ ...f, kontenText: newVal }));
+    setKontenText(newVal);
     requestAnimationFrame(() => {
       ta.focus();
       if (sel) {
@@ -461,7 +486,7 @@ function EditorToolbar({ editorRef, form, setForm, onInsertPasal, allVars }) {
     const before = ta.value.substring(0, start);
     const lineStart = before.lastIndexOf('\n') + 1;
     const newVal = ta.value.substring(0, lineStart) + prefix + ta.value.substring(lineStart);
-    setForm(f => ({ ...f, kontenText: newVal }));
+    setKontenText(newVal);
     requestAnimationFrame(() => {
       ta.focus();
       ta.setSelectionRange(start + prefix.length, end + prefix.length);
@@ -471,7 +496,7 @@ function EditorToolbar({ editorRef, form, setForm, onInsertPasal, allVars }) {
   const doInsert = (text) => {
     const { start, end } = getSelection(ta);
     const newVal = ta.value.substring(0, start) + text + ta.value.substring(end);
-    setForm(f => ({ ...f, kontenText: newVal }));
+    setKontenText(newVal);
     requestAnimationFrame(() => {
       ta.focus();
       ta.setSelectionRange(start + text.length, start + text.length);
@@ -615,26 +640,24 @@ function EditorToolbar({ editorRef, form, setForm, onInsertPasal, allVars }) {
   );
 }
 
-  function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
+  function onSubmitTemplate(formData) {
+    setServerError("");
     saveMutation.mutate({
       path: editTarget ? `/master/pks-templates/${editTarget.id}` : "/master/pks-templates",
       method: editTarget ? "PUT" : "POST",
       body: {
-        nama: form.nama,
-        blade: form.blade,
-        jenis_faskes_id: form.jenis_faskes_id || null,
-        aktif: form.aktif,
-        is_default: form.is_default,
-        konten: form.kontenText,
+        nama: formData.nama,
+        blade: formData.blade,
+        jenis_faskes_id: formData.jenis_faskes_id || null,
+        aktif: formData.aktif,
+        is_default: formData.is_default,
+        konten: kontenText,
       },
-    }, {
       onSuccess: (data) => {
         if (!data.ok && data.message) throw new Error(data.message || Object.values(data.errors || {})[0]?.[0] || "Gagal menyimpan.");
         setShowModal(false);
       },
-      onError: (err) => setError(err.message),
+      onError: (err) => setServerError(err.message),
     });
   }
 
@@ -696,12 +719,12 @@ function EditorToolbar({ editorRef, form, setForm, onInsertPasal, allVars }) {
             Tulis isi PKS dalam satu editor. Gunakan marker <code>[PASAL:nomor|judul]</code> untuk menandai tiap pasal.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={openAdd}>
+        <Button onClick={openAdd}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
           Tambah Template
-        </button>
+        </Button>
       </div>
 
       <div style={{ padding: "12px 16px", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: "8px", marginBottom: "20px", fontSize: "13px", color: "#1E40AF" }}>
@@ -748,17 +771,17 @@ function EditorToolbar({ editorRef, form, setForm, onInsertPasal, allVars }) {
                   <td><TemplateBadge template={t} /></td>
                   <td>
                     <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                      <button className="btn btn-ghost btn-sm" style={{ color: "#3B82F6", padding: "4px 8px", fontSize: "12px" }} onClick={() => openView(t)}>Lihat</button>
-                      <button className="btn btn-ghost btn-sm" style={{ color: "#8B5CF6", padding: "4px 8px", fontSize: "12px" }} onClick={() => handlePreviewPdf(t)}>Preview PDF</button>
-                      <button className="btn btn-ghost btn-sm" style={{ color: "#4CAF50", padding: "4px 8px", fontSize: "12px" }} onClick={() => openEdit(t)}>Edit</button>
+                      <Button variant="ghost" size="sm" style={{ color: "#3B82F6" }} onClick={() => openView(t)}>Lihat</Button>
+                      <Button variant="ghost" size="sm" style={{ color: "#8B5CF6" }} onClick={() => handlePreviewPdf(t)}>Preview PDF</Button>
+                      <Button variant="ghost" size="sm" style={{ color: "#4CAF50" }} onClick={() => openEdit(t)}>Edit</Button>
                       {BUNDLED_BLADES.find(b => b.blade === t.blade) && (
-                        <button className="btn btn-ghost btn-sm" style={{ color: "#F59E0B", padding: "4px 8px", fontSize: "12px" }} onClick={() => handleReset(t)}>Reset</button>
+                        <Button variant="ghost" size="sm" style={{ color: "#F59E0B" }} onClick={() => handleReset(t)}>Reset</Button>
                       )}
-                      <button className="btn btn-ghost btn-sm" style={{ color: t.aktif ? "#ef4444" : "#10B981", padding: "4px 8px", fontSize: "12px" }} onClick={() => handleToggleAktif(t)}>
+                      <Button variant="ghost" size="sm" style={{ color: t.aktif ? "#ef4444" : "#10B981" }} onClick={() => handleToggleAktif(t)}>
                         {t.aktif ? "Nonaktifkan" : "Aktifkan"}
-                      </button>
+                      </Button>
                       {!t.is_default && (
-                        <button className="btn btn-ghost btn-sm" style={{ color: "#ef4444", padding: "4px 8px", fontSize: "12px" }} onClick={() => handleDelete(t)}>Hapus</button>
+                        <Button variant="ghost" size="sm" style={{ color: "#ef4444" }} onClick={() => handleDelete(t)}>Hapus</Button>
                       )}
                     </div>
                   </td>
@@ -852,18 +875,18 @@ function EditorToolbar({ editorRef, form, setForm, onInsertPasal, allVars }) {
       {/* Edit / Add modal */}
       {showModal && (
         <Modal title={editTarget ? "Edit Template PKS" : "Tambah Template PKS"} onClose={() => setShowModal(false)} wide>
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit(onSubmitTemplate)}>
             <div style={{ padding: "24px" }}>
-              {error && (
+              {serverError && (
                 <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: "6px", color: "#991B1B", fontSize: "13px" }}>
-                  {error}
+                  {serverError}
                 </div>
               )}
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0 16px", marginBottom: "16px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Jenis Faskes</label>
-                  <select className="form-input" value={form.jenis_faskes_id} onChange={e => setForm(f => ({ ...f, jenis_faskes_id: e.target.value }))}>
+                  <select className="form-input" {...register("jenis_faskes_id")}>
                     <option value="">— Fallback / Default —</option>
                     {jenisFaskesOptions.map(jf => (
                       <option key={jf.id} value={jf.id}>{jf.nama} ({jf.kode})</option>
@@ -871,56 +894,52 @@ function EditorToolbar({ editorRef, form, setForm, onInsertPasal, allVars }) {
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Nama Template</label>
-                  <input className="form-input" value={form.nama} onChange={e => setForm(f => ({ ...f, nama: e.target.value }))} placeholder="cth: Template PKS Puskesmas" required />
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Nama Template *</label>
+                  <input className="form-input" {...register("nama")} placeholder="cth: Template PKS Puskesmas" />
+                  {errors.nama && <p style={{ color: "#DC2626", fontSize: "12px", marginTop: "2px" }}>{errors.nama.message}</p>}
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Blade File</label>
-                  <select className="form-input" value={form.blade} onChange={e => setForm(f => ({ ...f, blade: e.target.value }))} required>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Blade File *</label>
+                  <select className="form-input" {...register("blade")}>
                     <option value="">— Pilih blade —</option>
                     {BUNDLED_BLADES.map(b => (
                       <option key={b.blade} value={b.blade}>{b.label}</option>
                     ))}
-                    {form.blade && !BUNDLED_BLADES.find(b => b.blade === form.blade) && (
-                      <option value={form.blade}>Custom: {form.blade}</option>
-                    )}
                   </select>
+                  {errors.blade && <p style={{ color: "#DC2626", fontSize: "12px", marginTop: "2px" }}>{errors.blade.message}</p>}
                 </div>
               </div>
 
               <div style={{ marginBottom: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
                 <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#374151", cursor: "pointer" }}>
-                  <input type="checkbox" checked={form.aktif} onChange={e => setForm(f => ({ ...f, aktif: e.target.checked }))} />
+                  <input type="checkbox" {...register("aktif")} />
                   Aktif
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#374151", cursor: "pointer" }}>
-                  <input type="checkbox" checked={form.is_default} onChange={e => setForm(f => ({ ...f, is_default: e.target.checked }))} />
+                  <input type="checkbox" {...register("is_default")} />
                   Jadikan default
                 </label>
               </div>
 
-              {/* Editor Toolbar */}
               <EditorToolbar
                 editorRef={editorRef}
-                form={form}
-                setForm={setForm}
+                kontenText={kontenText}
+                setKontenText={setKontenText}
                 onInsertPasal={insertPasal}
                 allVars={allVars}
               />
 
               {/* Main editor textarea */}
-              <textarea
+              <Textarea
                 ref={editorRef}
-                value={form.kontenText}
-                onChange={e => setForm(f => ({ ...f, kontenText: e.target.value }))}
+                value={kontenText}
+                onChange={e => setKontenText(e.target.value)}
                 rows={22}
+                className="font-mono"
                 style={{
-                  width: "100%", boxSizing: "border-box",
                   fontFamily: "'Courier New', 'Consolas', monospace",
                   fontSize: "13px", lineHeight: "1.7",
                   padding: "14px 16px",
-                  border: "1px solid #D1D5DB",
-                  borderRadius: "0 0 8px 8px",
                   resize: "vertical",
                   background: "#fff",
                   color: "#1E293B",
@@ -934,10 +953,10 @@ function EditorToolbar({ editorRef, form, setForm, onInsertPasal, allVars }) {
               </div>
 
               <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", borderTop: "1px solid #F1F5F9", paddingTop: "20px", marginTop: "20px" }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
-                <button type="submit" className="btn btn-primary" disabled={saveMutation.isPending}>
+                <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Batal</Button>
+                <Button type="submit" disabled={saveMutation.isPending}>
                   {saveMutation.isPending ? "Menyimpan..." : editTarget ? "Simpan" : "Tambah Template"}
-                </button>
+                </Button>
               </div>
             </div>
           </form>

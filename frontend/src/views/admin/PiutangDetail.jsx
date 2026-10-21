@@ -3,6 +3,7 @@ import { useParams, useHistory } from "react-router-dom";
 import { useApi } from "@/hooks/useApi";
 import { formatDate } from "../../utils/dateFormat";
 import SettlementJournalPanel from "@/components/SettlementJournalPanel";
+import { Button } from "@/components/ui/button";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -111,7 +112,7 @@ export default function PiutangDetail() {
     return (
       <div style={{ padding: "40px", textAlign: "center" }}>
         <div style={{ color: "#DC2626", fontSize: "13px", marginBottom: "16px" }}>{error}</div>
-        <button className="btn btn-secondary" onClick={() => history.push("/admin/piutang")}>Kembali</button>
+        <Button variant="outline" onClick={() => history.push("/admin/piutang")}>Kembali</Button>
       </div>
     );
   }
@@ -122,15 +123,14 @@ export default function PiutangDetail() {
       {/* Header + back */}
       <div style={{ marginBottom: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <button
-            className="btn btn-ghost"
-            style={{ padding: "6px 8px", borderRadius: "6px" }}
+          <Button
+            variant="ghost"
             onClick={() => history.push("/admin/piutang")}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
-          </button>
+          </Button>
           <div>
             <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>
               Detail Invoice
@@ -209,13 +209,13 @@ export default function PiutangDetail() {
               <InfoRow label="Status Siklus" value={inv.siklus.status} />
               <InfoRow label="Tanggal Pengajuan" value={formatDate(inv.siklus.tanggal_pengajuan)} />
               <div style={{ marginTop: "8px" }}>
-                <button
-                  className="btn btn-secondary"
-                  style={{ fontSize: "12px", padding: "6px 12px" }}
+                <Button
+                  variant="outline"
+                  style={{ fontSize: "12px" }}
                   onClick={() => history.push(`/admin/pendaftaran/${inv.siklus.id}`)}
                 >
                   Lihat Detail Siklus
-                </button>
+                </Button>
               </div>
             </>
           ) : (

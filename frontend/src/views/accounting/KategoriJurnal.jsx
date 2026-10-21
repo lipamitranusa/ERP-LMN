@@ -1,5 +1,19 @@
 import React, { useState } from "react";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const JENIS_LABEL = {
   adjustment: "Adjustment", pemasukan: "Pemasukan", pengeluaran: "Pengeluaran",
@@ -8,76 +22,78 @@ const JENIS_LABEL = {
 };
 const JENIS_COLOR = {
   adjustment:  { bg: "#EFF6FF", color: "#1D4ED8" },
-  pemasukan:   { bg: "#DCFCE7", color: "#166534" },
-  pengeluaran: { bg: "#FEE2E2", color: "#991B1B" },
+  pemasukan:   { bg: "#DCFCE7", color: "oklch(0.75 0.15 145)" },
+  pengeluaran: { bg: "#FEE2E2", color: "oklch(0.70 0.20 25)" },
   bkm:         { bg: "#F0FDF4", color: "#15803D" },
   bkk:         { bg: "#FEF2F2", color: "#B91C1C" },
   kkm:         { bg: "#F0FDF4", color: "#15803D" },
   kkk:         { bg: "#FEF2F2", color: "#B91C1C" },
 };
 
-function Modal({ title, children, onClose }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
-      <div style={{ background: "#fff", borderRadius: "8px", width: "440px", maxHeight: "90vh", overflowY: "auto" }}>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "600" }}>{title}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "#64748B" }}>×</button>
-        </div>
-        <div style={{ padding: "20px" }}>{children}</div>
-      </div>
-    </div>
-  );
-}
+const EMPTY_FORM = { nama: "", jenis: "adjustment", is_aktif: true };
+
+const schema = z.object({
+  nama: z.string().min(1, "Nama kategori wajib diisi"),
+  jenis: z.string().default("adjustment"),
+  is_aktif: z.boolean().default(true),
+});
 
 export default function AccountingKategori() {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
-  const [form, setForm] = useState({ nama: "", jenis: "adjustment", is_aktif: true });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
 
   const { data: apiData, isLoading: loading } = useApi("kategori-jurnal", "/keuangan/accounting/kategori");
   const data = apiData?.data || [];
 
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: EMPTY_FORM,
+  });
+
   const saveMutation = useMutateKeys(["kategori-jurnal"], {
     onSuccess: () => setShowForm(false),
-    onError: (err) => { setError(err.message); setSaving(false); },
   });
+
   const deleteMutation = useMutateKeys(["kategori-jurnal"], {
     onError: (err) => alert(err.message),
   });
 
-  const openNew = () => { setEditItem(null); setForm({ nama: "", jenis: "adjustment", is_aktif: true }); setError(""); setShowForm(true); };
-  const openEdit = (k) => { setEditItem(k); setForm({ nama: k.nama, jenis: k.jenis, is_aktif: k.is_aktif }); setError(""); setShowForm(true); };
+  function openNew() {
+    setEditItem(null);
+    reset(EMPTY_FORM);
+    setShowForm(true);
+  }
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    if (!form.nama) { setError("Nama kategori wajib diisi."); return; }
-    setSaving(true);
+  function openEdit(k) {
+    setEditItem(k);
+    reset({ nama: k.nama, jenis: k.jenis, is_aktif: k.is_aktif });
+    setShowForm(true);
+  }
+
+  const onSubmit = (formData) => {
     saveMutation.mutate({
       path: editItem ? `/keuangan/accounting/kategori/${editItem.id}` : "/keuangan/accounting/kategori",
       method: editItem ? "PUT" : "POST",
-      body: form,
+      body: formData,
     });
   };
 
-  const handleDelete = async (k) => {
+  function handleDelete(k) {
     if (!window.confirm(`Hapus kategori "${k.nama}"?`)) return;
     deleteMutation.mutate({ path: `/keuangan/accounting/kategori/${k.id}`, method: "DELETE" });
-  };
+  }
 
   return (
     <div>
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div className="mb-6 flex justify-between items-start">
         <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Kategori Jurnal</h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>Master jenis transaksi untuk jurnal umum.</p>
+          <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Kategori Jurnal</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5">Master jenis transaksi untuk jurnal umum.</p>
         </div>
-        <button className="btn btn-primary" onClick={openNew} style={{ background: "#2563EB" }}>+ Tambah Kategori</button>
+        <Button onClick={openNew} style={{ background: "#2563EB" }}>+ Tambah Kategori</Button>
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
+      <Card className="overflow-hidden">
         <table className="data-table">
           <thead>
             <tr>
@@ -89,12 +105,12 @@ export default function AccountingKategori() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="4" style={{ textAlign: "center", color: "#94A3B8", padding: "32px" }}>Memuat...</td></tr>
+              <tr><td colSpan="4" style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: "32px" }}>Memuat...</td></tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan="4" style={{ textAlign: "center", color: "#94A3B8", padding: "32px" }}>Belum ada kategori. Tambahkan minimal 1.</td></tr>
+              <tr><td colSpan="4" style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: "32px" }}>Belum ada kategori. Tambahkan minimal 1.</td></tr>
             ) : data.map(k => (
               <tr key={k.id} style={{ opacity: k.is_aktif ? 1 : 0.5 }}>
-                <td style={{ fontSize: "14px", fontWeight: "500" }}>{k.nama}</td>
+                <td className="text-sm font-medium">{k.nama}</td>
                 <td>
                   <span style={{ padding: "2px 10px", borderRadius: "9999px", fontSize: "11px", fontWeight: "600", background: JENIS_COLOR[k.jenis]?.bg || "#F1F5F9", color: JENIS_COLOR[k.jenis]?.color || "#64748B" }}>
                     {JENIS_LABEL[k.jenis] || k.jenis}
@@ -106,40 +122,49 @@ export default function AccountingKategori() {
                   </span>
                 </td>
                 <td style={{ textAlign: "center" }}>
-                  <button className="btn btn-ghost" style={{ fontSize: "11px", padding: "2px 8px", color: "#2563EB" }} onClick={() => openEdit(k)}>Edit</button>
-                  <button className="btn btn-ghost" style={{ fontSize: "11px", padding: "2px 8px", color: "#DC2626" }} onClick={() => handleDelete(k)}>Hapus</button>
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(k)} className="text-xs h-7 px-2" style={{ color: "oklch(0.65 0.20 255)" }}>Edit</Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(k)} className="text-xs h-7 px-2" style={{ color: "#DC2626" }}>Hapus</Button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      </Card>
 
-      {showForm && (
-        <Modal title={editItem ? "Edit Kategori" : "Tambah Kategori"} onClose={() => setShowForm(false)}>
-          <form onSubmit={handleSave}>
-            {error && <div style={{ background: "#FEE2E2", color: "#991B1B", padding: "8px 12px", borderRadius: "4px", marginBottom: "12px", fontSize: "13px" }}>{error}</div>}
-            <div style={{ marginBottom: "12px" }}>
-              <label className="form-label">Nama Kategori *</label>
-              <input className="form-input" value={form.nama} onChange={e => setForm(f => ({ ...f, nama: e.target.value }))} placeholder="mis. Pengeluaran Operasional" required />
+      <Dialog open={showForm} onOpenChange={v => { if (!saveMutation.isPending) { setShowForm(v); if (!v) reset(EMPTY_FORM); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editItem ? "Edit Kategori" : "Tambah Kategori"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="kat-nama">Nama Kategori *</Label>
+              <Input id="kat-nama" {...register("nama")} placeholder="mis. Pengeluaran Operasional" />
+              {errors.nama && <p className="text-xs text-red-500 mt-1">{errors.nama.message}</p>}
             </div>
-            <div style={{ marginBottom: "12px" }}>
-              <label className="form-label">Jenis *</label>
-              <select className="form-input" value={form.jenis} onChange={e => setForm(f => ({ ...f, jenis: e.target.value }))}>
+            <div className="space-y-1.5">
+              <Label htmlFor="kat-jenis">Jenis *</Label>
+              <select
+                id="kat-jenis"
+                className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+                {...register("jenis")}
+              >
                 {Object.entries(JENIS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
-            <div style={{ marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
-              <input type="checkbox" checked={form.is_aktif} onChange={e => setForm(f => ({ ...f, is_aktif: e.target.checked }))} />
-              <label style={{ fontSize: "13px" }}>Aktif</label>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" {...register("is_aktif")} id="kat-aktif" className="h-4 w-4 rounded border-slate-300" />
+              <Label htmlFor="kat-aktif" className="text-sm font-normal cursor-pointer">Aktif</Label>
             </div>
-            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Batal</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Menyimpan..." : "Simpan"}</button>
-            </div>
+            <DialogFooter className="gap-2 sm:gap-0 border-t pt-4">
+              <Button type="button" variant="outline" onClick={() => setShowForm(false)} disabled={saveMutation.isPending}>Batal</Button>
+              <Button type="submit" disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? "Menyimpan..." : "Simpan"}
+              </Button>
+            </DialogFooter>
           </form>
-        </Modal>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

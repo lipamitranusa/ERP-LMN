@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\KonfigurasiPajak;
+use App\Models\Lembaga;
 use Illuminate\Database\Seeder;
 
 /**
@@ -49,10 +50,12 @@ class KonfigurasiPajakSeeder extends Seeder
             ],
         ];
 
+        $lembagaId = Lembaga::query()->value('id');
+
         foreach ($rows as $row) {
             KonfigurasiPajak::withoutGlobalScope('lembaga')->updateOrCreate(
                 ['id' => $row['id']],
-                $row,
+                array_merge($row, ['lembaga_id' => $lembagaId]),
             );
         }
     }

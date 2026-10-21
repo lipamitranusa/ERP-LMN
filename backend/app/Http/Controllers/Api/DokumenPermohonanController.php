@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ChecklistValidasi;
 use App\Models\DokumenPermohonan;
 use App\Models\SiklusAkreditasi;
 use App\Services\AttachmentService;
@@ -73,7 +74,11 @@ class DokumenPermohonanController extends Controller
         return response()->json(['data' => $versions]);
     }
 
-    private const REQUIRED_JENIS = ['dfo', 'surat_permohonan', 'self_assessment'];
+    /**
+     * Dokumen wajib = sumber kebenaran tunggal, dipakai bersama oleh
+     * gate upload di sini dan gate checklist (ChecklistValidasi).
+     */
+    private const REQUIRED_JENIS = ChecklistValidasi::JENIS_WAJIB;
 
     /**
      * POST /api/pendaftaran/siklus/{siklus}/dokumen

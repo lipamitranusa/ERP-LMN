@@ -1,4 +1,5 @@
 import React, { useState, useRef } from "react";
+import { Button } from "@/components/ui/button";
 
 /**
  * Reusable CSV Import Modal.
@@ -225,9 +226,10 @@ export default function ImportModal({
             <div style={{ fontSize: "13px", color: "#475569" }}>
               <strong>Tidak punya file?</strong> Unduh template CSV terlebih dahulu.
             </div>
-            <button
+            <Button
               onClick={downloadTemplate}
-              className="btn btn-secondary btn-sm"
+              variant="outline"
+              size="sm"
               style={{ flexShrink: 0 }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
@@ -236,7 +238,7 @@ export default function ImportModal({
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
               Download Template
-            </button>
+            </Button>
           </div>
 
           {/* Error */}
@@ -451,28 +453,30 @@ export default function ImportModal({
           </div>
           <div style={{ display: "flex", gap: "8px" }}>
             {hasResults && (
-              <button
+              <Button
                 onClick={() => {
                   setResults(null);
                   setSelectedFile(null);
                 }}
-                className="btn btn-secondary btn-sm"
+                variant="outline"
+                size="sm"
                 disabled={uploading}
               >
                 Import Lagi
-              </button>
+              </Button>
             )}
-            <button
+            <Button
               onClick={handleClose}
-              className="btn btn-secondary btn-sm"
+              variant="outline"
+              size="sm"
               disabled={uploading}
             >
               {hasResults ? "Tutup" : "Batal"}
-            </button>
+            </Button>
             {!hasResults && (
-              <button
+              <Button
                 onClick={handleUpload}
-                className="btn btn-primary btn-sm"
+                size="sm"
                 disabled={uploading || !selectedFile}
               >
                 {uploading ? (
@@ -492,7 +496,7 @@ export default function ImportModal({
                     Upload & Import
                   </>
                 )}
-              </button>
+              </Button>
             )}
           </div>
         </div>

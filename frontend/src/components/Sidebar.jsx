@@ -1,6 +1,11 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { ChevronLeft, ChevronRight, Building2, Users, Settings, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { readGroupOpen, persistGroupOpen } from "@/lib/uiPrefs";
+import { LMNIcon } from "@/components/LMNIcon";
 import { useAuth } from "@/hooks/useAuth";
+import { useLembaga } from "@/contexts/LembagaContext";
 
 function hasPrivilege(route, menuActions) {
   if (!route.privilege) return true;
@@ -14,225 +19,193 @@ function routeVisibleForRole(route, roleName) {
   return true;
 }
 
-// Icon mapping: map ni-* class names from routes to SVG paths
-const iconPaths = {
-  "ni ni-tv-2": (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
-    </svg>
-  ),
-  "ni ni-badge": (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/>
-    </svg>
-  ),
-  "ni ni-delivery-fast": (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
-    </svg>
-  ),
-  "ni ni-check-bold": (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12"/>
-    </svg>
-  ),
-  "ni ni-single-02": (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-    </svg>
-  ),
-  "ni ni-lock-circle-open": (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-    </svg>
-  ),
-  "ni ni-building": (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><path d="M9 22V12h6v10M2 10h20M2 6h20M2 14h20M2 18h20"/>
-    </svg>
-  ),
-  "ni ni-tag": (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>
-    </svg>
-  ),
-  "ni ni-align-left-2": (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/>
-    </svg>
-  ),
-  "ni ni-single-02": (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/>
-    </svg>
-  ),
-  "ni ni-money-coins": (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/>
-      <path d="M12 6v12M8 10c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2s-.9 2-2 2H10c-1.1 0-2 .9-2 2s.9 2 2 2h4c1.1 0 2-.9 2-2"/>
-    </svg>
-  ),
-};
-
-const LMNIcon = () => (
-  <svg viewBox="0 0 36 36" width="32" height="32" fill="none">
-    {/* Circle ring */}
-    <circle cx="18" cy="18" r="15" stroke="#4CAF50" strokeWidth="3" strokeDasharray="22 73" strokeDashoffset="0" strokeLinecap="round"/>
-    {/* Cross / plus */}
-    <path d="M18 11v14M12 18h12" stroke="#4CAF50" strokeWidth="3" strokeLinecap="round"/>
-    {/* Color dots around the ring */}
-    <circle cx="18" cy="3.5" r="2" fill="#7E57C2"/>
-    <circle cx="29.5" cy="9.5" r="2" fill="#EF5350"/>
-    <circle cx="32" cy="20" r="2" fill="#FF9800"/>
-    <circle cx="26" cy="30" r="2" fill="#FFEB3B"/>
-    <circle cx="10" cy="30" r="2" fill="#42A5F5"/>
-  </svg>
-);
-
-function SidebarNavItem({ route }) {
+function SidebarNavItem({ route, collapsed, onNavigate }) {
   const location = useLocation();
   const fullPath = location.pathname;
   const routeFullPath = route.layout + route.path;
   const routeSegs = routeFullPath.split("/").filter(Boolean);
   const fullSegs = fullPath.split("/").filter(Boolean);
-  const isActive = fullPath === routeFullPath || (fullSegs.length === routeSegs.length && fullSegs.every((s, i) => s === routeSegs[i]));
+  const isActive = fullPath === routeFullPath || (
+    fullSegs.length === routeSegs.length &&
+    fullSegs.every((s, i) => s === routeSegs[i])
+  );
 
   return (
-    <Link to={routeFullPath} className={`sidebar-nav-item${isActive ? " active" : ""}`}>
+    <Link
+      to={routeFullPath}
+      onClick={onNavigate}
+      className={cn(
+        "flex items-center gap-3 rounded-md text-sm font-medium transition-colors",
+        isActive
+          ? "bg-primary/10 text-primary border-l-2 border-primary ml-[-3px]"
+          : "text-slate-400 dark:text-slate-500 hover:bg-slate-800 hover:text-slate-100",
+        collapsed ? "justify-center px-2 py-2" : "px-3 py-2"
+      )}
+      title={collapsed ? route.name : undefined}
+    >
       {route.icon && (
-        <span className="nav-icon" style={{ display: "inline-flex", alignItems: "center" }}>
+        <span className={cn("shrink-0", isActive ? "text-primary" : "text-slate-400 dark:text-slate-500")}>
           {route.icon}
         </span>
       )}
-      {!route.icon && (
-        <span className="nav-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-          </svg>
-        </span>
-      )}
-      <span>{route.name}</span>
+      {!collapsed && <span className="truncate">{route.name}</span>}
     </Link>
   );
 }
 
-function Sidebar({ routes }) {
-  const { menuActions, user } = useAuth();
-  const roleName = user?.role?.nama_role ?? user?.role ?? null;
+function SidebarGroup({ group, collapsed, menuActions, roleName, onNavigate }) {
+  // Dibaca dari localStorage agar status expand/collapse tetap sama
+  // setelah user logout lalu login ulang.
+  const [open, setOpen] = useState(() => readGroupOpen(group.group));
+
+  const toggleOpen = () => {
+    setOpen(prev => {
+      const next = !prev;
+      persistGroupOpen(group.group, next);
+      return next;
+    });
+  };
+
+  const visibleItems = (group.items || []).filter(
+    r => !r.hideInSidebar && hasPrivilege(r, menuActions) && routeVisibleForRole(r, roleName)
+  );
+  if (visibleItems.length === 0) return null;
+
+  if (collapsed) {
+    return (
+      <div className="space-y-1">
+        <div className="px-2 py-1">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 block text-center">
+            {group.group.charAt(0)}
+          </span>
+        </div>
+        {visibleItems.map((route, ki) => (
+          <SidebarNavItem
+            key={`g-c-${ki}`}
+            route={route}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <nav className="sidebar">
+    <div className="space-y-1">
+      <button
+        onClick={toggleOpen}
+        className="flex w-full items-center justify-between px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-300 dark:hover:text-slate-300 transition-colors"
+      >
+        <span>{group.group}</span>
+        <ChevronDown
+          className={cn("h-3 w-3 transition-transform", open ? "" : "-rotate-90")}
+        />
+      </button>
+      {open && visibleItems.map((route, ki) => (
+        <SidebarNavItem
+          key={`g-${ki}`}
+          route={route}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function Sidebar({ routes, collapsed, onCollapse, onNavigate }) {
+  const { menuActions, user } = useAuth();
+  // Baca langsung dari localStorage agar langsung tampil saat render pertama
+  const lembagaName = localStorage.getItem("lembaga_name") || null;
+  const lembagaLogo = localStorage.getItem("lembaga_logo") || null;
+  const roleName = user?.role?.nama_role ?? user?.role ?? null;
+  const companyName = lembagaName || "LIPA MITRA NUSA";
+
+  return (
+    <aside
+      className={cn(
+        "fixed top-0 left-0 z-40 h-screen bg-slate-800 border-r border-slate-700 flex flex-col transition-all duration-200",
+        collapsed ? "w-[68px]" : "w-[240px]"
+      )}
+    >
       {/* Logo area */}
-      <div style={{ padding: "20px 16px 16px", borderBottom: "1px solid rgba(51,65,85,0.6)" }}>
-        <Link
-          to="/admin/dashboard"
-          style={{ display: "flex", alignItems: "center", gap: "10px", textDecoration: "none" }}
-        >
-          <LMNIcon />
-          <div style={{ overflow: "hidden" }}>
-            <div style={{
-              color: "#FFFFFF",
-              fontSize: "14px",
-              fontWeight: "700",
-              letterSpacing: "-0.02em",
-              lineHeight: "1.2",
-              whiteSpace: "nowrap",
-            }}>
-              LIPA MITRA
+      <div className={cn("flex items-center border-b border-slate-700 shrink-0", collapsed ? "justify-center px-2 py-4" : "px-4 py-4")}>
+        <Link to="/admin/dashboard" className="flex items-center gap-3 no-underline">
+          {lembagaLogo ? (
+            <img src={lembagaLogo} alt={companyName} className={cn("rounded object-contain", collapsed ? "w-10 h-10" : "w-9 h-9")} />
+          ) : (
+            <LMNIcon size={collapsed ? 32 : 28} />
+          )}
+          {!collapsed && (
+            <div>
+              <div className="text-white font-bold text-sm leading-tight tracking-tight">
+                {lembagaName ? companyName : "LIPA MITRA"}
+              </div>
+              {lembagaName ? (
+                <div className="text-slate-400 dark:text-slate-500 text-[10px] font-medium uppercase tracking-widest">
+                  Lembaga Akreditasi
+                </div>
+              ) : (
+                <div className="text-slate-400 dark:text-slate-500 text-[10px] font-medium uppercase tracking-widest">
+                  Nusa
+                </div>
+              )}
             </div>
-            <div style={{
-              color: "rgba(255,255,255,0.5)",
-              fontSize: "11px",
-              fontWeight: "500",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              whiteSpace: "nowrap",
-            }}>
-              Nusa
-            </div>
-          </div>
+          )}
         </Link>
       </div>
 
       {/* Navigation */}
-      <div style={{ flex: 1, overflowY: "auto", paddingTop: "12px", paddingBottom: "12px" }}>
+      <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
+
         {routes.map((entry, key) => {
-          // Group header
           if (entry.group) {
-            const visibleItems = (entry.items || []).filter(
-              r => !r.hideInSidebar && hasPrivilege(r, menuActions) && routeVisibleForRole(r, roleName),
-            );
-            if (visibleItems.length === 0) return null;
             return (
-              <div key={`group-${key}`}>
-                <div style={{
-                  padding: "12px 16px 6px",
-                  fontSize: "10px", fontWeight: "700", letterSpacing: "0.08em",
-                  textTransform: "uppercase", color: "rgba(255,255,255,0.45)",
-                }}>
-                  {entry.group}
-                </div>
-                {visibleItems.map((route, ki) => (
-                  <SidebarNavItem key={`g-${key}-${ki}`} route={route} />
-                ))}
-              </div>
+              <SidebarGroup
+                key={`group-${key}`}
+                group={entry}
+                collapsed={collapsed}
+                menuActions={menuActions}
+                roleName={roleName}
+                onNavigate={onNavigate}
+              />
             );
           }
-
           if (entry.hideInSidebar) return null;
           if (!hasPrivilege(entry, menuActions)) return null;
           if (!routeVisibleForRole(entry, roleName)) return null;
           return (
-            <SidebarNavItem key={key} route={entry} />
+            <SidebarNavItem
+              key={key}
+              route={entry}
+              collapsed={collapsed}
+              onNavigate={onNavigate}
+            />
           );
         })}
       </div>
 
-      {/* Bottom: user info + logout */}
-      <div style={{
-        padding: "12px 16px",
-        borderTop: "1px solid rgba(51,65,85,0.6)",
-        marginTop: "auto",
-      }}>
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "10px",
-          marginBottom: "8px",
-        }}>
-          <div style={{
-            width: "32px", height: "32px",
-            borderRadius: "50%",
-            background: "rgba(76,175,80,0.2)",
-            border: "1px solid rgba(76,175,80,0.4)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-          }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="#4CAF50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-            </svg>
-          </div>
-          <div style={{ overflow: "hidden", flex: 1 }}>
-            <div id="sidebar-user-name" style={{ color: "#fff", fontSize: "13px", fontWeight: "500", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>—</div>
-            <div id="sidebar-user-role" style={{ color: "rgba(255,255,255,0.45)", fontSize: "11px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>—</div>
-          </div>
-        </div>
+      {/* Bottom: collapse toggle + user info */}
+      <div className="border-t border-slate-700 px-2 py-3 shrink-0">
+        {/* Collapse toggle */}
         <button
-          className="btn btn-ghost"
-          style={{ width: "100%", color: "rgba(255,255,255,0.5)", fontSize: "12px", justifyContent: "flex-start", padding: "6px 8px" }}
-          onClick={() => {
-            localStorage.removeItem("token");
-            localStorage.removeItem("user");
-            window.location.href = "/auth/login";
-          }}
+          onClick={onCollapse}
+          className={cn(
+            "flex items-center w-full gap-3 rounded-md px-3 py-2 text-sm text-slate-400 dark:text-slate-500 hover:bg-slate-700 hover:text-slate-200 transition-colors"
+          )}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-          Keluar
+          {collapsed ? (
+            <ChevronRight size={16} className="shrink-0" />
+          ) : (
+            <>
+              <ChevronLeft size={16} className="shrink-0" />
+              <span className="text-xs">Collapse</span>
+            </>
+          )}
         </button>
       </div>
-    </nav>
+    </aside>
   );
 }
-
-export default Sidebar;

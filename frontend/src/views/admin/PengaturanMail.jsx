@@ -1,32 +1,24 @@
 import React, { useState, useMemo } from "react";
 import { useApi, useMutate } from "@/hooks/useApi";
+import { PageHeader } from "@/components/PageHeader";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Eye, EyeOff } from "lucide-react";
 
-function PasswordField({ value, onChange, label, placeholder = "••••••••" }) {
+function formatRp(n) { return `Rp ${Number(n || 0).toLocaleString("id-ID")}`; }
+
+function PasswordField({ label, value, onChange, placeholder }) {
   const [show, setShow] = useState(false);
   return (
-    <div>
-      <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-        {label}
-      </label>
-      <div style={{ position: "relative" }}>
-        <input
-          className="form-input"
-          type={show ? "text" : "password"}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
-          style={{ paddingRight: "44px" }}
-        />
-        <button
-          type="button"
-          onClick={() => setShow(s => !s)}
-          style={{
-            position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)",
-            background: "none", border: "none", cursor: "pointer", color: "#94A3B8", fontSize: "11px",
-            padding: "2px 4px",
-          }}
-        >
-          {show ? "Sembunyikan" : "Tampilkan"}
+    <div className="space-y-1.5">
+      <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{label}</Label>
+      <div className="relative">
+        <Input type={show ? "text" : "password"} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || "••••••••"} className="pr-10" />
+        <button type="button" onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-300 dark:text-slate-500">
+          {show ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>
       </div>
     </div>
@@ -35,28 +27,23 @@ function PasswordField({ value, onChange, label, placeholder = "•••••�
 
 function LoadingSpinner({ label = "Memuat..." }) {
   return (
-    <div style={{ textAlign: "center", padding: "48px", color: "#94A3B8", fontSize: "13px" }}>
-      <div style={{
-        width: "28px", height: "28px", border: "3px solid #E2E8F0",
-        borderTopColor: "#4CAF50", borderRadius: "50%",
-        animation: "spin 0.7s linear infinite",
-        margin: "0 auto 10px",
-      }} />
+    <div className="flex flex-col items-center justify-center py-12 text-slate-400 dark:text-slate-500 text-sm">
+      <div className="w-7 h-7 border-[3px] border-slate-200 dark:border-slate-700 border-t-green-500 rounded-full animate-spin mb-3" />
       {label}
     </div>
   );
 }
 
 function Toast({ message, type = "success" }) {
+  const colors = {
+    success: { bg: "#DCFCE7", text: "#166534", border: "#BBF7D0" },
+    error:   { bg: "#FEE2E2", text: "#991B1B", border: "#FECACA" },
+    info:    { bg: "#FEF9C3", text: "#854D0E", border: "#FDE68A" },
+  };
+  const c = colors[type] || colors.success;
   return (
-    <div style={{
-      position: "fixed", bottom: "24px", right: "24px", zIndex: 9999,
-      padding: "12px 20px", borderRadius: "8px", fontSize: "13px", fontWeight: "500",
-      boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
-      background: type === "success" ? "#DCFCE7" : type === "error" ? "#FEE2E2" : "#FEF9C3",
-      color: type === "success" ? "#166534" : type === "error" ? "#991B1B" : "#854D0E",
-      border: `1px solid ${type === "success" ? "#BBF7D0" : type === "error" ? "#FECACA" : "#FDE68A"}`,
-    }}>
+    <div className="fixed bottom-6 right-6 z-50 p-3 rounded-lg text-sm font-medium shadow-lg border"
+      style={{ background: c.bg, color: c.text, borderColor: c.border }}>
       {message}
     </div>
   );
@@ -68,6 +55,22 @@ const TABS = [
   { id: "mailgun", label: "Mailgun" },
   { id: "notifikasi", label: "Notifikasi" },
 ];
+
+function ToggleField({ label, value, onChange, children }) {
+  return (
+    <div>
+      {label && (
+        <div className="flex items-center gap-2.5 cursor-pointer select-none" onClick={() => onChange(value === "1" ? "0" : "1")}>
+          <div className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors" style={{ background: value === "1" ? "#22C55E" : "#CBD5E1" }}>
+            <div className="h-5 w-5 rounded-full bg-white shadow transition-transform" style={{ transform: value === "1" ? "translateX(22px)" : "translateX(2px)" }} />
+          </div>
+          {label && <span className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-500">{label}</span>}
+        </div>
+      )}
+      {children && <div className="mt-2">{children}</div>}
+    </div>
+  );
+}
 
 export default function PengaturanMail() {
   const [saving, setSaving] = useState(false);
@@ -87,10 +90,7 @@ export default function PengaturanMail() {
 
   const grouped = useMemo(() => {
     const grp = {};
-    settings.forEach(s => {
-      if (!grp[s.kategori]) grp[s.kategori] = {};
-      grp[s.kategori][s.kunci] = s;
-    });
+    settings.forEach(s => { if (!grp[s.kategori]) grp[s.kategori] = {}; grp[s.kategori][s.kunci] = s; });
     return grp;
   }, [settings]);
 
@@ -110,28 +110,12 @@ export default function PengaturanMail() {
     setSaving(true);
     try {
       const payload = {};
-      settings.forEach(s => {
-        const key = `${s.kategori}:${s.kunci}`;
-        if (key in tempValues) payload[key] = tempValues[key];
-      });
-      if (Object.keys(payload).length === 0) {
-        showToast("Tidak ada perubahan untuk disimpan.", "info");
-        setSaving(false);
-        return;
-      }
-      await mutateSave.mutateAsync({
-        path: "/mail-settings",
-        method: "PUT",
-        body: { values: payload },
-      });
-      setTempValues({});
-      setDirty({});
+      settings.forEach(s => { const key = `${s.kategori}:${s.kunci}`; if (key in tempValues) payload[key] = tempValues[key]; });
+      if (Object.keys(payload).length === 0) { showToast("Tidak ada perubahan untuk disimpan.", "info"); setSaving(false); return; }
+      await mutateSave.mutateAsync({ path: "/mail-settings", method: "PUT", body: { values: payload } });
+      setTempValues({}); setDirty({});
       showToast("Berhasil disimpan.", "success");
-    } catch (err) {
-      showToast(err.message || "Gagal menyimpan.", "error");
-    } finally {
-      setSaving(false);
-    }
+    } catch (err) { showToast(err.message || "Gagal menyimpan.", "error"); } finally { setSaving(false); }
   };
 
   const handleTestConnection = async () => {
@@ -141,24 +125,12 @@ export default function PengaturanMail() {
     try {
       const driver = getVal("umum", "driver") || "smtp";
       const { api } = await import("@/lib/api");
-      // api() sudah parse JSON & throw on non-ok — langsung dapat response body
-      const data = await api("/mail-settings/test-connection", {
-        method: "POST",
-        body: JSON.stringify({ driver, test_email: email, test_message }),
-      });
-      showToast(data.message, "success");
-    } catch (err) {
-      showToast(err.message || "Gagal mengirim email test.", "error");
-    } finally {
-      setTesting(false);
-    }
+      const res = await api("/mail-settings/test-connection", { method: "POST", body: JSON.stringify({ driver, test_email: email, test_message }) });
+      showToast(res.message, "success");
+    } catch (err) { showToast(err.message || "Gagal mengirim email test.", "error"); } finally { setTesting(false); }
   };
 
-  const showToast = (message, type = "success") => {
-    setToastMsg(message);
-    setToastType(type);
-    setTimeout(() => setToastMsg(null), 4000);
-  };
+  const showToast = (message, type = "success") => { setToastMsg(message); setToastType(type); setTimeout(() => setToastMsg(null), 4000); };
 
   const isEnabled = getVal("umum", "enabled") === "1";
   const activeDriver = getVal("umum", "driver") || "smtp";
@@ -169,106 +141,57 @@ export default function PengaturanMail() {
     const tipe = setting.tipe;
     const opts = (() => { try { const o = typeof setting.options === "string" ? JSON.parse(setting.options) : setting.options; return o || {}; } catch { return {}; } })();
 
-    if (tipe === "boolean") {
-      return (
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
-          <div
-            onClick={() => setVal(setting.kategori, setting.kunci, val === "1" ? "0" : "1")}
-            style={{
-              width: "44px", height: "24px", borderRadius: "12px",
-              background: val === "1" ? "#4CAF50" : "#CBD5E1",
-              position: "relative", transition: "background 0.2s", cursor: "pointer", flexShrink: 0,
-            }}
-          >
-            <div style={{
-              width: "20px", height: "20px", borderRadius: "50%", background: "#fff",
-              position: "absolute", top: "2px",
-              left: val === "1" ? "22px" : "2px",
-              transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-            }} />
-          </div>
-          <span style={{ fontSize: "13px", fontWeight: "500", color: "#374151" }}>
-            {setting.label}
-          </span>
+    if (tipe === "boolean") return (
+      <div className="flex items-center gap-2.5">
+        <div className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer" style={{ background: val === "1" ? "#22C55E" : "#CBD5E1" }} onClick={() => setVal(setting.kategori, setting.kunci, val === "1" ? "0" : "1")}>
+          <div className="h-5 w-5 rounded-full bg-white shadow transition-transform" style={{ transform: val === "1" ? "translateX(22px)" : "translateX(2px)" }} />
         </div>
-      );
-    }
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-500">{setting.label}</span>
+      </div>
+    );
 
     if (tipe === "select") {
       const choices = opts.choices || {};
-      const entries = Object.entries(choices);
       return (
-        <div>
-          <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-            {setting.label}
-          </label>
-          <select className="form-input" value={val}
-            onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)}>
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{setting.label}</Label>
+          <select className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={val} onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)}>
             <option value="">— Pilih —</option>
-            {entries.map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
-            ))}
+            {Object.entries(choices).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
       );
     }
 
-    if (tipe === "password") {
-      return (
-        <PasswordField
-          label={setting.label}
-          value={val}
-          placeholder={opts.placeholder || ""}
-          onChange={v => setVal(setting.kategori, setting.kunci, v)}
-        />
-      );
-    }
+    if (tipe === "password") return <PasswordField label={setting.label} value={val} onChange={v => setVal(setting.kategori, setting.kunci, v)} placeholder={opts.placeholder} />;
 
-    if (tipe === "number") {
-      return (
-        <div>
-          <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-            {setting.label}
-          </label>
-          <input className="form-input" type="number" value={val}
-            onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)} />
-        </div>
-      );
-    }
+    if (tipe === "number") return (
+      <div className="space-y-1.5">
+        <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{setting.label}</Label>
+        <Input type="number" value={val} onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)} />
+      </div>
+    );
 
-    if (tipe === "email") {
-      return (
-        <div>
-          <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-            {setting.label}
-          </label>
-          <input className="form-input" type="email" value={val}
-            placeholder={opts.placeholder || ""}
-            onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)} />
-        </div>
-      );
-    }
+    if (tipe === "email") return (
+      <div className="space-y-1.5">
+        <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{setting.label}</Label>
+        <Input type="email" value={val} onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)} placeholder={opts.placeholder || ""} />
+      </div>
+    );
 
     return (
-      <div>
-        <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-          {setting.label}
-        </label>
-        <input className="form-input" type="text" value={val}
-          placeholder={opts.placeholder || ""}
-          onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)} />
+      <div className="space-y-1.5">
+        <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{setting.label}</Label>
+        <Input value={val} onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)} placeholder={opts.placeholder || ""} />
       </div>
     );
   };
 
   const renderGroup = (kategori) => {
-    const items = Object.values(grouped[kategori] || {});
-    return items.map(setting => (
+    return Object.values(grouped[kategori] || {}).map(setting => (
       <div key={setting.id}>
         {renderField(setting)}
-        {setting.deskripsi && (
-          <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#94A3B8" }}>{setting.deskripsi}</p>
-        )}
+        {setting.deskripsi && <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{setting.deskripsi}</p>}
       </div>
     ));
   };
@@ -276,181 +199,99 @@ export default function PengaturanMail() {
   if (isLoading) return <LoadingSpinner />;
 
   return (
-    <div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", gap: "16px" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>
-            Pengaturan Mail Server
-          </h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
-            Konfigurasi SMTP &amp; driver pengiriman email
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving || !hasDirty}>
+    <div className="space-y-5">
+      <PageHeader
+        title="Pengaturan Mail Server"
+        subtitle="Konfigurasi SMTP & driver pengiriman email"
+        actions={
+          <Button onClick={handleSave} disabled={saving || !hasDirty}>
             {saving ? "Menyimpan..." : "Simpan Perubahan"}
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      />
 
-      <div style={{
-        padding: "12px 16px", borderRadius: "8px", marginBottom: "20px",
-        background: isEnabled ? "#DCFCE7" : "#FEE2E2",
-        border: `1px solid ${isEnabled ? "#BBF7D0" : "#FECACA"}`,
-        display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap",
-      }}>
-        <div style={{
-          width: "10px", height: "10px", borderRadius: "50%",
-          background: isEnabled ? "#4CAF50" : "#EF4444", flexShrink: 0,
-        }} />
-        <span style={{ fontSize: "13px", fontWeight: "500", color: isEnabled ? "#166534" : "#991B1B" }}>
-          Mail Server: <strong>{isEnabled ? `Aktif — Driver: ${activeDriver.toUpperCase()}` : "Nonaktif"}</strong>
-        </span>
+      <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium"
+        style={{ background: isEnabled ? "#DCFCE7" : "#FEE2E2", border: `1px solid ${isEnabled ? "#BBF7D0" : "#FECACA"}`, color: isEnabled ? "#166534" : "#991B1B" }}>
+        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: isEnabled ? "#22C55E" : "#EF4444" }} />
+        Mail Server: <strong>{isEnabled ? `Aktif — Driver: ${activeDriver.toUpperCase()}` : "Nonaktif"}</strong>
       </div>
 
       {isEnabled && (
-        <div style={{
-          padding: "16px", borderRadius: "8px", marginBottom: "20px",
-          background: "#EFF6FF", border: "1px solid #BFDBFE",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+        <Card className="p-5" style={{ background: "#EFF6FF", border: "1px solid #BFDBFE" }}>
+          <div className="flex items-center gap-2 mb-4">
             <svg viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-              <polyline points="22,6 12,13 2,6"/>
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
             </svg>
-            <span style={{ fontSize: "13px", fontWeight: "600", color: "#1E40AF" }}>Kirim Email Test</span>
+            <span className="text-sm font-semibold" style={{ color: "#1E40AF" }}>Kirim Email Test</span>
           </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-            <div>
-              <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                Email Tujuan
-              </label>
-              <input className="form-input" type="email" value={testEmail}
-                onChange={e => setTestEmail(e.target.value)}
-                placeholder="admin@lembaga.com"
-                style={{ marginBottom: 0 }} />
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Email Tujuan</Label>
+              <Input type="email" value={testEmail} onChange={e => setTestEmail(e.target.value)} placeholder="admin@lembaga.com" />
             </div>
-            <div style={{ display: "flex", alignItems: "flex-end" }}>
-              <button className="btn btn-secondary" onClick={handleTestConnection}
-                disabled={testing || !isEnabled}
-                style={{ display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}>
-                {testing ? (
-                  <div style={{ width: "14px", height: "14px", border: "2px solid #94A3B8", borderTopColor: "#4CAF50", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-                ) : (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                    <polyline points="22 4 12 14.01 9 11.01"/>
-                  </svg>
-                )}
-                {testing ? "Mengirim..." : "Kirim Test Email"}
-              </button>
+            <div className="flex items-end">
+              <Button variant="outline" onClick={handleTestConnection} disabled={testing || !isEnabled} className="gap-2">
+                {testing ? <><div className="w-3.5 h-3.5 border-2 border-slate-300 border-t-green-500 rounded-full animate-spin" />Mengirim...</> : "Kirim Test Email"}
+              </Button>
             </div>
           </div>
-
-          <div>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-              Isi Pesan
-            </label>
-            <textarea className="form-input" value={testMessage}
-              onChange={e => setTestMessage(e.target.value)}
-              placeholder="Ketik isi pesan email test..."
-              rows={3}
-              style={{ marginBottom: 0, resize: "vertical" }} />
+          <div className="space-y-1.5 mb-3">
+            <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Isi Pesan</Label>
+            <Textarea rows={2} value={testMessage} onChange={e => setTestMessage(e.target.value)} placeholder="Ketik isi pesan email test..." />
           </div>
-          <p style={{ fontSize: "11px", color: "#64748B", margin: "6px 0 0", lineHeight: "1.4" }}>
-            Kirim email test untuk memastikan konfigurasi SMTP benar.
-          </p>
-        </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">Kirim email test untuk memastikan konfigurasi SMTP benar.</p>
+        </Card>
       )}
 
-      <div style={{ display: "flex", gap: "4px", marginBottom: "20px", borderBottom: "1px solid #E2E8F0", paddingBottom: "0" }}>
+      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            style={{
-              padding: "8px 16px", border: "none",
-              borderBottom: activeTab === tab.id ? "2px solid #4CAF50" : "2px solid transparent",
-              background: "none", cursor: "pointer", fontSize: "13px",
-              fontWeight: activeTab === tab.id ? "600" : "400",
-              color: activeTab === tab.id ? "#4CAF50" : "#64748B", marginBottom: "-1px",
-            }}
-          >
+            className="px-4 py-2 text-sm border-b-2 transition-colors"
+            style={{ borderColor: activeTab === tab.id ? "#22C55E" : "transparent", color: activeTab === tab.id ? "#22C55E" : "#64748B", fontWeight: activeTab === tab.id ? 600 : 400, marginBottom: "-1px" }}>
             {tab.label}
           </button>
         ))}
       </div>
 
       {activeTab === "umum" && (
-        <div className="card" style={{ padding: "20px" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
-            Pengaturan Umum Mail
-          </h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {renderGroup("umum")}
-          </div>
-        </div>
+        <Card className="p-5">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4">Pengaturan Umum Mail</h3>
+          <div className="flex flex-col gap-4">{renderGroup("umum")}</div>
+        </Card>
       )}
 
       {activeTab === "smtp" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-          <div className="card" style={{ padding: "20px" }}>
-            <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
-              Konfigurasi SMTP
-            </h3>
-            <p style={{ margin: "0 0 16px", fontSize: "12px", color: "#94A3B8" }}>
-              Untuk Gmail, Outlook, SMTP custom, atau mail server hosting.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              {renderGroup("smtp")}
+        <div className="grid grid-cols-2 gap-5">
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Konfigurasi SMTP</h3>
+            <p className="text-[12px] text-slate-400 dark:text-slate-500 mb-4">Untuk Gmail, Outlook, SMTP custom, atau mail server hosting.</p>
+            <div className="flex flex-col gap-4">{renderGroup("smtp")}</div>
+          </Card>
+          <Card className="p-5" style={{ background: "#F8FAFC" }}>
+            <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-3">Panduan SMTP</h3>
+            <div className="text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500 space-y-3">
+              <p><strong>Gmail / Google Workspace:</strong> Gunakan App Password, bukan password akun biasa. Aktifkan 2-Factor Auth dulu, lalu buat App Password di myaccount.google.com.</p>
+              <p><strong>Mail Server Hosting:</strong> Cek detail SMTP dari panel hosting (cPanel/Plesk) — biasanya port 587 (TLS) atau 465 (SSL).</p>
+              <p><strong>Port umum:</strong> 587 (TLS), 465 (SSL), 25 (tanpa enkripsi — tidak disarankan).</p>
             </div>
-          </div>
-          <div className="card" style={{ padding: "20px", background: "#F8FAFC" }}>
-            <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "600", color: "#475569" }}>
-              Panduan SMTP
-            </h3>
-            <div style={{ fontSize: "12px", color: "#64748B", lineHeight: "1.7" }}>
-              <p style={{ margin: "0 0 10px" }}>
-                <strong>Gmail / Google Workspace:</strong> Gunakan App Password, bukan password akun biasa. Aktifkan 2-Factor Auth dulu, lalu buat App Password di myaccount.google.com.
-              </p>
-              <p style={{ margin: "0 0 10px" }}>
-                <strong>Mail Server Hosting:</strong> Cek detail SMTP dari panel hosting (cPanel/Plesk) — biasanya port 587 (TLS) atau 465 (SSL).
-              </p>
-              <p style={{ margin: "0 0 0" }}>
-                <strong>Port umum:</strong> 587 (TLS), 465 (SSL), 25 (tanpa enkripsi — tidak disarankan).
-              </p>
-            </div>
-          </div>
+          </Card>
         </div>
       )}
 
       {activeTab === "mailgun" && (
-        <div className="card" style={{ padding: "20px" }}>
-          <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
-            Konfigurasi Mailgun
-          </h3>
-          <p style={{ margin: "0 0 16px", fontSize: "12px", color: "#94A3B8" }}>
-            Mailing service transaksional. Daftar di <a href="https://www.mailgun.com" target="_blank" rel="noopener noreferrer" style={{ color: "#4CAF50" }}>mailgun.com</a>.
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
-            {renderGroup("mailgun")}
-          </div>
-        </div>
+        <Card className="p-5">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Konfigurasi Mailgun</h3>
+          <p className="text-[12px] text-slate-400 dark:text-slate-500 mb-4">Mailing service transaksional. Daftar di <a href="https://www.mailgun.com" target="_blank" rel="noopener noreferrer" className="text-green-600">mailgun.com</a>.</p>
+          <div className="grid grid-cols-2 gap-4">{renderGroup("mailgun")}</div>
+        </Card>
       )}
 
       {activeTab === "notifikasi" && (
-        <div className="card" style={{ padding: "20px" }}>
-          <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
-            Pengaturan Notifikasi Email
-          </h3>
-          <p style={{ margin: "0 0 16px", fontSize: "12px", color: "#94A3B8" }}>
-            Atur kapan sistem mengirim email notifikasi kepada pihak terkait.
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {renderGroup("notifikasi")}
-          </div>
-        </div>
+        <Card className="p-5">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Pengaturan Notifikasi Email</h3>
+          <p className="text-[12px] text-slate-400 dark:text-slate-500 mb-4">Atur kapan sistem mengirim email notifikasi kepada pihak terkait.</p>
+          <div className="flex flex-col gap-4">{renderGroup("notifikasi")}</div>
+        </Card>
       )}
 
       {toastMsg && <Toast message={toastMsg} type={toastType} />}

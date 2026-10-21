@@ -38,7 +38,7 @@ class ChecklistValidasiController extends Controller
     {
         $items = $request->validate([
             'items' => 'required|array|min:1',
-            'items.*.jenis_dokumen' => 'required|string|in:dfo,sisdmk,aspak,inm,ikp',
+            'items.*.jenis_dokumen' => 'required|string|in:' . implode(',', array_keys(ChecklistValidasi::JENIS_DOKUMEN)),
             'items.*.status_validasi' => 'required|string|in:belum,lengkap,tidak_lengkap',
             'items.*.catatan_admin' => 'nullable|string|max:2000',
         ]);
@@ -62,11 +62,14 @@ class ChecklistValidasiController extends Controller
 
         $allChecklist = ChecklistValidasi::where('siklus_id', $siklus->id)->get();
 
-        // Required document types
-        $requiredTypes = ['dfo', 'sisdmk', 'aspak', 'inm', 'ikp'];
-        $allComplete = collect($requiredTypes)->every(function ($type) use ($allChecklist) {
+        // Hanya 3 dokumen wajib yang mengunci advance tahap. Dokumen
+        // pendukung (SISDMK/ASPAK/INM/IKP) boleh menyusul.
+        $wajib = ChecklistValidasi::JENIS_WAJIB;
+        $wajibBelumLengkap = collect($wajib)->reject(function ($type) use ($allChecklist) {
             return $allChecklist->firstWhere('jenis_dokumen', $type)?->status_validasi === 'lengkap';
-        });
+        })->map(fn ($type) => ChecklistValidasi::JENIS_DOKUMEN[$type] ?? $type)->values();
+
+        $allComplete = $wajibBelumLengkap->isEmpty();
         $hasAny = $allChecklist->isNotEmpty();
 
         $siklus->forceFill([
@@ -87,12 +90,15 @@ class ChecklistValidasiController extends Controller
             $siklus->id
         );
 
+        $message = $allComplete
+            ? 'Dokumen wajib lengkap. Siklus tervalidasi dan bisa dilanjutkan ke Kontrak & Invoicing.'
+            : 'Checklist diperbarui. Dokumen wajib yang belum lengkap: ' . $wajibBelumLengkap->implode(', ') . '.';
+
         return response()->json([
             'data' => $siklus->fresh()->load(['checklist.validator', 'faskes.jenisFaskes']),
             'status_kelengkapan' => $siklus->status_kelengkapan,
-            'message' => $allComplete
-                ? 'Semua dokumen lengkap. Status kelengkapan: Lengkap.'
-                : 'Checklist diperbarui. Status kelengkapan: Belum Lengkap.',
+            'dokumen_wajib_belum_lengkap' => $wajibBelumLengkap,
+            'message' => $message,
         ]);
     }
 

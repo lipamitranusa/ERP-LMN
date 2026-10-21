@@ -1,75 +1,69 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { PageHeader } from "@/components/PageHeader";
+import { StatusBadge } from "@/components/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card } from "@/components/ui/card";
+import { Search } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const EMPTY_FORM = {
-  nama: "",
-  nama_pt: "",
-  alamat: "",
-  kota: "",
-  telepon: "",
-  email: "",
-  website: "",
-  nama_cp: "",
-  telepon_cp: "",
-  deskripsi: "",
-  nama_pejabat: "",
-  jabatan_pejabat: "",
-  npwp: "",
-  kode_kpp: "",
-  alamat_pajak: "",
-  kota_pajak: "",
-  nama_pejabat_pajak: "",
-  jabatan_pejabat_pajak: "",
+  nama: "", nama_pt: "", alamat: "", kota: "", telepon: "", email: "",
+  website: "", nama_cp: "", telepon_cp: "", deskripsi: "",
+  nama_pejabat: "", jabatan_pejabat: "",
+  npwp: "", kode_kpp: "", alamat_pajak: "", kota_pajak: "",
+  nama_pejabat_pajak: "", jabatan_pejabat_pajak: "",
   status: "aktif",
 };
 
-function Section({ title, children }) {
-  return (
-    <div style={{ marginBottom: "20px" }}>
-      <div style={{ fontSize: "11px", fontWeight: "700", color: "#2563EB", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px", paddingBottom: "6px", borderBottom: "1px solid #E2E8F0" }}>
-        {title}
-      </div>
-      {children}
-    </div>
-  );
-}
+const NPWP_REGEX = /^\d{2}\.\d{3}\.\d{3}\.\d{1}-\d{3}\.\d{3}$/;
 
-function Modal({ title, onClose, children, wide }) {
-  return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 200,
-      background: "rgba(15,23,42,0.5)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: "20px",
-    }} onClick={onClose}>
-      <div style={{
-        background: "#fff", borderRadius: "12px", width: "100%", maxWidth: wide ? "780px" : "600px",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.15)", overflow: "hidden",
-        maxHeight: "92vh", display: "flex", flexDirection: "column",
-      }} onClick={e => e.stopPropagation()}>
-        <div style={{
-          padding: "20px 24px", borderBottom: "1px solid #F1F5F9",
-          display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0,
-        }}>
-          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600", color: "#1E293B" }}>{title}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", color: "#94A3B8" }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-        <div style={{ overflowY: "auto" }}>{children}</div>
-      </div>
-    </div>
-  );
-}
+const schema = z.object({
+  nama: z.string().min(1, "Nama lembaga wajib diisi"),
+  nama_pt: z.string().default(""),
+  alamat: z.string().default(""),
+  kota: z.string().default(""),
+  telepon: z.string().default(""),
+  email: z.string().email("Format email tidak valid").or(z.literal("")).default(""),
+  website: z.string().default(""),
+  nama_cp: z.string().default(""),
+  telepon_cp: z.string().default(""),
+  deskripsi: z.string().default(""),
+  nama_pejabat: z.string().default(""),
+  jabatan_pejabat: z.string().default(""),
+  npwp: z.string().regex(NPWP_REGEX, "Format NPWP: 00.000.000.0-000.000").or(z.literal("")).default(""),
+  kode_kpp: z.string().default(""),
+  alamat_pajak: z.string().default(""),
+  kota_pajak: z.string().default(""),
+  nama_pejabat_pajak: z.string().default(""),
+  jabatan_pejabat_pajak: z.string().default(""),
+  status: z.string().default("aktif"),
+});
 
-function FormField({ label, children, required }) {
+function SectionTitle({ children }) {
   return (
-    <div style={{ marginBottom: "14px" }}>
-      <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-        {label}{required && <span style={{ color: "#DC2626", marginLeft: "2px" }}>*</span>}
-      </label>
+    <div className="text-[11px] font-bold text-blue-600 uppercase tracking-wide pb-2 mb-3 border-b border-slate-200 dark:border-slate-700">
       {children}
     </div>
   );
@@ -78,11 +72,9 @@ function FormField({ label, children, required }) {
 export default function MasterLembaga() {
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
-  const [form, setForm] = useState(EMPTY_FORM);
   const [logoFile, setLogoFile] = useState(null);
   const [hapusLogo, setHapusLogo] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [logoError, setLogoError] = useState(false);
   const [search, setSearch] = useState("");
   const fileInputRef = useRef(null);
 
@@ -90,18 +82,34 @@ export default function MasterLembaga() {
   const lembaga = data?.data || [];
   const mutate = useMutateKeys(["lembaga"]);
 
+  // Close modal on successful save
+  useEffect(() => {
+    if (mutate.isSuccess) {
+      mutate.reset();
+      setShowModal(false);
+    }
+  }, [mutate.isSuccess]);
+
+  const { register, handleSubmit, reset, formState: { errors }, getValues } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: EMPTY_FORM,
+  });
+
   function openAdd() {
     setEditTarget(null);
-    setForm(EMPTY_FORM);
     setLogoFile(null);
     setHapusLogo(false);
-    setError("");
+    setLogoError(false);
+    reset(EMPTY_FORM);
     setShowModal(true);
   }
 
   function openEdit(item) {
     setEditTarget(item);
-    setForm({
+    setLogoFile(null);
+    setHapusLogo(false);
+    setLogoError(false);
+    reset({
       nama: item.nama || "",
       nama_pt: item.nama_pt || "",
       alamat: item.alamat || "",
@@ -122,44 +130,20 @@ export default function MasterLembaga() {
       jabatan_pejabat_pajak: item.jabatan_pejabat_pajak || "",
       status: item.status || "aktif",
     });
-    setLogoFile(null);
-    setHapusLogo(false);
-    setError("");
     setShowModal(true);
   }
 
-  function set(key, value) {
-    setForm(f => ({ ...f, [key]: value }));
-  }
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    setSaving(true);
-    try {
-      const fd = new FormData();
-      Object.entries(form).forEach(([k, v]) => fd.append(k, v ?? ""));
-      if (logoFile) fd.append("logo", logoFile);
-      if (hapusLogo) fd.append("hapus_logo", "1");
-
-      await mutate.mutateAsync({
-        path: editTarget ? `/master/lembaga/${editTarget.id}` : "/master/lembaga",
-        method: editTarget ? "PUT" : "POST",
-        body: fd,
-      });
-      setShowModal(false);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function handleLogoChange(e) {
-    const file = e.target.files?.[0] || null;
-    setLogoFile(file);
-    if (file) setHapusLogo(false);
-  }
+  const onSubmit = (data) => {
+    const fd = new FormData();
+    Object.entries(data).forEach(([k, v]) => fd.append(k, v ?? ""));
+    if (logoFile) fd.append("logo", logoFile);
+    if (hapusLogo) fd.append("hapus_logo", "1");
+    mutate.mutate({
+      path: editTarget ? `/master/lembaga/${editTarget.id}` : "/master/lembaga",
+      method: editTarget ? "PUT" : "POST",
+      body: fd,
+    });
+  };
 
   async function handleDelete(item) {
     if (!confirm(`Hapus lembaga "${item.nama}"?`)) return;
@@ -170,283 +154,254 @@ export default function MasterLembaga() {
     }
   }
 
-  return (
-    <div>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Master Data — Lembaga Akreditasi</h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
-            {lembaga.length} lembaga terdaftar
-          </p>
-        </div>
-        <button className="btn btn-primary" onClick={openAdd}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Tambah Lembaga
-        </button>
-      </div>
+  const logoPreview = (!hapusLogo && editTarget?.logo_url) ? editTarget.logo_url : null;
 
-      {/* Search */}
-      <div style={{ marginBottom: "16px" }}>
-        <div style={{ position: "relative", maxWidth: "320px" }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16"
-            style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}>
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input
-            type="text"
-            className="form-input"
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="Master Data — Lembaga Akreditasi"
+        subtitle={`${lembaga.length} lembaga terdaftar`}
+        actions={
+          <Button onClick={openAdd}>
+            <Plus size={16} />
+            Tambah Lembaga
+          </Button>
+        }
+      />
+
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          <Input
             placeholder="Cari nama, nama PT, kota, atau email..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ paddingLeft: "38px" }}
+            className="pl-9"
           />
         </div>
       </div>
 
-      {/* Table */}
-      <div className="card" style={{ padding: 0 }}>
-        <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Nama Lembaga</th>
-                <th>Nama PT</th>
-                <th>Kota</th>
-                <th>Kontak</th>
-                <th>Email / Website</th>
-                <th>Status</th>
-                <th style={{ width: "100px" }}>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
-              ) : lembaga.length === 0 ? (
-                <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>
-                  {search ? "Tidak ada hasil untuk pencarian ini" : "Belum ada lembaga. Klik 'Tambah Lembaga' untuk memulai."}
-                </td></tr>
-              ) : lembaga.map(l => (
-                <tr key={l.id}>
-                  <td style={{ fontWeight: "500", color: "#1E293B", maxWidth: "220px" }}>
-                    <div style={{ fontWeight: "500" }}>{l.nama}</div>
-                    {l.nama_pt && <div style={{ fontSize: "11px", color: "#64748B", marginTop: "2px" }}>PT: {l.nama_pt}</div>}
-                    {l.nama_cp && <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>CP: {l.nama_cp}</div>}
-                  </td>
-                  <td style={{ color: "#64748B", fontSize: "13px" }}>{l.nama_pt || "—"}</td>
-                  <td style={{ color: "#64748B", fontSize: "13px" }}>{l.kota || "—"}</td>
-                  <td style={{ color: "#64748B", fontSize: "13px" }}>{l.telepon || l.telepon_cp || "—"}</td>
-                  <td style={{ color: "#64748B", fontSize: "12px", maxWidth: "180px" }}>
-                    <div>{l.email || "—"}</div>
-                    {l.website && <a href={l.website} target="_blank" rel="noopener" style={{ color: "#4CAF50", fontSize: "11px" }}>{l.website.replace(/^https?:\/\//, "")}</a>}
-                  </td>
-                  <td>
-                    <span style={{
-                      display: "inline-block",
-                      padding: "2px 8px",
-                      borderRadius: "20px",
-                      fontSize: "11px",
-                      fontWeight: "600",
-                      background: l.status === "aktif" ? "#DCFCE7" : "#FEE2E2",
-                      color: l.status === "aktif" ? "#166534" : "#991B1B",
-                    }}>
-                      {l.status === "aktif" ? "Aktif" : "Nonaktif"}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: "4px" }}>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        style={{ color: "#4CAF50", padding: "4px 8px", fontSize: "12px" }}
-                        onClick={() => openEdit(l)}
-                      >
-                        Ubah
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        style={{ color: "#EF4444", padding: "4px 8px", fontSize: "12px" }}
-                        onClick={() => handleDelete(l)}
-                      >
-                        Hapus
-                      </button>
+      <Card className="overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-50 dark:bg-slate-800/50">
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Nama Lembaga</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Nama PT</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Kota</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Kontak</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Email / Website</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Status</TableHead>
+              <TableHead className="w-[100px] text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Aksi</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">Memuat...</TableCell>
+              </TableRow>
+            ) : lembaga.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">
+                  {search ? "Tidak ada hasil" : "Belum ada lembaga."}
+                </TableCell>
+              </TableRow>
+            ) : lembaga.map(l => (
+              <TableRow key={l.id} className="hover:bg-slate-50/50">
+                <TableCell className="font-medium text-slate-900 dark:text-slate-100 text-sm max-w-[200px]">
+                  <div>{l.nama}</div>
+                  {l.nama_pt && <div className="text-[11px] text-slate-400 dark:text-slate-500">PT: {l.nama_pt}</div>}
+                  {l.nama_cp && <div className="text-[11px] text-slate-400 dark:text-slate-500">CP: {l.nama_cp}</div>}
+                </TableCell>
+                <TableCell className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">{l.nama_pt || "—"}</TableCell>
+                <TableCell className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">{l.kota || "—"}</TableCell>
+                <TableCell className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">{l.telepon || l.telepon_cp || "—"}</TableCell>
+                <TableCell className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 max-w-[160px]">
+                  <div>{l.email || "—"}</div>
+                  {l.website && (
+                    <a href={l.website} target="_blank" rel="noopener" className="text-primary text-[11px] hover:underline">
+                      {l.website.replace(/^https?:\/\//, "")}
+                    </a>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <StatusBadge status={l.status === "aktif" ? "lengkap" : "ditolak"} />
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-primary" onClick={() => openEdit(l)}>
+                      <Pencil size={13} />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-red-500" onClick={() => handleDelete(l)}>
+                      <Trash2 size={13} />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
+      <Dialog open={showModal} onOpenChange={v => { setShowModal(v); if (!v) reset(EMPTY_FORM); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editTarget ? "Ubah Lembaga" : "Tambah Lembaga Baru"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+
+            {/* Identitas & Logo */}
+            <div>
+              <SectionTitle>Identitas & Logo</SectionTitle>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-nama">Nama Lembaga <span className="text-red-500">*</span></Label>
+                  <Input id="lem-nama" {...register("nama")} placeholder="cth: Lembaga Akreditasi Mandiri X" />
+                  {errors.nama && <p className="text-xs text-red-500 mt-1">{errors.nama.message}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-pt">Nama PT (Perusahaan)</Label>
+                  <Input id="lem-pt" {...register("nama_pt")} placeholder="cth: PT. Lembaga Akreditasi Indonesia" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Logo</Label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 h-16 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center overflow-hidden shrink-0">
+                      {logoFile ? (
+                        <img src={URL.createObjectURL(logoFile)} alt="logo" className="w-full h-full object-contain" />
+                      ) : logoPreview && !logoError ? (
+                        <img
+                          src={logoPreview}
+                          alt="logo"
+                          className="w-full h-full object-contain"
+                          onError={() => setLogoError(true)}
+                        />
+                      ) : (
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500">Belum ada</span>
+                      )}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modal */}
-      {showModal && (
-        <Modal title={editTarget ? "Ubah Lembaga" : "Tambah Lembaga Baru"} onClose={() => setShowModal(false)} wide>
-          <form onSubmit={handleSubmit} style={{ padding: "24px" }}>
-            {error && (
-              <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: "6px", color: "#991B1B", fontSize: "13px" }}>
-                {error}
-              </div>
-            )}
-
-            {/* === Identitas + Logo === */}
-            <Section title="Identitas & Logo">
-              <FormField label="Nama Lembaga" required>
-                <input className="form-input" value={form.nama} onChange={e => set("nama", e.target.value)} required placeholder="cth: Lembaga Akreditasi Mandiri X" />
-              </FormField>
-
-              <FormField label="Nama PT (Perusahaan)">
-                <input className="form-input" value={form.nama_pt} onChange={e => set("nama_pt", e.target.value)} placeholder="cth: PT. Lembaga Akreditasi Indonesia" />
-              </FormField>
-
-              <FormField label="Logo (untuk kop invoice & slip)">
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <div style={{
-                    width: "64px", height: "64px", borderRadius: "8px",
-                    border: "1px solid #E2E8F0", background: "#F8FAFC",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    overflow: "hidden", flexShrink: 0,
-                  }}>
-                    {logoFile ? (
-                      <img src={URL.createObjectURL(logoFile)} alt="preview" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                    ) : !hapusLogo && editTarget?.logo_url ? (
-                      <img src={editTarget.logo_url} alt="logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                    ) : (
-                      <span style={{ fontSize: "11px", color: "#94A3B8" }}>Belum ada</span>
-                    )}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg,image/jpg,image/svg+xml"
-                      onChange={handleLogoChange}
-                      style={{ display: "none" }}
-                    />
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()}>
-                      {logoFile || (editTarget?.logo_url && !hapusLogo) ? "Ganti Logo" : "Pilih Logo"}
-                    </button>
-                    {(logoFile || (editTarget?.logo_url && !hapusLogo)) && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        style={{ color: "#DC2626", marginLeft: "8px" }}
-                        onClick={() => {
-                          setLogoFile(null);
-                          if (editTarget?.logo_url) setHapusLogo(true);
-                          if (fileInputRef.current) fileInputRef.current.value = "";
-                        }}
-                      >
-                        Hapus
-                      </button>
-                    )}
-                    <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "4px" }}>PNG/JPG/SVG, maks 2MB. Disimpan ke storage publik.</div>
+                    <div className="flex-1">
+                      <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/jpg,image/svg+xml" onChange={e => { setLogoFile(e.target.files?.[0] || null); setLogoError(false); if (e.target.files?.[0]) setHapusLogo(false); }} className="hidden" />
+                      <div className="flex gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                          {logoFile || (logoPreview && !logoError) ? "Ganti Logo" : "Pilih Logo"}
+                        </Button>
+                        {(logoFile || (logoPreview && !logoError)) && (
+                          <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => { setLogoFile(null); setLogoError(false); if (editTarget?.logo_url) setHapusLogo(true); if (fileInputRef.current) fileInputRef.current.value = ""; }}>
+                            Hapus
+                          </Button>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">PNG/JPG/SVG, maks 2MB</p>
+                    </div>
                   </div>
                 </div>
-              </FormField>
-
-              <FormField label="Status">
-                <select className="form-input" value={form.status} onChange={e => set("status", e.target.value)} required>
-                  <option value="aktif">Aktif</option>
-                  <option value="nonaktif">Nonaktif</option>
-                </select>
-              </FormField>
-            </Section>
-
-            {/* === Kontak === */}
-            <Section title="Kontak & Kontak Person">
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-                <FormField label="Alamat">
-                  <input className="form-input" value={form.alamat} onChange={e => set("alamat", e.target.value)} placeholder="Jl. ... No." />
-                </FormField>
-                <FormField label="Kota">
-                  <input className="form-input" value={form.kota} onChange={e => set("kota", e.target.value)} placeholder="cth: Jakarta Selatan" />
-                </FormField>
-                <FormField label="Telepon">
-                  <input className="form-input" value={form.telepon} onChange={e => set("telepon", e.target.value)} placeholder="(021) xxx-xxxx" />
-                </FormField>
-                <FormField label="Email">
-                  <input className="form-input" type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="info@lembaga.ac.id" />
-                </FormField>
-                <FormField label="Website">
-                  <input className="form-input" value={form.website} onChange={e => set("website", e.target.value)} placeholder="https://" />
-                </FormField>
-                <div />
-                <FormField label="Nama CP (Contact Person)">
-                  <input className="form-input" value={form.nama_cp} onChange={e => set("nama_cp", e.target.value)} placeholder="Nama penanggung jawab" />
-                </FormField>
-                <FormField label="Telepon CP">
-                  <input className="form-input" value={form.telepon_cp} onChange={e => set("telepon_cp", e.target.value)} placeholder="08xx-xxxx-xxxx" />
-                </FormField>
-              </div>
-              <FormField label="Deskripsi">
-                <textarea
-                  className="form-input"
-                  rows={3}
-                  value={form.deskripsi}
-                  onChange={e => set("deskripsi", e.target.value)}
-                  placeholder="Deskripsi singkat tentang lembaga..."
-                  style={{ resize: "vertical" }}
-                />
-              </FormField>
-            </Section>
-
-            {/* === Pejabat === */}
-            <Section title="Pejabat Penandatangan">
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-                <FormField label="Nama Pejabat">
-                  <input className="form-input" value={form.nama_pejabat} onChange={e => set("nama_pejabat", e.target.value)} placeholder="cth: Dr. Andi S., M.Kes" />
-                </FormField>
-                <FormField label="Jabatan">
-                  <input className="form-input" value={form.jabatan_pejabat} onChange={e => set("jabatan_pejabat", e.target.value)} placeholder="cth: Ketua Lembaga" />
-                </FormField>
-              </div>
-            </Section>
-
-            {/* === Pajak === */}
-            <Section title="Informasi Pajak (untuk bukti potong PPh 21)">
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-                <FormField label="NPWP Lembaga">
-                  <input
-                    className="form-input"
-                    value={form.npwp}
-                    onChange={e => set("npwp", e.target.value)}
-                    placeholder="00.000.000.0-000.000"
-                    inputMode="numeric"
-                    style={{ fontFamily: "ui-monospace" }}
-                  />
-                </FormField>
-                <FormField label="Kode KPP">
-                  <input className="form-input" value={form.kode_kpp} onChange={e => set("kode_kpp", e.target.value)} placeholder="cth: 001" />
-                </FormField>
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <FormField label="Alamat Pajak">
-                    <input className="form-input" value={form.alamat_pajak} onChange={e => set("alamat_pajak", e.target.value)} placeholder="Alamat yang tercantum di SPT" />
-                  </FormField>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-status">Status</Label>
+                  <select id="lem-status" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register("status")}>
+                    <option value="aktif">Aktif</option>
+                    <option value="nonaktif">Nonaktif</option>
+                  </select>
                 </div>
-                <FormField label="Kota Pajak">
-                  <input className="form-input" value={form.kota_pajak} onChange={e => set("kota_pajak", e.target.value)} placeholder="cth: Jakarta Selatan" />
-                </FormField>
-                <div />
-                <FormField label="Nama Pejabat Pajak">
-                  <input className="form-input" value={form.nama_pejabat_pajak} onChange={e => set("nama_pejabat_pajak", e.target.value)} placeholder="Pejabat yang menandatangani bukti potong" />
-                </FormField>
-                <FormField label="Jabatan Pejabat Pajak">
-                  <input className="form-input" value={form.jabatan_pejabat_pajak} onChange={e => set("jabatan_pejabat_pajak", e.target.value)} placeholder="cth: Bendahara" />
-                </FormField>
               </div>
-            </Section>
-
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "8px", borderTop: "1px solid #F1F5F9", paddingTop: "20px" }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>
-                {saving ? "Menyimpan..." : editTarget ? "Simpan Perubahan" : "Tambah Lembaga"}
-              </button>
             </div>
+
+            {/* Kontak */}
+            <div>
+              <SectionTitle>Kontak & Kontak Person</SectionTitle>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 space-y-1.5">
+                  <Label htmlFor="lem-alamat">Alamat</Label>
+                  <Input id="lem-alamat" {...register("alamat")} placeholder="Jl. ..." />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-kota">Kota</Label>
+                  <Input id="lem-kota" {...register("kota")} placeholder="cth: Jakarta Selatan" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-telepon">Telepon</Label>
+                  <Input id="lem-telepon" {...register("telepon")} placeholder="(021) xxx-xxxx" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-email">Email</Label>
+                  <Input id="lem-email" type="email" {...register("email")} placeholder="info@lembaga.ac.id" />
+                  {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-website">Website</Label>
+                  <Input id="lem-website" {...register("website")} placeholder="https://" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-cp">Nama CP</Label>
+                  <Input id="lem-cp" {...register("nama_cp")} placeholder="Nama penanggung jawab" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-cp-telepon">Telepon CP</Label>
+                  <Input id="lem-cp-telepon" {...register("telepon_cp")} placeholder="08xx-xxxx-xxxx" />
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <Label htmlFor="lem-desc">Deskripsi</Label>
+                  <Textarea id="lem-desc" rows={2} {...register("deskripsi")} placeholder="Deskripsi singkat tentang lembaga..." />
+                </div>
+              </div>
+            </div>
+
+            {/* Pejabat */}
+            <div>
+              <SectionTitle>Pejabat Penandatangan</SectionTitle>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-pejabat">Nama Pejabat</Label>
+                  <Input id="lem-pejabat" {...register("nama_pejabat")} placeholder="cth: Dr. Andi S., M.Kes" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-jabatan-pejabat">Jabatan</Label>
+                  <Input id="lem-jabatan-pejabat" {...register("jabatan_pejabat")} placeholder="cth: Ketua Lembaga" />
+                </div>
+              </div>
+            </div>
+
+            {/* Pajak */}
+            <div>
+              <SectionTitle>Informasi Pajak (untuk bukti potong PPh 21)</SectionTitle>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-npwp">NPWP Lembaga</Label>
+                  <Input id="lem-npwp" {...register("npwp")} placeholder="00.000.000.0-000.000" inputMode="numeric" className="font-mono" />
+                  {errors.npwp && <p className="text-xs text-red-500 mt-1">{errors.npwp.message}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-kode-kpp">Kode KPP</Label>
+                  <Input id="lem-kode-kpp" {...register("kode_kpp")} placeholder="cth: 001" />
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <Label htmlFor="lem-alamat-pajak">Alamat Pajak</Label>
+                  <Input id="lem-alamat-pajak" {...register("alamat_pajak")} placeholder="Alamat yang tercantum di SPT" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-kota-pajak">Kota Pajak</Label>
+                  <Input id="lem-kota-pajak" {...register("kota_pajak")} placeholder="cth: Jakarta Selatan" />
+                </div>
+                <div />
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-nama-pajak">Nama Pejabat Pajak</Label>
+                  <Input id="lem-nama-pajak" {...register("nama_pejabat_pajak")} placeholder="Pejabat yang menandatangani bukti potong" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-jabatan-pajak">Jabatan Pejabat Pajak</Label>
+                  <Input id="lem-jabatan-pajak" {...register("jabatan_pejabat_pajak")} placeholder="cth: Bendahara" />
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 border-t pt-4">
+              <Button type="button" variant="outline" onClick={() => { setShowModal(false); reset(EMPTY_FORM); }}>Batal</Button>
+              <Button type="submit" disabled={mutate.isPending}>
+                {mutate.isPending ? "Menyimpan..." : editTarget ? "Simpan Perubahan" : "Tambah Lembaga"}
+              </Button>
+            </DialogFooter>
           </form>
-        </Modal>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

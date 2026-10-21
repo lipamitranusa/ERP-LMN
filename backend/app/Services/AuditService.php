@@ -23,8 +23,15 @@ class AuditService
         ?Model $after = null,
         ?string $targetType = null,
         ?string $targetId = null,
+        ?string $lembagaId = null,
     ): AuditTrail {
         $aktorId = $this->request?->user()?->id;
+        $resolvedLembagaId = $lembagaId
+            ?? $after?->lembaga_id
+            ?? $before?->lembaga_id
+            // Lembaga is root entity: its own id IS the lembaga_id
+            ?? ($after instanceof \App\Models\Lembaga ? $after->id : null)
+            ?? ($before instanceof \App\Models\Lembaga ? $before->id : null);
 
         return AuditTrail::create([
             'id' => (string) Str::uuid(),
@@ -36,6 +43,7 @@ class AuditService
             'data_sesudah' => $this->normalize($after),
             'ip_address' => $this->request?->ip(),
             'user_agent' => $this->request?->userAgent(),
+            'lembaga_id' => $resolvedLembagaId,
         ]);
     }
 
@@ -43,9 +51,10 @@ class AuditService
      * Convenience helper for action-only audit entries (no before/after model diff).
      * Useful for events like "invoice.paid" where the state change is the action itself.
      */
-    public function log(string $action, string $targetType, string $targetId, array $extra = []): AuditTrail
+    public function log(string $action, string $targetType, string $targetId, array $extra = [], ?string $lembagaId = null): AuditTrail
     {
         $aktorId = $this->request?->user()?->id;
+        $resolvedLembagaId = $lembagaId ?? session('lembaga_id');
 
         return AuditTrail::create([
             'id' => (string) Str::uuid(),
@@ -57,6 +66,7 @@ class AuditService
             'data_sesudah' => null,
             'ip_address' => $this->request?->ip(),
             'user_agent' => $this->request?->userAgent(),
+            'lembaga_id' => $resolvedLembagaId,
         ]);
     }
 

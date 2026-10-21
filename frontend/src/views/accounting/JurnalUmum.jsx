@@ -1,5 +1,19 @@
 import React, { useState } from "react";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -11,87 +25,74 @@ function formatDate(d) {
 }
 
 const JENIS_COLOR = {
-  adjustment:  { bg: "#EFF6FF", color: "#1D4ED8" },
-  pemasukan:   { bg: "#DCFCE7", color: "#166534" },
-  pengeluaran: { bg: "#FEE2E2", color: "#991B1B" },
-  bkm:         { bg: "#F0FDF4", color: "#15803D" },
-  bkk:         { bg: "#FEF2F2", color: "#B91C1C" },
-  kkm:         { bg: "#F0FDF4", color: "#15803D" },
-  kkk:         { bg: "#FEF2F2", color: "#B91C1C" },
+  adjustment:  "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
+  pemasukan:   "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
+  pengeluaran: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  bkm:         "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400",
+  bkk:         "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400",
+  kkm:         "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400",
+  kkk:         "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400",
 };
 
-function Modal({ title, children, onClose, wide }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
-      <div style={{ background: "#fff", borderRadius: "8px", width: wide ? "720px" : "480px", maxHeight: "92vh", overflowY: "auto" }}>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "600" }}>{title}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "#64748B" }}>×</button>
-        </div>
-        <div style={{ padding: "20px" }}>{children}</div>
-      </div>
-    </div>
-  );
-}
+const EMPTY_FORM = { tanggal: new Date().toISOString().split("T")[0], kategori_id: "", keterangan: "" };
 
-function JournalRow({ row, index, coaOptions, onChange, onRemove, errors }) {
-  const update = (field, val) => onChange(index, field, val);
+const schema = z.object({
+  tanggal: z.string().min(1, "Tanggal wajib diisi"),
+  kategori_id: z.string().min(1, "Kategori wajib dipilih"),
+  keterangan: z.string().default(""),
+});
 
+function JournalRow({ row, index, coaOptions, onChange, onRemove }) {
   return (
     <tr>
-      <td style={{ width: "40px", textAlign: "center", fontSize: "12px", color: "#94A3B8" }}>{index + 1}</td>
+      <td style={{ width: "40px", textAlign: "center", fontSize: "12px", color: "hsl(var(--muted-foreground))" }}>{index + 1}</td>
       <td>
         <select
-          className="form-input"
+          className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
           value={row.coa_id || ""}
-          onChange={e => update("coa_id", e.target.value)}
-          style={{ fontSize: "13px" }}
+          onChange={e => onChange(index, "coa_id", e.target.value)}
         >
           <option value="">— Pilih Akun —</option>
           {coaOptions.map(c => (
             <option key={c.id} value={c.id}>{c.kode} — {c.nama}</option>
           ))}
         </select>
-        {errors?.coa_id && <div style={{ fontSize: "11px", color: "#DC2626", marginTop: "2px" }}>{errors.coa_id}</div>}
       </td>
-      <td style={{ width: "160px" }}>
-        <input
-          className="form-input"
+      <td style={{ width: "140px" }}>
+        <Input
           type="number"
           min="0"
           step="0.01"
           value={row.debit || ""}
-          onChange={e => update("debit", e.target.value)}
+          onChange={e => onChange(index, "debit", e.target.value)}
           placeholder="0"
-          style={{ fontSize: "13px", textAlign: "right" }}
+          className="text-xs text-right h-8"
         />
       </td>
-      <td style={{ width: "160px" }}>
-        <input
-          className="form-input"
+      <td style={{ width: "140px" }}>
+        <Input
           type="number"
           min="0"
           step="0.01"
           value={row.kredit || ""}
-          onChange={e => update("kredit", e.target.value)}
+          onChange={e => onChange(index, "kredit", e.target.value)}
           placeholder="0"
-          style={{ fontSize: "13px", textAlign: "right" }}
+          className="text-xs text-right h-8"
         />
       </td>
       <td>
-        <input
-          className="form-input"
+        <Input
           value={row.keterangan || ""}
-          onChange={e => update("keterangan", e.target.value)}
+          onChange={e => onChange(index, "keterangan", e.target.value)}
           placeholder="Keterangan (opsional)"
-          style={{ fontSize: "13px" }}
+          className="text-xs h-8"
         />
       </td>
-      <td style={{ width: "40px", textAlign: "center" }}>
+      <td style={{ width: "36px", textAlign: "center" }}>
         <button
           type="button"
           onClick={() => onRemove(index)}
-          style={{ background: "none", border: "none", cursor: "pointer", color: "#DC2626", fontSize: "16px", padding: "2px" }}
+          className="bg-none border-none cursor-pointer text-red-500 text-base hover:text-red-700 p-1"
         >×</button>
       </td>
     </tr>
@@ -102,9 +103,6 @@ export default function AccountingJurnal() {
   const [showForm, setShowForm] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
   const [filter, setFilter] = useState({ tahun: new Date().getFullYear(), bulan: "" });
-  const [form, setForm] = useState({ tanggal: new Date().toISOString().split("T")[0], kategori_id: "", keterangan: "", details: [{ coa_id: "", debit: "", kredit: "", keterangan: "" }] });
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState("");
 
   const qs = `/keuangan/accounting/jurnal?tahun=${filter.tahun}${filter.bulan ? "&bulan=" + filter.bulan : ""}`;
   const { data: jurnalData, isLoading: loading } = useApi(["jurnal", filter.tahun, filter.bulan], qs);
@@ -116,47 +114,57 @@ export default function AccountingJurnal() {
   const { data: kategoriData } = useApi("kategori-options", "/keuangan/accounting/kategori");
   const kategoriOptions = kategoriData?.data || [];
 
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: EMPTY_FORM,
+  });
+
+  const [details, setDetails] = useState([{ coa_id: "", debit: "", kredit: "", keterangan: "" }]);
+  const watchedKategoriId = watch("kategori_id");
+
+  const totalDebit = details.reduce((s, r) => s + (parseFloat(r.debit) || 0), 0);
+  const totalKredit = details.reduce((s, r) => s + (parseFloat(r.kredit) || 0), 0);
+  const isBalanced = Math.abs(totalDebit - totalKredit) < 0.01;
+
   const submitMutation = useMutateKeys(["jurnal", filter.tahun, filter.bulan], {
     onSuccess: () => setShowForm(false),
-    onError: (err) => { setFormError(err.message); setSaving(false); },
   });
+
   const deleteMutation = useMutateKeys(["jurnal", filter.tahun, filter.bulan], {
     onError: (err) => alert(err.message),
   });
-  const totalDebit = () => form.details.reduce((s, r) => s + (parseFloat(r.debit) || 0), 0);
-  const totalKredit = () => form.details.reduce((s, r) => s + (parseFloat(r.kredit) || 0), 0);
-  const isBalanced = () => Math.abs(totalDebit() - totalKredit()) < 0.01;
 
-  const updateRow = (i, field, val) => {
-    const rows = [...form.details];
+  function updateRow(i, field, val) {
+    const rows = [...details];
     if (field === "debit" && val) rows[i].kredit = "";
     if (field === "kredit" && val) rows[i].debit = "";
     rows[i][field] = val;
-    setForm(f => ({ ...f, details: rows }));
-  };
+    setDetails(rows);
+  }
 
-  const addRow = () => setForm(f => ({ ...f, details: [...f.details, { coa_id: "", debit: "", kredit: "", keterangan: "" }] }));
-  const removeRow = (i) => setForm(f => ({ ...f, details: f.details.filter((_, idx) => idx !== i) }));
+  function addRow() {
+    setDetails(prev => [...prev, { coa_id: "", debit: "", kredit: "", keterangan: "" }]);
+  }
 
-  const openNew = () => {
-    setForm({ tanggal: new Date().toISOString().split("T")[0], kategori_id: kategoriOptions[0]?.id || "", keterangan: "", details: [{ coa_id: "", debit: "", kredit: "", keterangan: "" }] });
-    setFormError(""); setShowForm(true);
-  };
+  function removeRow(i) {
+    setDetails(prev => prev.filter((_, idx) => idx !== i));
+  }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setFormError("");
+  function openNew() {
+    reset({ tanggal: new Date().toISOString().split("T")[0], kategori_id: kategoriOptions[0]?.id || "", keterangan: "" });
+    setDetails([{ coa_id: "", debit: "", kredit: "", keterangan: "" }]);
+    setShowForm(true);
+  }
 
-    if (!form.kategori_id) { setFormError("Kategori wajib dipilih."); return; }
-    const rows = form.details.filter(r => r.coa_id && (parseFloat(r.debit) > 0 || parseFloat(r.kredit) > 0));
-    if (rows.length < 2) { setFormError("Minimal 2 baris dengan akun dan nominal."); return; }
-    if (!isBalanced()) { setFormError("Total Debit harus sama dengan Total Kredit."); return; }
+  const onSubmit = (formData) => {
+    const rows = details.filter(r => r.coa_id && (parseFloat(r.debit) > 0 || parseFloat(r.kredit) > 0));
+    if (rows.length < 2) { alert("Minimal 2 baris dengan akun dan nominal."); return; }
+    if (!isBalanced) { alert("Total Debit harus sama dengan Total Kredit."); return; }
 
-    setSaving(true);
     const fd = new FormData();
-    fd.append("tanggal", form.tanggal);
-    fd.append("kategori_id", form.kategori_id);
-    fd.append("keterangan", form.keterangan);
+    fd.append("tanggal", formData.tanggal);
+    fd.append("kategori_id", formData.kategori_id);
+    fd.append("keterangan", formData.keterangan);
     rows.forEach((r, i) => {
       fd.append(`details[${i}][coa_id]`, r.coa_id);
       fd.append(`details[${i}][debit]`, r.debit || "0");
@@ -166,10 +174,10 @@ export default function AccountingJurnal() {
     submitMutation.mutate({ path: "/keuangan/accounting/jurnal", method: "POST", body: fd });
   };
 
-  const handleDelete = async (j) => {
+  function handleDelete(j) {
     if (!window.confirm(`Hapus jurnal ${j.nomor}?`)) return;
     deleteMutation.mutate({ path: `/keuangan/accounting/jurnal/${j.id}`, method: "DELETE" });
-  };
+  }
 
   const BULAN = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
   const TAHUN_AKIR = new Date().getFullYear() + 1;
@@ -177,33 +185,43 @@ export default function AccountingJurnal() {
 
   return (
     <div>
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div className="mb-6 flex justify-between items-start">
         <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Jurnal Umum</h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>Input transaksi non-survei — debit &amp; kredit harus seimbang.</p>
+          <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Jurnal Umum</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5">Input transaksi non-survei — debit &amp; kredit harus seimbang.</p>
         </div>
-        <button className="btn btn-primary" onClick={openNew} style={{ background: "#2563EB" }}>+ Entri Jurnal Baru</button>
+        <Button onClick={openNew} style={{ background: "#2563EB" }}>+ Entri Jurnal Baru</Button>
       </div>
 
-      <div className="card" style={{ padding: "16px 20px", marginBottom: "16px" }}>
-        <div style={{ display: "flex", gap: "12px", alignItems: "end" }}>
-          <div>
-            <label className="form-label">Tahun</label>
-            <select className="form-input" value={filter.tahun} onChange={e => setFilter(f => ({ ...f, tahun: parseInt(e.target.value) }))}>
+      <Card className="p-4 mb-4">
+        <div className="flex gap-3 items-end">
+          <div className="space-y-1">
+            <Label htmlFor="jurnal-filter-tahun">Tahun</Label>
+            <select
+              id="jurnal-filter-tahun"
+              className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+              value={filter.tahun}
+              onChange={e => setFilter(f => ({ ...f, tahun: parseInt(e.target.value) }))}
+            >
               {tahunOptions.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-          <div>
-            <label className="form-label">Bulan</label>
-            <select className="form-input" value={filter.bulan} onChange={e => setFilter(f => ({ ...f, bulan: e.target.value }))}>
+          <div className="space-y-1">
+            <Label htmlFor="jurnal-filter-bulan">Bulan</Label>
+            <select
+              id="jurnal-filter-bulan"
+              className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+              value={filter.bulan}
+              onChange={e => setFilter(f => ({ ...f, bulan: e.target.value }))}
+            >
               <option value="">Semua</option>
               {BULAN.map((b, i) => <option key={i+1} value={String(i+1).padStart(2,"0")}>{b}</option>)}
             </select>
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div className="card" style={{ padding: 0 }}>
+      <Card className="overflow-hidden">
         <table className="data-table">
           <thead>
             <tr>
@@ -218,138 +236,154 @@ export default function AccountingJurnal() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "32px" }}>Memuat...</td></tr>
+              <tr><td colSpan="7" style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: "32px" }}>Memuat...</td></tr>
             ) : jurnals.length === 0 ? (
-              <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "32px" }}>Belum ada jurnal. Klik "Entri Jurnal Baru" untuk mulai.</td></tr>
+              <tr><td colSpan="7" style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: "32px" }}>Belum ada jurnal. Klik "Entri Jurnal Baru" untuk mulai.</td></tr>
             ) : jurnals.map(j => (
               <tr key={j.id}>
                 <td>
-                  <div style={{ fontFamily: "ui-monospace", fontSize: "12px", fontWeight: "700", color: "#1E293B" }}>{j.nomor}</div>
+                  <div style={{ fontFamily: "ui-monospace", fontSize: "12px", fontWeight: "700", color: "hsl(var(--foreground))" }}>{j.nomor}</div>
                   {j.kategori?.jenis && (
-                    <span style={{ display: "inline-block", marginTop: "2px", padding: "1px 6px", borderRadius: "9999px", fontSize: "10px", fontWeight: "700", background: JENIS_COLOR[j.kategori.jenis]?.bg || "#F1F5F9", color: JENIS_COLOR[j.kategori.jenis]?.color || "#64748B", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    <span className={`inline-block mt-0.5 px-2 py-px rounded-full text-[10px] font-bold uppercase tracking-wider ${JENIS_COLOR[j.kategori?.jenis] || "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:text-slate-500"}`}>
                       {j.kategori.jenis.toUpperCase()}
                     </span>
                   )}
                 </td>
-                <td style={{ fontSize: "13px" }}>{formatDate(j.tanggal)}</td>
-                <td>
-                  <div style={{ fontSize: "13px" }}>{j.kategori?.nama || "-"}</div>
-                </td>
-                <td style={{ fontSize: "13px", color: "#475569" }}>{j.keterangan}</td>
-                <td style={{ fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{formatRp(j.total_debit)}</td>
-                <td style={{ fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{formatRp(j.total_kredit)}</td>
+                <td className="text-sm">{formatDate(j.tanggal)}</td>
+                <td className="text-sm">{j.kategori?.nama || "-"}</td>
+                <td className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">{j.keterangan}</td>
+                <td className="text-sm text-right font-mono">{formatRp(j.total_debit)}</td>
+                <td className="text-sm text-right font-mono">{formatRp(j.total_kredit)}</td>
                 <td style={{ textAlign: "center" }}>
-                  <button className="btn btn-ghost" style={{ fontSize: "11px", padding: "2px 8px", color: "#2563EB" }} onClick={() => setShowDetail(j)}>Detail</button>
-                  <button className="btn btn-ghost" style={{ fontSize: "11px", padding: "2px 8px", color: "#DC2626" }} onClick={() => handleDelete(j)}>Hapus</button>
+                  <Button variant="ghost" size="sm" onClick={() => setShowDetail(j)} className="text-xs h-7 px-2" style={{ color: "oklch(0.65 0.20 255)" }}>Detail</Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(j)} className="text-xs h-7 px-2" style={{ color: "#DC2626" }}>Hapus</Button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      </Card>
 
-      {showForm && (
-        <Modal title="Entri Jurnal Umum" onClose={() => setShowForm(false)} wide>
-          <form onSubmit={handleSubmit}>
-            {formError && <div style={{ background: "#FEE2E2", color: "#991B1B", padding: "8px 12px", borderRadius: "4px", marginBottom: "12px", fontSize: "13px" }}>{formError}</div>}
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-              <div>
-                <label className="form-label">Tanggal *</label>
-                <input className="form-input" type="date" value={form.tanggal} onChange={e => setForm(f => ({ ...f, tanggal: e.target.value }))} required />
+      <Dialog open={showForm} onOpenChange={v => { if (!submitMutation.isPending) setShowForm(v); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Entri Jurnal Umum</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="ju-tanggal">Tanggal *</Label>
+                <Input id="ju-tanggal" type="date" {...register("tanggal")} />
+                {errors.tanggal && <p className="text-xs text-red-500 mt-1">{errors.tanggal.message}</p>}
               </div>
-              <div>
-                <label className="form-label">Kategori *</label>
-                <select className="form-input" value={form.kategori_id} onChange={e => setForm(f => ({ ...f, kategori_id: e.target.value }))}>
+              <div className="space-y-1.5">
+                <Label htmlFor="ju-kategori">Kategori *</Label>
+                <select
+                  id="ju-kategori"
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+                  {...register("kategori_id")}
+                >
                   <option value="">— Pilih —</option>
                   {kategoriOptions.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
                 </select>
+                {errors.kategori_id && <p className="text-xs text-red-500 mt-1">{errors.kategori_id.message}</p>}
               </div>
-              <div>
-                <label className="form-label">Keterangan</label>
-                <input className="form-input" value={form.keterangan} onChange={e => setForm(f => ({ ...f, keterangan: e.target.value }))} placeholder="Uraian transaksi" />
+              <div className="space-y-1.5">
+                <Label htmlFor="ju-keterangan">Keterangan</Label>
+                <Input id="ju-keterangan" {...register("keterangan")} placeholder="Uraian transaksi" />
               </div>
             </div>
 
-            <div style={{ marginBottom: "8px", fontSize: "12px", fontWeight: "600", color: "#64748B" }}>Rincian Jurnal</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "8px" }}>
+            <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500">Rincian Jurnal</div>
+            <div className="overflow-x-auto">
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "var(--muted)" }}>
+                    <th style={{ padding: "6px 8px", fontSize: "11px", textAlign: "center", borderBottom: "1px solid hsl(var(--border))", width: "40px" }}>#</th>
+                    <th style={{ padding: "6px 8px", fontSize: "11px", borderBottom: "1px solid hsl(var(--border))" }}>Akun Perkiraan</th>
+                    <th style={{ padding: "6px 8px", fontSize: "11px", textAlign: "right", borderBottom: "1px solid hsl(var(--border))", width: "140px" }}>Debit</th>
+                    <th style={{ padding: "6px 8px", fontSize: "11px", textAlign: "right", borderBottom: "1px solid hsl(var(--border))", width: "140px" }}>Kredit</th>
+                    <th style={{ padding: "6px 8px", fontSize: "11px", borderBottom: "1px solid hsl(var(--border))" }}>Keterangan</th>
+                    <th style={{ padding: "6px 8px", fontSize: "11px", borderBottom: "1px solid hsl(var(--border))", width: "36px" }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {details.map((row, i) => (
+                    <JournalRow key={i} row={row} index={i} coaOptions={coaOptions} onChange={updateRow} onRemove={removeRow} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <Button type="button" variant="outline" size="sm" onClick={addRow} style={{ width: "100%", borderStyle: "dashed" }}>
+              + Tambah Baris
+            </Button>
+
+            <div className="flex gap-3 justify-end p-3 rounded-md" style={{ background: isBalanced ? "#F0FDF4" : "#FEF2F2", border: "1px solid hsl(var(--border))" }}>
+              <div>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">Total Debit: </span>
+                <span className="font-mono text-sm font-bold">{formatRp(totalDebit)}</span>
+              </div>
+              <div>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">Total Kredit: </span>
+                <span className="font-mono text-sm font-bold">{formatRp(totalKredit)}</span>
+              </div>
+              <div>
+                <span className="text-[11px]" style={{ color: isBalanced ? "#166534" : "#991B1B" }}>{isBalanced ? "✓ Seimbang" : "✗ Tidak Seimbang"}</span>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 border-t pt-4">
+              <Button type="button" variant="outline" onClick={() => setShowForm(false)} disabled={submitMutation.isPending}>Batal</Button>
+              <Button type="submit" disabled={submitMutation.isPending}>
+                {submitMutation.isPending ? "Menyimpan..." : "Simpan Jurnal"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {showDetail && (
+        <Dialog open={!!showDetail} onOpenChange={v => !v && setShowDetail(null)}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Jurnal {showDetail.nomor}</DialogTitle>
+            </DialogHeader>
+            <div className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-4">
+              <strong>Tanggal:</strong> {formatDate(showDetail.tanggal)} &nbsp;|&nbsp;
+              <strong>Kategori:</strong> {showDetail.kategori?.nama || "-"} &nbsp;|&nbsp;
+              <strong>Keterangan:</strong> {showDetail.keterangan || "-"}
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ background: "#F8FAFC" }}>
-                  <th style={{ padding: "6px 8px", fontSize: "11px", textAlign: "center", borderBottom: "1px solid #E2E8F0", width: "40px" }}>#</th>
-                  <th style={{ padding: "6px 8px", fontSize: "11px", borderBottom: "1px solid #E2E8F0" }}>Akun Perkiraan</th>
-                  <th style={{ padding: "6px 8px", fontSize: "11px", textAlign: "right", borderBottom: "1px solid #E2E8F0", width: "120px" }}>Debit</th>
-                  <th style={{ padding: "6px 8px", fontSize: "11px", textAlign: "right", borderBottom: "1px solid #E2E8F0", width: "120px" }}>Kredit</th>
-                  <th style={{ padding: "6px 8px", fontSize: "11px", borderBottom: "1px solid #E2E8F0" }}>Keterangan</th>
-                  <th style={{ padding: "6px 8px", fontSize: "11px", borderBottom: "1px solid #E2E8F0", width: "36px" }}></th>
+                <tr style={{ background: "var(--muted)" }}>
+                  <th style={{ padding: "6px 8px", fontSize: "11px", borderBottom: "1px solid hsl(var(--border))" }}>Kode</th>
+                  <th style={{ padding: "6px 8px", fontSize: "11px", borderBottom: "1px solid hsl(var(--border))" }}>Akun</th>
+                  <th style={{ padding: "6px 8px", fontSize: "11px", textAlign: "right", borderBottom: "1px solid hsl(var(--border))" }}>Debit</th>
+                  <th style={{ padding: "6px 8px", fontSize: "11px", textAlign: "right", borderBottom: "1px solid hsl(var(--border))" }}>Kredit</th>
+                  <th style={{ padding: "6px 8px", fontSize: "11px", borderBottom: "1px solid hsl(var(--border))" }}>Keterangan</th>
                 </tr>
               </thead>
               <tbody>
-                {form.details.map((row, i) => (
-                  <JournalRow key={i} row={row} index={i} coaOptions={coaOptions} onChange={updateRow} onRemove={removeRow} />
+                {showDetail.details?.map((d, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: "6px 8px", fontSize: "13px", fontFamily: "ui-monospace" }}>{d.coa?.kode}</td>
+                    <td style={{ padding: "6px 8px", fontSize: "13px" }}>{d.coa?.nama}</td>
+                    <td style={{ padding: "6px 8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{parseFloat(d.debit) > 0 ? formatRp(d.debit) : ""}</td>
+                    <td style={{ padding: "6px 8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{parseFloat(d.kredit) > 0 ? formatRp(d.kredit) : ""}</td>
+                    <td style={{ padding: "6px 8px", fontSize: "13px", color: "hsl(var(--muted-foreground))" }}>{d.keterangan || "-"}</td>
+                  </tr>
                 ))}
+                <tr style={{ background: "var(--muted)", fontWeight: "600" }}>
+                  <td colSpan="2" style={{ padding: "8px", fontSize: "12px", textAlign: "right" }}>TOTAL</td>
+                  <td style={{ padding: "8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{formatRp(showDetail.total_debit)}</td>
+                  <td style={{ padding: "8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{formatRp(showDetail.total_kredit)}</td>
+                  <td></td>
+                </tr>
               </tbody>
             </table>
-
-            <button type="button" onClick={addRow} style={{ background: "none", border: "1px dashed #CBD5E1", borderRadius: "4px", padding: "6px 12px", fontSize: "12px", color: "#64748B", cursor: "pointer", width: "100%", marginBottom: "12px" }}>+ Tambah Baris</button>
-
-            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", marginBottom: "16px", padding: "10px 12px", background: isBalanced() ? "#F0FDF4" : "#FEF2F2", borderRadius: "4px" }}>
-              <div>
-                <span style={{ fontSize: "11px", color: "#64748B" }}>Total Debit: </span>
-                <span style={{ fontFamily: "ui-monospace", fontSize: "14px", fontWeight: "700" }}>{formatRp(totalDebit())}</span>
-              </div>
-              <div>
-                <span style={{ fontSize: "11px", color: "#64748B" }}>Total Kredit: </span>
-                <span style={{ fontFamily: "ui-monospace", fontSize: "14px", fontWeight: "700" }}>{formatRp(totalKredit())}</span>
-              </div>
-              <div>
-                <span style={{ fontSize: "11px", color: isBalanced() ? "#166534" : "#991B1B" }}>{isBalanced() ? "✓ Seimbang" : "✗ Tidak Seimbang"}</span>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Batal</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Menyimpan..." : "Simpan Jurnal"}</button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
-      {showDetail && (
-        <Modal title={`Jurnal ${showDetail.nomor}`} onClose={() => setShowDetail(null)} wide>
-          <div style={{ marginBottom: "12px", fontSize: "13px", color: "#475569" }}>
-            <strong>Tanggal:</strong> {formatDate(showDetail.tanggal)} &nbsp;|&nbsp;
-            <strong>Kategori:</strong> {showDetail.kategori?.nama || "-"} &nbsp;|&nbsp;
-            <strong>Keterangan:</strong> {showDetail.keterangan || "-"}
-          </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ background: "#F8FAFC" }}>
-                <th style={{ padding: "6px 8px", fontSize: "11px", borderBottom: "1px solid #E2E8F0" }}>Kode</th>
-                <th style={{ padding: "6px 8px", fontSize: "11px", borderBottom: "1px solid #E2E8F0" }}>Akun</th>
-                <th style={{ padding: "6px 8px", fontSize: "11px", textAlign: "right", borderBottom: "1px solid #E2E8F0" }}>Debit</th>
-                <th style={{ padding: "6px 8px", fontSize: "11px", textAlign: "right", borderBottom: "1px solid #E2E8F0" }}>Kredit</th>
-                <th style={{ padding: "6px 8px", fontSize: "11px", borderBottom: "1px solid #E2E8F0" }}>Keterangan</th>
-              </tr>
-            </thead>
-            <tbody>
-              {showDetail.details?.map((d, i) => (
-                <tr key={i}>
-                  <td style={{ padding: "6px 8px", fontSize: "13px", fontFamily: "ui-monospace" }}>{d.coa?.kode}</td>
-                  <td style={{ padding: "6px 8px", fontSize: "13px" }}>{d.coa?.nama}</td>
-                  <td style={{ padding: "6px 8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{parseFloat(d.debit) > 0 ? formatRp(d.debit) : ""}</td>
-                  <td style={{ padding: "6px 8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{parseFloat(d.kredit) > 0 ? formatRp(d.kredit) : ""}</td>
-                  <td style={{ padding: "6px 8px", fontSize: "13px", color: "#64748B" }}>{d.keterangan || "-"}</td>
-                </tr>
-              ))}
-              <tr style={{ background: "#F8FAFC", fontWeight: "600" }}>
-                <td colSpan="2" style={{ padding: "8px", fontSize: "12px", textAlign: "right" }}>TOTAL</td>
-                <td style={{ padding: "8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{formatRp(showDetail.total_debit)}</td>
-                <td style={{ padding: "8px", fontSize: "13px", textAlign: "right", fontFamily: "ui-monospace" }}>{formatRp(showDetail.total_kredit)}</td>
-                <td></td>
-              </tr>
-            </tbody>
-          </table>
-        </Modal>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

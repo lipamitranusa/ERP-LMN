@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useApi } from "@/hooks/useApi";
+import { Button } from "@/components/ui/button";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -312,9 +313,9 @@ export default function SlipHonorarium() {
             ))}
           </select>
         </div>
-        <button onClick={() => {}} className="btn btn-primary" style={{ height: "38px" }}>
+        <Button onClick={() => {}}>
           Lihat Data
-        </button>
+        </Button>
       </div>
 
       {error?.message && (

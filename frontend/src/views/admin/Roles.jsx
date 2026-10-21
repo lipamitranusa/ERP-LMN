@@ -1,5 +1,34 @@
 import React, { useState } from "react";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { PageHeader } from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Pencil, Trash2 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+const schema = z.object({
+  nama_role: z.string().min(1, "Nama role wajib diisi"),
+});
 
 const ACTION_COLORS = {
   Lihat: { bg: "#DBEAFE", text: "#1E40AF" },
@@ -14,59 +43,51 @@ const ACTION_COLORS = {
 function PrivBadge({ text }) {
   const c = ACTION_COLORS[text] || { bg: "#F1F5F9", text: "#475569" };
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center",
-      padding: "2px 7px", borderRadius: "9999px",
-      fontSize: "10px", fontWeight: "600",
-      background: c.bg, color: c.text,
-    }}>
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+      style={{ background: c.bg, color: c.text }}
+    >
       {text}
     </span>
   );
 }
 
-function Roles() {
+export default function Roles() {
   const [showModal, setShowModal] = useState(false);
   const [editData, setEditData] = useState(null);
-  const [form, setForm] = useState({ nama_role: "" });
-  const [saving, setSaving] = useState(false);
 
   const { data, isLoading, error } = useApi("roles", "/admin/roles");
   const roles = data?.data || [];
   const mutate = useMutateKeys(["roles"]);
 
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: { nama_role: "" },
+  });
+
   function openCreate() {
     setEditData(null);
-    setForm({ nama_role: "" });
+    reset({ nama_role: "" });
     setShowModal(true);
   }
 
   function openEdit(role) {
     setEditData(role);
-    setForm({ nama_role: role.nama_role });
+    reset({ nama_role: role.nama_role });
     setShowModal(true);
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    if (!form.nama_role.trim()) return;
-    setSaving(true);
-    try {
-      await mutate.mutateAsync({
-        path: editData ? `/admin/roles/${editData.id}` : "/admin/roles",
-        method: editData ? "PUT" : "POST",
-        body: form,
-      });
-      setShowModal(false);
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
+  const onSubmit = (formData) => {
+    mutate.mutate({
+      path: editData ? `/admin/roles/${editData.id}` : "/admin/roles",
+      method: editData ? "PUT" : "POST",
+      body: formData,
+      onSuccess: () => setShowModal(false),
+    });
+  };
 
   async function handleDelete(role) {
-    if (!confirm(`Hapus role "${role.nama_role}"? Tindakan ini tidak bisa dibatalkan.`)) return;
+    if (!window.confirm(`Hapus role "${role.nama_role}"? Tindakan ini tidak bisa dibatalkan.`)) return;
     try {
       await mutate.mutateAsync({ path: `/admin/roles/${role.id}`, method: "DELETE" });
     } catch (err) {
@@ -75,147 +96,144 @@ function Roles() {
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Role & Hak Akses</h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
-            {roles.length} role — 6 role bawaan (default) tidak bisa dihapus.
-          </p>
-        </div>
-        <button className="btn btn-primary" onClick={openCreate}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Tambah Role
-        </button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Role & Hak Akses"
+        subtitle={`${roles.length} role — 6 role bawaan (default) tidak bisa dihapus.`}
+        actions={
+          <Button onClick={openCreate}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Tambah Role
+          </Button>
+        }
+      />
 
-      {/* Table */}
-      <div className="card" style={{ padding: 0 }}>
-        <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th style={{ width: "36px" }}>#</th>
-                <th>Nama Role</th>
-                <th style={{ width: "100px" }}>Tipe</th>
-                <th>Privilege ({">"} 0)</th>
-                <th style={{ width: "160px" }}>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr><td colSpan="5" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>Memuat...</td></tr>
-              ) : error ? (
-                <tr><td colSpan="5" style={{ textAlign: "center", color: "#DC2626", padding: "32px 16px", fontSize: "13px" }}>{error?.message || "Terjadi kesalahan"}</td></tr>
-              ) : roles.length === 0 ? (
-                <tr><td colSpan="5" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>Belum ada role.</td></tr>
-              ) : roles.map((r, i) => (
-                <tr key={r.id}>
-                  <td style={{ color: "#94A3B8", fontSize: "12px" }}>{i + 1}</td>
-                  <td>
-                    <div style={{ fontWeight: "600", color: "#1E293B" }}>{r.nama_role}</div>
-                    <div style={{ fontSize: "11px", color: "#94A3B8", fontFamily: "ui-monospace, monospace" }}>{r.id}</div>
-                  </td>
-                  <td>
-                    {r.is_default ? (
-                      <span style={{ padding: "2px 8px", borderRadius: "9999px", fontSize: "11px", fontWeight: "600", background: "#F1F5F9", color: "#475569" }}>
-                        Default
-                      </span>
-                    ) : (
-                      <span style={{ padding: "2px 8px", borderRadius: "9999px", fontSize: "11px", fontWeight: "600", background: "#EDE9F6", color: "#5E35B1" }}>
-                        Kustom
+      <Card className="overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-50 dark:bg-slate-800/50">
+              <TableHead className="w-10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">#</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Nama Role</TableHead>
+              <TableHead className="w-24 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Tipe</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Privilege</TableHead>
+              <TableHead className="w-36 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Aksi</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell><div className="h-4 w-6 rounded animate-pulse bg-slate-200" /></TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      <div className="h-4 w-24 rounded animate-pulse bg-slate-200" />
+                      <div className="h-3 w-16 rounded animate-pulse bg-slate-200" />
+                    </div>
+                  </TableCell>
+                  <TableCell><div className="h-4 w-14 rounded animate-pulse bg-slate-200" /></TableCell>
+                  <TableCell><div className="h-4 w-32 rounded animate-pulse bg-slate-200" /></TableCell>
+                  <TableCell><div className="h-4 w-20 rounded animate-pulse bg-slate-200" /></TableCell>
+                </TableRow>
+              ))
+            ) : error ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-8 text-red-600 text-sm">
+                  {error?.message || "Terjadi kesalahan"}
+                </TableCell>
+              </TableRow>
+            ) : roles.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">
+                  Belum ada role.
+                </TableCell>
+              </TableRow>
+            ) : roles.map((r, i) => (
+              <TableRow key={r.id} className="hover:bg-slate-50/50">
+                <TableCell className="text-slate-400 dark:text-slate-500 text-xs font-medium">{i + 1}</TableCell>
+                <TableCell>
+                  <div className="font-semibold text-slate-900 dark:text-slate-100 text-sm">{r.nama_role}</div>
+                  <div className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">{r.id}</div>
+                </TableCell>
+                <TableCell>
+                  {r.is_default ? (
+                    <Badge variant="secondary" className="text-[11px] font-semibold">Default</Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-[11px] font-semibold bg-purple-50 text-purple-700 border-purple-100">Kustom</Badge>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1 max-w-md">
+                    {(r.privileges || []).length === 0 ? (
+                      <span className="text-xs text-slate-300 dark:text-slate-500">—</span>
+                    ) : (r.privileges || []).map((p, j) => (
+                      <PrivBadge key={j} text={p?.split("/")[1] || p} />
+                    ))}
+                    {(r.privileges || []).length > 0 && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                        {(r.privileges || []).length}
                       </span>
                     )}
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "3px", maxWidth: "420px" }}>
-                      {(r.privileges || []).length === 0 ? (
-                        <span style={{ fontSize: "12px", color: "#CBD5E1" }}>—</span>
-                      ) : (r.privileges || []).map((p, j) => (
-                        <PrivBadge key={j} text={p?.split("/")[1] || p} />
-                      ))}
-                      {(r.privileges || []).length > 0 && (
-                        <span style={{ padding: "2px 7px", borderRadius: "9999px", fontSize: "10px", fontWeight: "600", background: "#F1F5F9", color: "#64748B" }}>
-                          {(r.privileges || []).length}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: "4px" }}>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        style={{ color: "#4CAF50", padding: "4px 8px", fontSize: "12px" }}
-                        onClick={() => openEdit(r)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        style={{ color: "#DC2626", padding: "4px 8px", fontSize: "12px" }}
-                        onClick={() => handleDelete(r)}
-                        disabled={r.is_default}
-                        title={r.is_default ? "Role default tidak bisa dihapus" : ""}
-                      >
-                        Hapus
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-primary"
+                      onClick={() => openEdit(r)}
+                    >
+                      <Pencil size={13} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-red-600"
+                      onClick={() => handleDelete(r)}
+                      disabled={r.is_default}
+                      title={r.is_default ? "Role default tidak bisa dihapus" : ""}
+                    >
+                      <Trash2 size={13} />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
 
-      {/* Create/Edit modal */}
-      {showModal && (
-        <div
-          style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
-          onClick={() => setShowModal(false)}
-        >
-          <div
-            style={{ background: "#fff", borderRadius: "12px", width: "100%", maxWidth: "440px", boxShadow: "0 20px 60px rgba(0,0,0,0.15)", overflow: "hidden" }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ padding: "20px 24px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600", color: "#1E293B" }}>
-                {editData ? "Edit Role" : "Tambah Role"}
-              </h3>
-              <button className="btn btn-ghost" style={{ padding: "4px", color: "#94A3B8" }} onClick={() => setShowModal(false)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
+      <Dialog open={showModal} onOpenChange={v => { if (!mutate.isPending) setShowModal(v); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editData ? "Edit Role" : "Tambah Role"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="nama-role">Nama Role *</Label>
+              <Input
+                id="nama-role"
+                {...register("nama_role")}
+                placeholder="cth: Admin Lembaga"
+                autoFocus
+              />
+              {errors.nama_role && (
+                <p className="text-xs text-red-600">{errors.nama_role.message}</p>
+              )}
             </div>
-            <form onSubmit={handleSubmit} style={{ padding: "24px" }}>
-              <div style={{ marginBottom: "20px" }}>
-                <label className="form-label">Nama Role</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={form.nama_role}
-                  onChange={e => setForm({ ...form, nama_role: e.target.value })}
-                  required
-                  placeholder="cth: Admin Lembaga"
-                  autoFocus
-                />
-              </div>
-              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? "Menyimpan..." : (editData ? "Simpan" : "Tambah")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setShowModal(false)} disabled={mutate.isPending}>
+                Batal
+              </Button>
+              <Button type="submit" disabled={mutate.isPending}>
+                {mutate.isPending ? "Menyimpan..." : editData ? "Simpan" : "Tambah"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
-export default Roles;

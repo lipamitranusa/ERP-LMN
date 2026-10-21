@@ -1,32 +1,72 @@
 import React, { useState, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import ImportModal from "@/components/ImportModal";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
 import { useLembaga } from "@/contexts/LembagaContext";
+import { PageHeader } from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Search, Plus, Upload, Pencil, Trash2, Eye, EyeOff } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
-const EMPTY = {
-  nomor_induk_surveior: "",
-  nama: "",
-  no_wa: "",
-  peran: "surveior",
-  jenis: "TKPP",
-  status_aktif: "Aktif",
+const schema = z.object({
+  nomor_induk_surveior: z.string().min(1, "Nomor induk wajib diisi"),
+  nama: z.string().min(1, "Nama wajib diisi"),
+  no_wa: z.string().default(""),
+  peran: z.string().default("surveior"),
+  jenis: z.string().default("TKPP"),
+  status_aktif: z.string().default("Aktif"),
+  batas_penugasan_per_periode: z.string().default(""),
+  npwp: z.string().default(""),
+  nik: z.string().default(""),
+  nama_pajak: z.string().default(""),
+  kode_objek_pajak: z.string().default("21-100-01"),
+  status_ptkp: z.string().default("TK/0"),
+  kode_kpp: z.string().default(""),
+  no_rekening: z.string().default(""),
+  nama_bank: z.string().default(""),
+  atas_nama_rekening: z.string().default(""),
+  lembaga_id: z.string().min(1, "Lembaga wajib dipilih"),
+  buat_akun: z.boolean().default(false),
+  username: z.string().default(""),
+  email: z.string().default(""),
+  password: z.string().default(""),
+  role_id: z.string().default(""),
+}).refine(d => d.peran !== "verifikator" ? d.jenis : true, {
+  message: "Jenis wajib dipilih untuk surveior",
+  path: ["jenis"],
+}).refine(d => !d.buat_akun || d.password.length >= 8, {
+  message: "Password minimal 8 karakter",
+  path: ["password"],
+});
+
+const EMPTY_FORM = {
+  nomor_induk_surveior: "", nama: "", no_wa: "",
+  peran: "surveior", jenis: "TKPP", status_aktif: "Aktif",
   batas_penugasan_per_periode: "",
-  npwp: "",
-  nik: "",
-  nama_pajak: "",
-  kode_objek_pajak: "21-100-01",
-  status_ptkp: "TK/0",
-  kode_kpp: "",
-  no_rekening: "",
-  nama_bank: "",
-  atas_nama_rekening: "",
-  lembaga_id: "",
-  buat_akun: false,
-  username: "",
-  email: "",
-  password: "",
-  role_id: "",
+  npwp: "", nik: "", nama_pajak: "",
+  kode_objek_pajak: "21-100-01", status_ptkp: "TK/0", kode_kpp: "",
+  no_rekening: "", nama_bank: "", atas_nama_rekening: "",
+  lembaga_id: "", buat_akun: false, username: "", email: "", password: "", role_id: "",
 };
 
 const PTKP_OPTIONS = [
@@ -40,134 +80,48 @@ const PTKP_OPTIONS = [
   { value: "K/3", label: "K/3 — Kawin, 3 tanggungan" },
 ];
 
-function Modal({ title, onClose, children }) {
-  return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 200,
-      background: "rgba(15,23,42,0.5)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: "20px",
-    }} onClick={onClose}>
-      <div style={{
-        background: "#fff", borderRadius: "12px", width: "100%", maxWidth: "640px",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.15)", overflow: "hidden", maxHeight: "90vh", overflowY: "auto",
-      }} onClick={e => e.stopPropagation()}>
-        <div style={{ padding: "20px 24px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
-          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600", color: "#1E293B" }}>{title}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", color: "#94A3B8" }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function ToggleSwitch({ checked, onChange, label }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
-      onClick={() => onChange(!checked)}>
-      <div style={{
-        width: "44px", height: "24px", borderRadius: "12px",
-        background: checked ? "#4CAF50" : "#CBD5E1",
-        position: "relative", transition: "background 0.2s", cursor: "pointer", flexShrink: 0,
-      }}>
-        <div style={{
-          width: "20px", height: "20px", borderRadius: "50%", background: "#fff",
-          position: "absolute", top: "2px",
-          left: checked ? "22px" : "2px",
-          transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-        }} />
-      </div>
-      <span style={{ fontSize: "13px", fontWeight: "500", color: "#374151" }}>{label}</span>
-    </div>
-  );
-}
-
-function PasswordField({ value, onChange, label, placeholder = "••••••••" }) {
-  const [show, setShow] = useState(false);
-  return (
-    <div>
-      <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-        {label}
-      </label>
-      <div style={{ position: "relative" }}>
-        <input
-          className="form-input"
-          type={show ? "text" : "password"}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
-          style={{ paddingRight: "44px" }}
-        />
-        <button
-          type="button"
-          onClick={() => setShow(s => !s)}
-          style={{
-            position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)",
-            background: "none", border: "none", cursor: "pointer", color: "#94A3B8", fontSize: "11px",
-            padding: "2px 4px",
-          }}
-        >
-          {show ? "Sembunyikan" : "Tampilkan"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-const PERAN_LABEL = {
-  surveior: "Surveior",
-  verifikator: "Verifikator",
-  kedua: "Keduanya",
+const PERAN_LABEL = { surveior: "Surveior", verifikator: "Verifikator", kedua: "Keduanya" };
+const JENIS_COLORS = {
+  TKPP: { bg: "#FEF3C7", fg: "#92400E" },
+  TKSDU: { bg: "#DBEAFE", fg: "#1E40AF" },
 };
-const JENIS_BADGE = {
-  TKPP: { bg: "#FEF3C7", fg: "#92400E", label: "TKPP" },
-  TKSDU: { bg: "#DBEAFE", fg: "#1E40AF", label: "TKSDU" },
-};
-const STATUS_BADGE = {
+const STATUS_COLORS = {
   Aktif: { bg: "#DCFCE7", fg: "#166534" },
   Nonaktif: { bg: "#F1F5F9", fg: "#475569" },
   Cuti: { bg: "#FEF3C7", fg: "#92400E" },
   Resign: { bg: "#FEE2E2", fg: "#991B1B" },
 };
-const STATUS_PENUGASAN_BADGE = {
-  tidak_bertugas: { bg: "#F1F5F9", fg: "#475569", label: "Tidak Bertugas" },
-  sedang_bertugas: { bg: "#FEF3C7", fg: "#92400E", label: "Sedang Bertugas" },
-};
+const EXCLUDED_ROLES = ["Admin", "Faskes"];
 
-// Role yang tidak bisa dipilih (admin, faskes, dsb)
-const EXCLUDED_ROLES = ['Admin', 'Faskes'];
+function StatusBadgeTA({ status }) {
+  const c = STATUS_COLORS[status] || STATUS_COLORS.Nonaktif;
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: c.bg, color: c.fg }}>
+      {status}
+    </span>
+  );
+}
 
 export default function MasterTenagaAhli() {
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
-  const [form, setForm] = useState(EMPTY);
-  const [error, setError] = useState("");
+  const [serverError, setServerError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [search, setSearch] = useState("");
   const [filterPeran, setFilterPeran] = useState("");
   const [filterJenis, setFilterJenis] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const queryClient = useQueryClient();
-  const [showImport, setShowImport] = useState(false);
   const [filterLembaga, setFilterLembaga] = useState("");
+  const [showImport, setShowImport] = useState(false);
   const { lembagaId: activeLembagaId } = useLembaga();
 
-  // Debounced search for query key
   const [debouncedSearch, setDebouncedSearch] = useState("");
-
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(t);
   }, [search]);
 
-  // Fetch daftar lembaga untuk filter
   const { data: lembagaList } = useApi("lembaga-list-filter", "/master/lembaga?per_page=100");
-
-  // Active filter: jika user belum pilih di dropdown, default ke lembaga aktif dari session
   const effectiveLembagaId = filterLembaga || activeLembagaId;
 
   const qs = new URLSearchParams();
@@ -181,27 +135,38 @@ export default function MasterTenagaAhli() {
     ["tenaga-ahli", debouncedSearch, filterPeran, filterJenis, filterStatus, effectiveLembagaId],
     `/master/tenaga-ahli?${qs.toString()}`
   );
-
   const { data: rolesData } = useApi("roles-tenaga-ahli", "/admin/roles");
   const items = listData?.data ?? [];
   const roles = (rolesData?.data ?? []).filter(r => !EXCLUDED_ROLES.includes(r.nama_role));
-
   const mutateSubmit = useMutateKeys([["tenaga-ahli"], ["roles-tenaga-ahli"]], {
-    onSuccess: () => setShowModal(false),
-    onError: (err) => setError(err.message),
+    onSuccess: data => {
+      if (data?.generated_password) {
+        alert(`Akun berhasil dibuat!\nPassword: ${data.generated_password}\nSegera informasikan ke tenaga ahli dan minta diganti.`);
+      }
+      setShowModal(false);
+    },
+    onError: err => setServerError(err.message),
   });
   const mutateDelete = useMutateKeys(["tenaga-ahli"]);
 
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: EMPTY_FORM,
+  });
+
+  const watchedPeran = watch("peran");
+  const watchedBuatAkun = watch("buat_akun");
+
   function openAdd() {
     setEditTarget(null);
-    setForm({ ...EMPTY, lembaga_id: activeLembagaId || "" });
-    setError("");
+    reset({ ...EMPTY_FORM, lembaga_id: activeLembagaId || "" });
+    setServerError("");
     setShowModal(true);
   }
 
   function openEdit(item) {
     setEditTarget(item);
-    setForm({
+    reset({
       nomor_induk_surveior: item.nomor_induk_surveior || "",
       nama: item.nama || "",
       no_wa: item.no_wa || "",
@@ -225,600 +190,320 @@ export default function MasterTenagaAhli() {
       password: "",
       role_id: "",
     });
-    setError("");
+    setServerError("");
     setShowModal(true);
   }
 
-  function closeModal() {
-    if (mutateSubmit.isPending) return;
-    setShowModal(false);
-  }
+  function closeModal() { if (!mutateSubmit.isLoading) setShowModal(false); }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    const payload = { ...form };
+  const onSubmit = (formData) => {
+    setServerError("");
+    const payload = { ...formData };
     if (payload.peran === "verifikator") payload.jenis = null;
-    if (payload.batas_penugasan_per_periode === "") {
-      payload.batas_penugasan_per_periode = null;
-    } else {
-      payload.batas_penugasan_per_periode = parseInt(payload.batas_penugasan_per_periode, 10);
-    }
-
-    // Normalize buat_akun to boolean
-    payload.buat_akun = !!payload.buat_akun;
+    if (payload.batas_penugasan_per_periode === "") payload.batas_penugasan_per_periode = null;
+    else payload.batas_penugasan_per_periode = parseInt(payload.batas_penugasan_per_periode, 10);
     if (!payload.buat_akun) {
-      delete payload.email;
-      delete payload.password;
-      delete payload.role_id;
-      delete payload.username;
+      delete payload.email; delete payload.password; delete payload.role_id; delete payload.username;
     } else {
-      // role_id wajib jika buat_akun
-      if (!payload.role_id) {
-        setError("Role akun wajib dipilih.");
-        return;
-      }
-      // username optional, delete if empty
+      if (!payload.role_id) { setServerError("Role akun wajib dipilih."); return; }
       if (!payload.username) delete payload.username;
     }
-
     mutateSubmit.mutate({
       path: editTarget ? `/master/tenaga-ahli/${editTarget.id}` : "/master/tenaga-ahli",
       method: editTarget ? "PUT" : "POST",
       body: payload,
     });
-  }
+  };
 
-  function handleDelete(item) {
+  async function handleDelete(item) {
     if (!confirm(`Hapus tenaga ahli "${item.nama}"?`)) return;
-    mutateDelete.mutate(
-      { path: `/master/tenaga-ahli/${item.id}`, method: "DELETE" },
-      { onError: (err) => alert(err.message) }
-    );
+    mutateDelete.mutate({ path: `/master/tenaga-ahli/${item.id}`, method: "DELETE" }, { onError: err => alert(err.message) });
   }
 
-  function set(key, value) {
-    setForm(f => ({ ...f, [key]: value }));
-  }
-
-  // Filter role options berdasarkan peran tenaga ahli
   const filteredRoles = roles.filter(r => {
-    if (form.peran === "kedua") return true;
-    const roleName = r.nama_role?.toLowerCase() || "";
-    if (form.peran === "surveior") return roleName === "surveior";
-    if (form.peran === "verifikator") return roleName === "verifikator";
+    if (watchedPeran === "kedua") return true;
+    const n = (r.nama_role || "").toLowerCase();
+    if (watchedPeran === "surveior") return n === "surveior";
+    if (watchedPeran === "verifikator") return n === "verifikator";
     return true;
   });
 
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Master Data — Tenaga Ahli</h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>{items.length} tenaga ahli terdaftar</p>
-        </div>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            Import CSV
-          </button>
-          <button className="btn btn-primary" onClick={openAdd}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Tambah Tenaga Ahli
-          </button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Master Data — Tenaga Ahli"
+        subtitle={`${items.length} tenaga ahli terdaftar`}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowImport(true)}><Upload size={16} /> Import CSV</Button>
+            <Button onClick={openAdd}><Plus size={16} /> Tambah Tenaga Ahli</Button>
+          </div>
+        }
+      />
 
-      {/* Filter bar */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "16px", alignItems: "center" }}>
-        <div style={{ position: "relative", flex: "1 1 240px", maxWidth: "320px" }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16"
-            style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}>
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input type="text" className="form-input" placeholder="Cari nama atau NIK..."
-            value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: "38px" }} />
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          <Input placeholder="Cari nama atau NIK..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <select className="form-input" value={filterPeran} onChange={e => setFilterPeran(e.target.value)} style={{ flex: "0 0 160px" }}>
-          <option value="">— Semua Peran —</option>
-          <option value="surveior">Surveior</option>
-          <option value="verifikator">Verifikator</option>
-          <option value="kedua">Keduanya</option>
-        </select>
-        <select className="form-input" value={filterJenis} onChange={e => setFilterJenis(e.target.value)} style={{ flex: "0 0 140px" }}>
-          <option value="">— Semua Jenis —</option>
-          <option value="TKPP">TKPP</option>
-          <option value="TKSDU">TKSDU</option>
-        </select>
-        <select className="form-input" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ flex: "0 0 140px" }}>
-          <option value="">— Semua Status —</option>
-          <option value="Aktif">Aktif</option>
-          <option value="Nonaktif">Nonaktif</option>
-          <option value="Cuti">Cuti</option>
-          <option value="Resign">Resign</option>
-        </select>
-        <select
-          className="form-input"
-          value={filterLembaga}
-          onChange={e => setFilterLembaga(e.target.value)}
-          style={{ flex: "0 0 220px" }}
-          title="Filter Lembaga"
-        >
+        {[
+          { val: filterPeran, set: setFilterPeran, opts: ["", "surveior", "verifikator", "kedua"], labels: ["Semua Peran", "Surveior", "Verifikator", "Keduanya"] },
+          { val: filterJenis, set: setFilterJenis, opts: ["", "TKPP", "TKSDU"], labels: ["Semua Jenis", "TKPP", "TKSDU"] },
+          { val: filterStatus, set: setFilterStatus, opts: ["", "Aktif", "Nonaktif", "Cuti", "Resign"], labels: ["Semua Status", "Aktif", "Nonaktif", "Cuti", "Resign"] },
+        ].map(({ val, set, opts, labels }, i) => (
+          <select key={i} className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={val} onChange={e => set(e.target.value)} style={{ flex: "0 0 150px" }}>
+            {opts.map((o, j) => <option key={o} value={o}>{labels[j]}</option>)}
+          </select>
+        ))}
+        <select className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={filterLembaga} onChange={e => setFilterLembaga(e.target.value)} style={{ flex: "0 0 220px" }}>
           <option value="">— Semua Lembaga / Lembaga Aktif —</option>
-          {(lembagaList?.data || []).map(l => (
-            <option key={l.id} value={l.id}>
-              {l.nama}{l.id === activeLembagaId ? " (Aktif)" : ""}
-            </option>
-          ))}
+          {(lembagaList?.data || []).map(l => <option key={l.id} value={l.id}>{l.nama}{l.id === activeLembagaId ? " (Aktif)" : ""}</option>)}
         </select>
         {(filterPeran || filterJenis || filterStatus || search || filterLembaga) && (
-          <button className="btn btn-ghost btn-sm" onClick={() => { setFilterPeran(""); setFilterJenis(""); setFilterStatus(""); setSearch(""); setFilterLembaga(""); }}>
-            Reset
-          </button>
+          <Button variant="ghost" size="sm" onClick={() => { setFilterPeran(""); setFilterJenis(""); setFilterStatus(""); setSearch(""); setFilterLembaga(""); }}>Reset</Button>
         )}
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
-        <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>No. Induk</th>
-                <th>Nama</th>
-                <th>No. WA</th>
-                <th>Peran</th>
-                <th>Jenis</th>
-                <th>No. Rekening</th>
-                <th>Status</th>
-                <th>Akun Login</th>
-                <th>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr><td colSpan="9" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
-              ) : items.length === 0 ? (
-                <tr><td colSpan="9" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>
-                  {search || filterPeran || filterJenis || filterStatus ? "Tidak ada hasil" : "Belum ada data."}
-                </td></tr>
-              ) : items.map(item => {
-                const sb = STATUS_BADGE[item.status_aktif] || STATUS_BADGE.Nonaktif;
-                const jb = JENIS_BADGE[item.jenis];
-                const rekDisplay = item.no_rekening
-                  ? `${item.no_rekening}${item.nama_bank ? ` (${item.nama_bank})` : ''}`
-                  : null;
-                return (
-                  <tr key={item.id}>
-                    <td style={{ color: "#64748B", fontSize: "12px", fontFamily: "monospace" }}>{item.nomor_induk_surveior}</td>
-                    <td style={{ fontWeight: "500", color: "#1E293B" }}>{item.nama}</td>
-                    <td style={{ color: "#64748B", fontSize: "12px" }}>
-                      {item.no_wa ? (
-                        <a href={`https://wa.me/${item.no_wa.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer" style={{ color: "#16A34A", textDecoration: "none" }}>
-                          {item.no_wa}
-                        </a>
-                      ) : <span style={{ color: "#94A3B8" }}>—</span>}
-                    </td>
-                    <td style={{ color: "#64748B", fontSize: "13px" }}>{PERAN_LABEL[item.peran] || item.peran}</td>
-                    <td>
-                      {jb ? (
-                        <span style={{
-                          display: "inline-block", padding: "2px 8px", borderRadius: "4px",
-                          fontSize: "10px", fontWeight: "600",
-                          background: jb.bg, color: jb.fg,
-                        }}>{jb.label}</span>
-                      ) : <span style={{ color: "#94A3B8" }}>—</span>}
-                    </td>
-                    <td style={{ fontSize: "12px", color: "#64748B", maxWidth: "160px" }}>
-                      {rekDisplay ? (
-                        <span title={`Atas nama: ${item.atas_nama_rekening || '-'}`}>{rekDisplay}</span>
-                      ) : <span style={{ color: "#94A3B8" }}>—</span>}
-                    </td>
-                    <td>
-                      <span style={{
-                        display: "inline-block", padding: "2px 8px", borderRadius: "20px",
-                        fontSize: "11px", fontWeight: "600",
-                        background: sb.bg, color: sb.fg,
-                      }}>{item.status_aktif}</span>
-                    </td>
-                    <td>
-                      {item.has_akun ? (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span style={{
-                              display: "inline-flex", alignItems: "center",
-                              gap: "4px",
-                              padding: "2px 8px", borderRadius: "20px",
-                              fontSize: "11px", fontWeight: "600",
-                              background: "#DCFCE7", color: "#166534",
-                            }}>
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="10" height="10">
-                                <polyline points="20 6 9 17 4 12"/>
-                              </svg>
-                              Ada
-                            </span>
-                          </div>
-                          <span style={{ fontSize: "11px", color: "#94A3B8" }}>
-                            {item.akun_email}
-                            {item.akun_username && <span style={{ color: "#64748B" }}> / {item.akun_username}</span>}
-                          </span>
-                        </div>
-                      ) : (
-                        <span style={{
-                          padding: "2px 8px", borderRadius: "20px",
-                          fontSize: "11px", fontWeight: "500",
-                          background: "#F1F5F9", color: "#94A3B8",
-                        }}>
-                          Belum ada
+      <Card className="overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-50 dark:bg-slate-800/50">
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">No. Induk</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Nama</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">No. WA</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Peran</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Jenis</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">No. Rekening</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Status</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Akun</TableHead>
+              <TableHead className="w-[100px] text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Aksi</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow><TableCell colSpan={9} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">Memuat...</TableCell></TableRow>
+            ) : items.length === 0 ? (
+              <TableRow><TableCell colSpan={9} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">{search || filterPeran || filterJenis || filterStatus ? "Tidak ada hasil" : "Belum ada data."}</TableCell></TableRow>
+            ) : items.map(item => {
+              const jb = JENIS_COLORS[item.jenis];
+              const rekDisplay = item.no_rekening ? `${item.no_rekening}${item.nama_bank ? ` (${item.nama_bank})` : ""}` : null;
+              return (
+                <TableRow key={item.id} className="hover:bg-slate-50/50">
+                  <TableCell className="font-mono text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">{item.nomor_induk_surveior}</TableCell>
+                  <TableCell className="font-medium text-slate-900 dark:text-slate-100 text-sm">{item.nama}</TableCell>
+                  <TableCell className="text-xs">
+                    {item.no_wa ? (
+                      <a href={`https://wa.me/${item.no_wa.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline">{item.no_wa}</a>
+                    ) : <span className="text-slate-300 dark:text-slate-500">—</span>}
+                  </TableCell>
+                  <TableCell className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">{PERAN_LABEL[item.peran] || item.peran}</TableCell>
+                  <TableCell>{jb ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: jb.bg, color: jb.fg }}>{item.jenis}</span>
+                  ) : <span className="text-slate-300 dark:text-slate-500">—</span>}</TableCell>
+                  <TableCell className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 max-w-[140px] truncate" title={rekDisplay || undefined}>{rekDisplay || <span className="text-slate-300 dark:text-slate-500">—</span>}</TableCell>
+                  <TableCell><StatusBadgeTA status={item.status_aktif} /></TableCell>
+                  <TableCell>
+                    {item.has_akun ? (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                          Ada
                         </span>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", gap: "4px" }}>
-                        <button className="btn btn-ghost btn-sm" style={{ color: "#4CAF50", padding: "4px 8px", fontSize: "12px" }} onClick={() => openEdit(item)}>Ubah</button>
-                        <button className="btn btn-ghost btn-sm" style={{ color: "#EF4444", padding: "4px 8px", fontSize: "12px" }} onClick={() => handleDelete(item)}>Hapus</button>
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500">{item.akun_email}{item.akun_username && <span className="text-slate-500 dark:text-slate-400 dark:text-slate-500"> / {item.akun_username}</span>}</span>
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500">Belum ada</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-primary" onClick={() => openEdit(item)}><Pencil size={13} /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-red-500" onClick={() => handleDelete(item)}><Trash2 size={13} /></Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Card>
 
-      {showModal && (
-        <Modal title={editTarget ? "Ubah Tenaga Ahli" : "Tambah Tenaga Ahli Baru"} onClose={closeModal}>
-          <form onSubmit={handleSubmit} style={{ padding: "24px" }}>
-            {error && (
-              <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: "6px", color: "#991B1B", fontSize: "13px" }}>{error}</div>
+      <Dialog open={showModal} onOpenChange={closeModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editTarget ? "Ubah Tenaga Ahli" : "Tambah Tenaga Ahli Baru"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            {serverError && <div className="p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">{serverError}</div>}
+            {editTarget?.has_akun && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 text-xs">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" className="shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <div>Tenaga ahli ini sudah memiliki akun login: <strong>{editTarget.akun_email}</strong>. Akun tidak akan dibuat ulang.</div>
+              </div>
             )}
 
-            {/* Data tenaga ahli */}
-            <div style={{ marginBottom: "8px" }}>
-              <div style={{ fontSize: "12px", fontWeight: "700", color: "#64748B", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "12px" }}>
-                Data Tenaga Ahli
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    Nomor Induk Karyawan <span style={{ color: "#DC2626" }}>*</span>
-                  </label>
-                  <input className="form-input" value={form.nomor_induk_surveior} onChange={e => set("nomor_induk_surveior", e.target.value)} required placeholder="cth: KRY-0001" />
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    Nama Lengkap <span style={{ color: "#DC2626" }}>*</span>
-                  </label>
-                  <input className="form-input" value={form.nama} onChange={e => set("nama", e.target.value)} required placeholder="cth: Dr. Nama Lengkap" />
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    No. WhatsApp
-                  </label>
-                  <input className="form-input" value={form.no_wa} onChange={e => set("no_wa", e.target.value)} placeholder="cth: 081234567890" />
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Peran <span style={{ color: "#DC2626" }}>*</span></label>
-                  <select className="form-input" value={form.peran} onChange={e => set("peran", e.target.value)} required>
-                    <option value="surveior">Surveior</option>
-                    <option value="verifikator">Verifikator</option>
-                    <option value="kedua">Keduanya (Surveior & Verifikator)</option>
-                  </select>
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    Jenis {form.peran !== "verifikator" && <span style={{ color: "#DC2626" }}>*</span>}
-                  </label>
-                  <select
-                    className="form-input"
-                    value={form.jenis}
-                    onChange={e => set("jenis", e.target.value)}
-                    required={form.peran !== "verifikator"}
-                    disabled={form.peran === "verifikator"}
-                  >
-                    <option value="TKPP">TKPP</option>
-                    <option value="TKSDU">TKSDU</option>
-                  </select>
-                  {form.peran === "verifikator" && (
-                    <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>Jenis hanya berlaku untuk surveior.</div>
-                  )}
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Status Aktif <span style={{ color: "#DC2626" }}>*</span></label>
-                  <select className="form-input" value={form.status_aktif} onChange={e => set("status_aktif", e.target.value)} required>
-                    <option value="Aktif">Aktif</option>
-                    <option value="Nonaktif">Nonaktif</option>
-                    <option value="Cuti">Cuti</option>
-                    <option value="Resign">Resign</option>
-                  </select>
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    Lembaga <span style={{ color: "#DC2626" }}>*</span>
-                  </label>
-                  <select
-                    className="form-input"
-                    value={form.lembaga_id}
-                    onChange={e => set("lembaga_id", e.target.value)}
-                    required
-                  >
-                    <option value="">— Pilih Lembaga —</option>
-                    {(lembagaList?.data || []).map(l => (
-                      <option key={l.id} value={l.id}>
-                        {l.nama}{l.id === activeLembagaId ? " (Aktif)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    Batas Penugasan per Periode
-                  </label>
-                  <input
-                    type="number" min="0"
-                    className="form-input"
-                    value={form.batas_penugasan_per_periode}
-                    onChange={e => set("batas_penugasan_per_periode", e.target.value)}
-                    placeholder="Kosongkan jika tidak ada batas"
-                  />
-                  <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>
-                    FR-3.8: Batas maksimal penugasan per periode.
+            {/* Data */}
+            <div>
+              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-3">Data Tenaga Ahli</p>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { id: "ta-nomor", label: "Nomor Induk *", key: "nomor_induk_surveior", placeholder: "cth: KRY-0001" },
+                  { id: "ta-nama", label: "Nama Lengkap *", key: "nama", placeholder: "cth: Dr. Nama Lengkap" },
+                  { id: "ta-wa", label: "No. WhatsApp", key: "no_wa", placeholder: "cth: 081234567890" },
+                ].map(f => (
+                  <div key={f.id} className={`space-y-1 ${f.id === "ta-nama" ? "col-span-2" : ""}`}>
+                    <Label htmlFor={f.id}>{f.label}</Label>
+                    <Input id={f.id} {...register(f.key)} placeholder={f.placeholder} />
+                    {errors[f.key] && <p className="text-xs text-red-600">{errors[f.key].message}</p>}
                   </div>
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    No. Rekening
-                  </label>
-                  <input className="form-input" value={form.no_rekening} onChange={e => set("no_rekening", e.target.value)} placeholder="cth: 1234567890" />
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    Nama Bank
-                  </label>
-                  <input className="form-input" value={form.nama_bank} onChange={e => set("nama_bank", e.target.value)} placeholder="cth: Bank BCA" />
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    Atas Nama Rekening
-                  </label>
-                  <input className="form-input" value={form.atas_nama_rekening} onChange={e => set("atas_nama_rekening", e.target.value)} placeholder="Nama pemilik rekening" />
-                </div>
-              </div>
-            </div>
-
-            {/* Pembatas */}
-            <div style={{ borderTop: "1px solid #F1F5F9", margin: "16px 0" }} />
-
-            {/* Identitas Pajak — FR-5.9 BP21 (Coretax) */}
-            <div style={{ marginBottom: "8px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
-                <div style={{ fontSize: "12px", fontWeight: "700", color: "#64748B", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  Identitas Pajak · Bukti Potong BP21
-                </div>
-                <span style={{ fontSize: "10px", fontWeight: "600", padding: "2px 8px", borderRadius: "9999px", background: "#E0E7FF", color: "#3730A3" }}>
-                  FR-5.9
-                </span>
-              </div>
-              <div style={{ fontSize: "11px", color: "#94A3B8", marginBottom: "12px" }}>
-                Wajib diisi sebelum tenaga ahli menerima honor — lihat tabulasi
-                BP21 di halaman Bukti Potong PPh (Keuangan).
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    NPWP
-                  </label>
-                  <input className="form-input" value={form.npwp} onChange={e => set("npwp", e.target.value)} placeholder="15 digit (cth: 012345678901000)" />
-                  <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>
-                    Tanpa titik/strip. NPWP placeholder akan ditolak export.
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    NIK (fallback)
-                  </label>
-                  <input className="form-input" value={form.nik} onChange={e => set("nik", e.target.value)} placeholder="16 digit (jika belum punya NPWP)" maxLength={20} />
-                </div>
-
-                <div style={{ marginBottom: "14px", gridColumn: "1 / -1" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    Nama Sesuai NPWP/NIK
-                  </label>
-                  <input className="form-input" value={form.nama_pajak} onChange={e => set("nama_pajak", e.target.value)} placeholder="cth: dr. Joko Pramono, M.Kes" />
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    Kode Objek Pajak
-                  </label>
-                  <input className="form-input" value={form.kode_objek_pajak} onChange={e => set("kode_objek_pajak", e.target.value)} placeholder="21-100-01" maxLength={10} />
-                  <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>
-                    Default 21-100-01 (honorarium). Format: XX-XXX-XX.
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    Status PTKP
-                  </label>
-                  <select className="form-input" value={form.status_ptkp} onChange={e => set("status_ptkp", e.target.value)}>
-                    {PTKP_OPTIONS.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                  <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>
-                    BP21 &lt;StatusTaxExemption&gt;. Default TK/0.
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                    Kode KPP
-                  </label>
-                  <input
-                    className="form-input"
-                    value={form.kode_kpp}
-                    onChange={e => set("kode_kpp", e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="6 digit (cth: 011001)"
-                    maxLength={6}
-                    inputMode="numeric"
-                  />
-                  <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>
-                    BP21 &lt;IDPlaceOfBusinessActivityOfIncomeRecipient&gt;.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Pembatas */}
-            <div style={{ borderTop: "1px solid #F1F5F9", margin: "16px 0" }} />
-
-            {/* Akun Login */}
-            <div style={{ marginBottom: "8px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-                <div>
-                  <div style={{ fontSize: "12px", fontWeight: "700", color: "#64748B", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "2px" }}>
-                    Akun Login
-                  </div>
-                  <div style={{ fontSize: "11px", color: "#94A3B8" }}>
-                    Buat sekaligus agar tidak perlu input dua kali.
-                  </div>
-                </div>
-                <ToggleSwitch
-                  checked={!!form.buat_akun}
-                  onChange={v => set("buat_akun", v)}
-                  label=""
-                />
-              </div>
-
-              {/* Warning: tenaga ahli sudah punya akun */}
-              {editTarget?.has_akun && (
-                <div style={{
-                  padding: "10px 14px",
-                  background: "#FFF7ED",
-                  border: "1px solid #FED7AA",
-                  borderRadius: "8px",
-                  marginBottom: "12px",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "8px",
-                }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="#C2410C" strokeWidth="2" width="16" height="16" style={{ flexShrink: 0, marginTop: "1px" }}>
-                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                  </svg>
-                  <div style={{ fontSize: "12px", color: "#C2410C" }}>
-                    Tenaga ahli ini sudah memiliki akun login: <strong>{editTarget.akun_email}</strong>.
-                    Akun tidak akan dibuat ulang.
-                  </div>
-                </div>
-              )}
-
-              {form.buat_akun && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-                  <div style={{ marginBottom: "14px", gridColumn: "1 / -1" }}>
-                    <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                      Username Login
-                    </label>
-                    <input
-                      className="form-input"
-                      type="text"
-                      value={form.username}
-                      onChange={e => set("username", e.target.value)}
-                      placeholder="Kosongkan jika login pakai email/NIK saja"
-                      style={{ fontSize: "13px" }}
-                    />
-                    <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>
-                      Opsional. Jika diisi, bisa login dengan username ini.
-                    </div>
-                  </div>
-
-                  <div style={{ marginBottom: "14px", gridColumn: "1 / -1" }}>
-                    <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                      Email Login <span style={{ color: "#DC2626" }}>*</span>
-                    </label>
-                    <input
-                      className="form-input"
-                      type="email"
-                      value={form.email}
-                      onChange={e => set("email", e.target.value)}
-                      placeholder="cth: nama@email.com"
-                      style={{ fontSize: "13px" }}
-                    />
-                    <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>
-                      Email harus unik. Password akan di-generate otomatis dan ditampilkan setelah tenaga ahli dibuat.
-                    </div>
-                  </div>
-
-                  <div style={{ marginBottom: "14px" }}>
-                    <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                      Role Akun <span style={{ color: "#DC2626" }}>*</span>
-                    </label>
-                    <select
-                      className="form-input"
-                      value={form.role_id}
-                      onChange={e => set("role_id", e.target.value)}
-                      required={form.buat_akun}
-                    >
-                      <option value="">— Pilih Role —</option>
-                      {filteredRoles.map(r => (
-                        <option key={r.id} value={r.id}>{r.nama_role}</option>
-                      ))}
-                    </select>
-                    {form.peran === "kedua" && (
-                      <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>
-                        Untuk peran "Keduanya", pilih role sesuai kebutuhan akses.
-                      </div>
+                ))}
+                {[
+                  { id: "ta-peran", label: "Peran *", key: "peran" },
+                  { id: "ta-jenis", label: `Jenis ${watchedPeran !== "verifikator" ? "*" : ""}`, key: "jenis", disabled: watchedPeran === "verifikator" },
+                  { id: "ta-status", label: "Status Aktif *", key: "status_aktif" },
+                ].map(f => (
+                  <div key={f.id} className="space-y-1">
+                    <Label htmlFor={f.id}>{f.label}</Label>
+                    {f.key === "peran" ? (
+                      <select id={f.id} className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register(f.key)}>
+                        <option value="surveior">Surveior</option>
+                        <option value="verifikator">Verifikator</option>
+                        <option value="kedua">Keduanya (Surveior &amp; Verifikator)</option>
+                      </select>
+                    ) : f.key === "status_aktif" ? (
+                      <select id={f.id} className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register(f.key)}>
+                        {["Aktif", "Nonaktif", "Cuti", "Resign"].map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    ) : (
+                      <select id={f.id} className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50" {...register(f.key)} disabled={f.disabled}>
+                        <option value="TKPP">TKPP</option>
+                        <option value="TKSDU">TKSDU</option>
+                      </select>
                     )}
+                    {errors[f.key] && <p className="text-xs text-red-600">{errors[f.key].message}</p>}
+                    {f.key === "jenis" && watchedPeran === "verifikator" && <p className="text-[11px] text-slate-400 dark:text-slate-500">Jenis hanya berlaku untuk surveior.</p>}
+                  </div>
+                ))}
+                {[
+                  { id: "ta-lembaga", label: "Lembaga *", key: "lembaga_id" },
+                  { id: "ta-batas", label: "Batas Penugasan per Periode", key: "batas_penugasan_per_periode", type: "number", placeholder: "Kosongkan jika tidak ada batas" },
+                  { id: "ta-rek", label: "No. Rekening", key: "no_rekening", placeholder: "cth: 1234567890" },
+                  { id: "ta-bank", label: "Nama Bank", key: "nama_bank", placeholder: "cth: Bank BCA" },
+                  { id: "ta-atas", label: "Atas Nama Rekening", key: "atas_nama_rekening", placeholder: "Nama pemilik rekening" },
+                ].map(f => (
+                  <div key={f.id} className={`space-y-1 ${f.id === "ta-lembaga" ? "col-span-2" : ""}`}>
+                    <Label htmlFor={f.id}>{f.label}</Label>
+                    {f.id === "ta-lembaga" ? (
+                      <select id={f.id} className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register(f.key)}>
+                        <option value="">— Pilih —</option>
+                        {(lembagaList?.data || []).map(l => <option key={l.id} value={l.id}>{l.nama}{l.id === activeLembagaId ? " (Aktif)" : ""}</option>)}
+                      </select>
+                    ) : (
+                      <Input id={f.id} type={f.type || "text"} {...register(f.key)} placeholder={f.placeholder} />
+                    )}
+                    {errors[f.key] && <p className="text-xs text-red-600">{errors[f.key].message}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Pajak */}
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Identitas Pajak · Bukti Potong BP21</p>
+                <Badge variant="secondary" className="text-[10px] h-4">FR-5.9</Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { id: "ta-npwp", key: "npwp", placeholder: "15 digit" },
+                  { id: "ta-nik", key: "nik", placeholder: "16 digit", maxLength: 20 },
+                  { id: "ta-kop", key: "kode_objek_pajak", placeholder: "21-100-01", maxLength: 10 },
+                  { id: "ta-kpp", key: "kode_kpp", placeholder: "6 digit", maxLength: 6, inputMode: "numeric" },
+                ].map(f => (
+                  <div key={f.id} className={f.id === "ta-namapajak" ? "col-span-2 space-y-1" : "space-y-1"}>
+                    <Label htmlFor={f.id}>{f.id === "ta-npwp" ? "NPWP" : f.id === "ta-nik" ? "NIK (fallback)" : f.id === "ta-kop" ? "Kode Objek Pajak" : "Kode KPP"}</Label>
+                    <Input id={f.id} {...register(f.key)} placeholder={f.placeholder} maxLength={f.maxLength} inputMode={f.inputMode} />
+                  </div>
+                ))}
+                <div className="col-span-2 space-y-1">
+                  <Label htmlFor="ta-namapajak">Nama Sesuai NPWP/NIK</Label>
+                  <Input id="ta-namapajak" {...register("nama_pajak")} placeholder="cth: dr. Joko Pramono, M.Kes" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="ta-ptkp">Status PTKP</Label>
+                  <select id="ta-ptkp" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register("status_ptkp")}>
+                    {PTKP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Akun */}
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Akun Login</p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Buat sekaligus agar tidak perlu input dua kali.</p>
+                </div>
+                <button type="button" onClick={() => setValue("buat_akun", !watchedBuatAkun)} className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors" style={{ background: watchedBuatAkun ? "#4CAF50" : "#CBD5E1" }}>
+                  <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${watchedBuatAkun ? "translate-x-5" : "translate-x-0.5"}`} />
+                </button>
+              </div>
+
+              {watchedBuatAkun && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2 space-y-1">
+                    <Label htmlFor="ta-username">Username Login</Label>
+                    <Input id="ta-username" {...register("username")} placeholder="Kosongkan jika login pakai email/NIK" />
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <Label htmlFor="ta-email">Email Login <span className="text-red-500">*</span></Label>
+                    <Input id="ta-email" type="email" {...register("email")} placeholder="cth: nama@email.com" />
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <Label htmlFor="ta-role">Role Akun <span className="text-red-500">*</span></Label>
+                    <select id="ta-role" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register("role_id")}>
+                      <option value="">— Pilih Role —</option>
+                      {filteredRoles.map(r => <option key={r.id} value={r.id}>{r.nama_role}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <Label htmlFor="ta-password">Password <span className="text-red-500">*</span></Label>
+                    <div className="relative">
+                      <Input
+                        id="ta-password"
+                        type={showPassword ? "text" : "password"}
+                        {...register("password")}
+                        placeholder="Min. 8 karakter"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(p => !p)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                      >
+                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                    {errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}
                   </div>
                 </div>
               )}
-
-              {!form.buat_akun && (
-                <div style={{
-                  padding: "10px 14px",
-                  background: "#F8FAFC",
-                  border: "1px dashed #CBD5E1",
-                  borderRadius: "8px",
-                  fontSize: "12px",
-                  color: "#94A3B8",
-                  textAlign: "center",
-                }}>
-                Toggle <strong>"Buat Akun Login"</strong> untuk membuat akun masukkan tenaga ahli sekaligus.
-              </div>
+              {!watchedBuatAkun && (
+                <div className="p-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 dark:bg-slate-800/50 text-xs text-slate-400 dark:text-slate-500 text-center">
+                  Toggle <strong>"Buat Akun Login"</strong> untuk membuat akun login sekaligus.
+                </div>
               )}
             </div>
 
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "16px", borderTop: "1px solid #F1F5F9", paddingTop: "20px" }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={closeModal}
-                disabled={mutateSubmit.isPending}
-              >
-                Batal
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={mutateSubmit.isPending}>
-                {mutateSubmit.isPending ? "Menyimpan..." : editTarget ? "Simpan" : "Tambah"}
-              </button>
-            </div>
+            <DialogFooter className="gap-2 sm:gap-0 border-t pt-4">
+              <Button type="button" variant="outline" onClick={closeModal} disabled={mutateSubmit.isLoading}>Batal</Button>
+              <Button type="submit" disabled={mutateSubmit.isLoading}>{mutateSubmit.isLoading ? "Menyimpan..." : editTarget ? "Simpan" : "Tambah"}</Button>
+            </DialogFooter>
           </form>
-        </Modal>
-      )}
+        </DialogContent>
+      </Dialog>
 
       <ImportModal
         open={showImport}
@@ -828,7 +513,7 @@ export default function MasterTenagaAhli() {
         downloadUrl="/master/tenaga-ahli/template"
         downloadName="template_tenaga_ahli.csv"
         uploadUrl="/master/tenaga-ahli/import"
-        description="Upload file CSV berisi data tenaga ahli. Baris yang gagal akan ditampilkan beserta alasannya."
+        description="Upload file CSV berisi data tenaga ahli."
         successNote="Daftar tenaga ahli telah diperbarui."
       />
     </div>

@@ -2,8 +2,11 @@ import React, { useState } from "react";
 import { useHistory } from "react-router-dom";
 import InvoiceStatusCard from "@/components/InvoiceStatusCard";
 import PaymentMethodSelector from "@/components/PaymentMethodSelector";
-import { formatDate } from "../../utils/dateFormat";
+import { formatDate } from "@/utils/dateFormat";
 import { useApi } from "@/hooks/useApi";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 
 function formatRp(n) {
   return `Rp ${Number(n).toLocaleString("id-ID")}`;
@@ -29,49 +32,47 @@ export default function FaskesTagihan() {
   const { data: invoicesData } = useApi(
     ["invoices", selectedSiklus],
     selectedSiklus ? `/invoice/by-siklus/${selectedSiklus}` : "/pendaftaran/siklus?per_page=50",
-    {
-      enabled: !!selectedSiklus,
-      // Refetch when tab becomes visible (e.g., after paying in another tab)
-    }
+    { enabled: !!selectedSiklus }
   );
 
   const invoices = invoicesData?.data || [];
 
   if (loading) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>;
+    return <div className="p-10 text-center text-slate-400 dark:text-slate-500 text-sm">Memuat...</div>;
   }
 
   if (siklusList.length === 0) {
     return (
-      <div style={{ maxWidth: "640px", margin: "40px auto", padding: "32px", textAlign: "center" }}>
-        <div style={{ fontSize: "14px", color: "#64748B" }}>Belum ada tagihan untuk Anda.</div>
+      <div className="max-w-[640px] mx-auto mt-10 p-8 text-center">
+        <div className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Belum ada tagihan untuk Anda.</div>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: "720px", margin: "0 auto" }}>
-      <button
+    <div className="max-w-[720px] mx-auto">
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => history.push("/faskes")}
-        className="btn btn-ghost btn-sm"
-        style={{ marginBottom: "16px", padding: "6px 0" }}
+        className="mb-4 pl-0 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:text-slate-500"
       >
         ← Kembali ke Status Pengajuan
-      </button>
+      </Button>
 
-      <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>
+      <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-1">
         Tagihan
       </h1>
-      <p style={{ margin: "4px 0 24px", fontSize: "13px", color: "#64748B" }}>
+      <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-6">
         Daftar invoice untuk setiap siklus akreditasi Anda.
       </p>
 
-      {/* Siklus selector */}
       {siklusList.length > 1 && (
-        <div style={{ marginBottom: "20px" }}>
-          <label className="form-label">Pilih siklus</label>
+        <div className="mb-5 space-y-1.5">
+          <Label htmlFor="siklus-select">Pilih siklus</Label>
           <select
-            className="form-input"
+            id="siklus-select"
+            className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
             value={selectedSiklus || ""}
             onChange={e => setSelectedSiklus(e.target.value)}
           >
@@ -85,13 +86,13 @@ export default function FaskesTagihan() {
       )}
 
       {invoices.length === 0 ? (
-        <div className="card" style={{ padding: "32px", textAlign: "center" }}>
-          <div style={{ fontSize: "13px", color: "#64748B" }}>
+        <Card className="p-8 text-center">
+          <div className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
             Belum ada invoice untuk siklus ini. Invoice akan muncul setelah PKS disetujui.
           </div>
-        </div>
+        </Card>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div className="flex flex-col gap-3">
           {invoices.map(inv => (
             <InvoiceStatusCard
               key={inv.id}
@@ -103,14 +104,12 @@ export default function FaskesTagihan() {
           {(() => {
             const unpaid = invoices.find(inv => inv.status !== "lunas" && inv.status !== "refunded");
             return unpaid ? (
-              <button
-                type="button"
-                className="btn btn-primary"
+              <Button
                 onClick={() => history.push(`/faskes/tagihan/${unpaid.id}`)}
-                style={{ marginTop: "8px" }}
+                className="mt-2"
               >
                 Bayar Sekarang
-              </button>
+              </Button>
             ) : null;
           })()}
         </div>

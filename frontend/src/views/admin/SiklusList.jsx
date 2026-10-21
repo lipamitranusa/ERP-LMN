@@ -1,38 +1,43 @@
 import React, { useState } from "react";
 import { useHistory } from "react-router-dom";
-import { formatDate } from "../../utils/dateFormat";
+import { Search, Plus } from "lucide-react";
+import { formatDate } from "@/utils/dateFormat";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { PageHeader } from "@/components/PageHeader";
+import { StatusBadge } from "@/components/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
-function StatusBadge({ status }) {
-  const map = {
-    menunggu: ["Menunggu", "warning"],
-    menunggu_dokumen: ["Menunggu Dokumen", "warning"],
-    menunggu_persetujuan: ["Menunggu Persetujuan", "warning"],
-    menunggu_kontrak: ["Menunggu Kontrak", "warning"],
-    menunggu_pembayaran: ["Menunggu Pembayaran", "warning"],
-    lengkap: ["Lengkap", "success"],
-    aktif: ["Aktif", "success"],
-    survei: ["Survei", "info"],
-    verifikasi: ["Verifikasi", "info"],
-    selesai: ["Selesai", "success"],
-    disetujui: ["Disetujui", "success"],
-    final: ["Final", "success"],
-    dibatalkan: ["Dibatalkan", "danger"],
-    ditolak: ["Ditolak", "danger"],
-    draft: ["Draft", "secondary"],
-    terkirim: ["Terkirim", "info"],
-  };
-  const [label, color] = map[status] || [status, "secondary"];
-  return <span className={`status-badge status-${color}`}>{label}</span>;
-}
+const schema = z.object({
+  lembaga_id: z.string().min(1, "Lembaga wajib dipilih"),
+  tanggal_permohonan_survei: z.string().min(1, "Tanggal permohonan wajib diisi"),
+});
 
-function SiklusList() {
+export default function SiklusList() {
   const history = useHistory();
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ lembaga_id: "", tanggal_permohonan_survei: "" });
   const [search, setSearch] = useState("");
 
-  // React Query auto-caches, dedupes, and refetches on window focus
   const { data: siklusData, isLoading } = useApi(
     ["siklus", search],
     `/pendaftaran/siklus?q=${encodeURIComponent(search)}`
@@ -44,172 +49,163 @@ function SiklusList() {
 
   const mutate = useMutateKeys([["siklus"], ["lembaga"]]);
 
-  async function handleCreate(e) {
-    e.preventDefault();
-    try {
-      await mutate.mutateAsync({
-        path: "/pendaftaran/siklus",
-        method: "POST",
-        body: formData,
-      });
-      setShowForm(false);
-    } catch (err) {
-      alert(err.message);
-    }
-  }
-
-  const filtered = siklus.filter(s => {
-    const q = search.toLowerCase();
-    return (
-      !q ||
-      (s.faskes?.nama || "").toLowerCase().includes(q) ||
-      (s.lembaga?.nama || "").toLowerCase().includes(q) ||
-      (s.status || "").toLowerCase().includes(q)
-    );
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: { lembaga_id: "", tanggal_permohonan_survei: "" },
   });
 
-  return (
-    <div>
-      {/* Page header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>
-            Pendaftaran & Validasi Dokumen
-          </h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
-            {siklus.length} siklus terdaftar
-          </p>
-        </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Ajukan Permohonan
-        </button>
-      </div>
+  function openForm() {
+    reset({ lembaga_id: "", tanggal_permohonan_survei: "" });
+    setShowForm(true);
+  }
 
-      {/* Toolbar: search */}
-      <div style={{ display: "flex", gap: "12px", marginBottom: "16px", alignItems: "center" }}>
-        <div style={{ position: "relative", flex: 1, maxWidth: "320px" }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}>
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input
+  const onSubmit = (formData) => {
+    mutate.mutate({
+      path: "/pendaftaran/siklus",
+      method: "POST",
+      body: formData,
+      onSuccess: () => {
+        setShowForm(false);
+        reset({ lembaga_id: "", tanggal_permohonan_survei: "" });
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="Pendaftaran & Validasi Dokumen"
+        subtitle={`${siklus.length} siklus terdaftar`}
+        actions={
+          <Button onClick={openForm}>
+            <Plus size={16} />
+            Ajukan Permohonan
+          </Button>
+        }
+      />
+
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          <Input
             type="text"
-            className="form-input"
             placeholder="Cari faskes, lembaga, atau status..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ paddingLeft: "38px" }}
+            className="pl-9"
           />
         </div>
-        <span style={{ fontSize: "13px", color: "#94A3B8" }}>
-          {filtered.length} hasil
+        <span className="text-sm text-slate-400 dark:text-slate-500">
+          {siklus.length} hasil
         </span>
       </div>
 
-      {/* Table */}
-      <div className="card" style={{ padding: 0 }}>
-        <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th style={{ width: "40px" }}>No</th>
-                <th>Faskes</th>
-                <th>Lembaga</th>
-                <th>Tanggal Pengajuan</th>
-                <th>Kelengkapan</th>
-                <th>Status</th>
-                <th style={{ width: "80px" }}>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>Memuat...</td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>
+      <Card className="overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-50 dark:bg-slate-800/50">
+              <TableHead className="w-10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">No</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Faskes</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Lembaga</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Tanggal Pengajuan</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Kelengkapan</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Status</TableHead>
+              <TableHead className="w-20 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Aksi</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array.from({ length: 8 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell><div className="h-4 w-6 rounded animate-pulse bg-slate-200" /></TableCell>
+                  <TableCell><div className="h-4 w-32 rounded animate-pulse bg-slate-200" /></TableCell>
+                  <TableCell><div className="h-4 w-24 rounded animate-pulse bg-slate-200" /></TableCell>
+                  <TableCell><div className="h-4 w-20 rounded animate-pulse bg-slate-200" /></TableCell>
+                  <TableCell><div className="h-4 w-16 rounded animate-pulse bg-slate-200" /></TableCell>
+                  <TableCell><div className="h-4 w-16 rounded animate-pulse bg-slate-200" /></TableCell>
+                  <TableCell><div className="h-4 w-10 rounded animate-pulse bg-slate-200" /></TableCell>
+                </TableRow>
+              ))
+            ) : siklus.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">
                   {search ? "Tidak ada hasil untuk pencarian ini" : "Belum ada pendaftaran"}
-                </td></tr>
-              ) : filtered.map((s, i) => (
-                <tr key={s.id}>
-                  <td style={{ color: "#94A3B8", fontSize: "12px" }}>{i + 1}</td>
-                  <td style={{ fontWeight: "500", color: "#1E293B" }}>{s.faskes?.nama || s.faskes_id || "—"}</td>
-                  <td style={{ color: "#64748B" }}>{s.lembaga?.nama || "—"}</td>
-                  <td style={{ color: "#64748B", fontSize: "12px" }}>{formatDate(s.tanggal_pengajuan)}</td>
-                  <td><StatusBadge status={s.status_kelengkapan} /></td>
-                  <td><StatusBadge status={s.status} /></td>
-                  <td>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      style={{ color: "#4CAF50", padding: "4px 8px" }}
-                      onClick={() => history.push(`/admin/pendaftaran/${s.id}`)}
-                    >
-                      Detail
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </TableCell>
+              </TableRow>
+            ) : siklus.map((s, i) => (
+              <TableRow key={s.id} className="hover:bg-slate-50/50">
+                <TableCell className="text-slate-400 dark:text-slate-500 text-xs font-medium">{i + 1}</TableCell>
+                <TableCell className="font-medium text-slate-900 dark:text-slate-100 text-sm">
+                  {s.faskes?.nama || s.faskes_id || "—"}
+                </TableCell>
+                <TableCell className="text-slate-600 dark:text-slate-300 dark:text-slate-500 text-sm">
+                  {s.lembaga?.nama || "—"}
+                </TableCell>
+                <TableCell className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs">
+                  {formatDate(s.tanggal_pengajuan)}
+                </TableCell>
+                <TableCell><StatusBadge status={s.status_kelengkapan} /></TableCell>
+                <TableCell><StatusBadge status={s.status} /></TableCell>
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-primary text-xs font-medium h-7 px-2"
+                    onClick={() => history.push(`/admin/pendaftaran/${s.id}`)}
+                  >
+                    Detail
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
 
-      {/* Modal */}
-      {showForm && (
-        <div style={{
-          position: "fixed", inset: 0, zIndex: 200,
-          background: "rgba(15,23,42,0.5)",
-          display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
-        }} onClick={() => setShowForm(false)}>
-          <div style={{
-            background: "#fff", borderRadius: "12px", width: "100%", maxWidth: "480px",
-            boxShadow: "0 20px 60px rgba(0,0,0,0.15)", overflow: "hidden",
-          }} onClick={e => e.stopPropagation()}>
-            <div style={{ padding: "20px 24px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600", color: "#1E293B" }}>Ajukan Permohonan Survei</h3>
-              <button className="btn btn-ghost" style={{ padding: "4px", color: "#94A3B8" }} onClick={() => setShowForm(false)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
+      <Dialog open={showForm} onOpenChange={v => { if (!mutate.isLoading) setShowForm(v); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Ajukan Permohonan Survei</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="lembaga">Lembaga Akreditasi *</Label>
+              <select
+                id="lembaga"
+                className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+                {...register("lembaga_id")}
+              >
+                <option value="">— Pilih Lembaga —</option>
+                {lembaga.map(l => (
+                  <option key={l.id} value={l.id}>{l.nama}</option>
+                ))}
+              </select>
+              {errors.lembaga_id && (
+                <p className="text-xs text-red-600">{errors.lembaga_id.message}</p>
+              )}
             </div>
-            <form onSubmit={handleCreate} style={{ padding: "24px" }}>
-              <div style={{ marginBottom: "16px" }}>
-                <label className="form-label" htmlFor="lembaga">Lembaga Akreditasi</label>
-                <select
-                  id="lembaga"
-                  className="form-input"
-                  value={formData.lembaga_id}
-                  onChange={e => setFormData({ ...formData, lembaga_id: e.target.value })}
-                  required
-                >
-                  <option value="">— Pilih Lembaga —</option>
-                  {lembaga.map(l => (
-                    <option key={l.id} value={l.id}>{l.nama}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ marginBottom: "24px" }}>
-                <label className="form-label" htmlFor="tanggal">Tanggal Permohonan Survei</label>
-                <input
-                  id="tanggal"
-                  type="date"
-                  className="form-input"
-                  value={formData.tanggal_permohonan_survei}
-                  onChange={e => setFormData({ ...formData, tanggal_permohonan_survei: e.target.value })}
-                  required
-                />
-              </div>
-              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Batal</button>
-                <button type="submit" className="btn btn-primary">Ajukan</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <div className="space-y-2">
+              <Label htmlFor="tanggal">Tanggal Permohonan Survei *</Label>
+              <Input
+                id="tanggal"
+                type="date"
+                {...register("tanggal_permohonan_survei")}
+              />
+              {errors.tanggal_permohonan_survei && (
+                <p className="text-xs text-red-600">{errors.tanggal_permohonan_survei.message}</p>
+              )}
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setShowForm(false)} disabled={mutate.isLoading}>
+                Batal
+              </Button>
+              <Button type="submit" disabled={mutate.isLoading}>
+                {mutate.isLoading ? "Menyimpan..." : "Ajukan"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
-export default SiklusList;

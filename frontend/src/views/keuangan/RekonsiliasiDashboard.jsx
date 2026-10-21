@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useApi } from "@/hooks/useApi";
+import { Button } from "@/components/ui/button";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -77,13 +78,13 @@ export default function RekonsiliasiDashboard() {
           <label style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", display: "block", marginBottom: "4px" }}>Sampai Tanggal</label>
           <input type="date" className="form-input" value={sampai} onChange={e => setSampai(e.target.value)} style={{ width: "160px" }} />
         </div>
-        <button onClick={() => setTrigger(t => t + 1)} className="btn btn-primary" style={{ height: "38px" }}>
+        <Button onClick={() => setTrigger(t => t + 1)}>
           Terapkan Filter
-        </button>
+        </Button>
         {(dari || sampai) && (
-          <button onClick={() => { setDari(""); setSampai(""); setTrigger(t => t + 1); }} className="btn btn-ghost" style={{ height: "38px" }}>
+          <Button variant="ghost" onClick={() => { setDari(""); setSampai(""); setTrigger(t => t + 1); }}>
             Reset
-          </button>
+          </Button>
         )}
       </div>
 

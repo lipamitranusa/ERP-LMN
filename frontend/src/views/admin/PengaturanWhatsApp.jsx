@@ -1,32 +1,24 @@
 import React, { useState, useMemo } from "react";
 import { useApi, useMutate } from "@/hooks/useApi";
+import { PageHeader } from "@/components/PageHeader";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Eye, EyeOff, CheckCircle, XCircle, Copy } from "lucide-react";
 
-function PasswordField({ value, onChange, label, placeholder = "••••••••" }) {
+function formatRp(n) { return `Rp ${Number(n || 0).toLocaleString("id-ID")}`; }
+
+function PasswordField({ label, value, onChange, placeholder }) {
   const [show, setShow] = useState(false);
   return (
-    <div>
-      <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-        {label}
-      </label>
-      <div style={{ position: "relative" }}>
-        <input
-          className="form-input"
-          type={show ? "text" : "password"}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
-          style={{ paddingRight: "44px" }}
-        />
-        <button
-          type="button"
-          onClick={() => setShow(s => !s)}
-          style={{
-            position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)",
-            background: "none", border: "none", cursor: "pointer", color: "#94A3B8", fontSize: "11px",
-            padding: "2px 4px",
-          }}
-        >
-          {show ? "Sembunyikan" : "Tampilkan"}
+    <div className="space-y-1.5">
+      <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{label}</Label>
+      <div className="relative">
+        <Input type={show ? "text" : "password"} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || ""} className="pr-10" />
+        <button type="button" onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-300 dark:text-slate-500">
+          {show ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>
       </div>
     </div>
@@ -35,28 +27,23 @@ function PasswordField({ value, onChange, label, placeholder = "•••••�
 
 function LoadingSpinner({ label = "Memuat..." }) {
   return (
-    <div style={{ textAlign: "center", padding: "48px", color: "#94A3B8", fontSize: "13px" }}>
-      <div style={{
-        width: "28px", height: "28px", border: "3px solid #E2E8F0",
-        borderTopColor: "#4CAF50", borderRadius: "50%",
-        animation: "spin 0.7s linear infinite",
-        margin: "0 auto 10px",
-      }} />
+    <div className="flex flex-col items-center justify-center py-12 text-slate-400 dark:text-slate-500 text-sm">
+      <div className="w-7 h-7 border-[3px] border-slate-200 dark:border-slate-700 border-t-green-500 rounded-full animate-spin mb-3" />
       {label}
     </div>
   );
 }
 
 function Toast({ message, type = "success" }) {
+  const colors = {
+    success: { bg: "#DCFCE7", text: "#166534", border: "#BBF7D0" },
+    error:   { bg: "#FEE2E2", text: "#991B1B", border: "#FECACA" },
+    info:    { bg: "#FEF9C3", text: "#854D0E", border: "#FDE68A" },
+  };
+  const c = colors[type] || colors.success;
   return (
-    <div style={{
-      position: "fixed", bottom: "24px", right: "24px", zIndex: 9999,
-      padding: "12px 20px", borderRadius: "8px", fontSize: "13px", fontWeight: "500",
-      boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
-      background: type === "success" ? "#DCFCE7" : type === "error" ? "#FEE2E2" : "#FEF9C3",
-      color: type === "success" ? "#166534" : type === "error" ? "#991B1B" : "#854D0E",
-      border: `1px solid ${type === "success" ? "#BBF7D0" : type === "error" ? "#FECACA" : "#FDE68A"}`,
-    }}>
+    <div className="fixed bottom-6 right-6 z-50 p-3 rounded-lg text-sm font-medium shadow-lg border"
+      style={{ background: c.bg, color: c.text, borderColor: c.border }}>
       {message}
     </div>
   );
@@ -66,58 +53,22 @@ function TestResultBanner({ result }) {
   if (!result) return null;
   const isSuccess = result.success;
   return (
-    <div style={{
-      marginBottom: "16px",
-      padding: "12px 16px",
-      borderRadius: "8px",
-      background: isSuccess ? "#DCFCE7" : "#FEE2E2",
-      border: `1px solid ${isSuccess ? "#BBF7D0" : "#FECACA"}`,
-      display: "flex",
-      alignItems: "flex-start",
-      gap: "10px",
-    }}>
-      <div style={{
-        width: "20px", height: "20px", borderRadius: "50%",
-        background: isSuccess ? "#4CAF50" : "#EF4444",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        flexShrink: 0, marginTop: "1px",
-      }}>
-        {isSuccess ? (
-          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" width="12" height="12">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-        ) : (
-          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" width="12" height="12">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        )}
+    <div className="mb-4 p-4 rounded-lg border flex items-start gap-3"
+      style={{ background: isSuccess ? "#DCFCE7" : "#FEE2E2", borderColor: isSuccess ? "#BBF7D0" : "#FECACA" }}>
+      <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: isSuccess ? "#22C55E" : "#EF4444" }}>
+        {isSuccess ? <CheckCircle size={12} className="text-white" /> : <XCircle size={12} className="text-white" />}
       </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: "13px", fontWeight: "600", color: isSuccess ? "#166534" : "#991B1B" }}>
+      <div className="flex-1">
+        <div className="text-sm font-semibold" style={{ color: isSuccess ? "#166534" : "#991B1B" }}>
           {isSuccess ? "Koneksi Berhasil" : "Koneksi Gagal"}
         </div>
-        <div style={{ fontSize: "12px", color: isSuccess ? "#15803D" : "#B91C1C", marginTop: "4px" }}>
-          {result.message}
-        </div>
+        <div className="text-[12px] mt-1" style={{ color: isSuccess ? "#15803D" : "#B91C1C" }}>{result.message}</div>
         {isSuccess && result.phone && (
-          <div style={{
-            marginTop: "10px",
-            padding: "8px 12px",
-            background: "#fff",
-            borderRadius: "6px",
-            display: "flex",
-            gap: "16px",
-            flexWrap: "wrap",
-          }}>
-            {[
-              ["Nomor", result.phone.number],
-              ["Nama Bisnis", result.phone.name],
-              ["Status", result.phone.status],
-              ["Quality", result.phone.rating],
-            ].filter(([, v]) => v).map(([label, val]) => (
-              <div key={label}>
-                <span style={{ fontSize: "11px", color: "#94A3B8" }}>{label}: </span>
-                <span style={{ fontSize: "12px", fontWeight: "600", color: "#1E293B" }}>{val}</span>
+          <div className="flex flex-wrap gap-4 mt-3 p-2 rounded-md bg-white/60">
+            {[["Nomor", result.phone.number], ["Nama Bisnis", result.phone.name], ["Status", result.phone.status], ["Quality", result.phone.rating]].filter(([, v]) => v).map(([label, val]) => (
+              <div key={label} className="text-[12px]">
+                <span className="text-slate-400 dark:text-slate-500">{label}: </span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{val}</span>
               </div>
             ))}
           </div>
@@ -134,6 +85,16 @@ const TABS = [
   { id: "notifikasi", label: "Notifikasi" },
 ];
 
+function WhatsAppIcon() {
+  return (
+    <div className="w-10 h-10 rounded-[10px] bg-[#25D366] flex items-center justify-center shrink-0">
+      <svg viewBox="0 0 24 24" fill="#fff" width="22" height="22">
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+      </svg>
+    </div>
+  );
+}
+
 export default function PengaturanWhatsApp() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -143,7 +104,6 @@ export default function PengaturanWhatsApp() {
   const [tempValues, setTempValues] = useState({});
   const [dirty, setDirty] = useState({});
   const [testResult, setTestResult] = useState(null);
-  // Test kirim pesan (end-to-end) — beda dari testConnection (API only)
   const [testSend, setTestSend] = useState({ phone: "", message: "Halo, ini pesan test dari sistem ERP LIPA Akreditasi." });
   const [sendingTest, setSendingTest] = useState(false);
   const [testSendResult, setTestSendResult] = useState(null);
@@ -155,10 +115,7 @@ export default function PengaturanWhatsApp() {
 
   const grouped = useMemo(() => {
     const grp = {};
-    settings.forEach(s => {
-      if (!grp[s.kategori]) grp[s.kategori] = {};
-      grp[s.kategori][s.kunci] = s;
-    });
+    settings.forEach(s => { if (!grp[s.kategori]) grp[s.kategori] = {}; grp[s.kategori][s.kunci] = s; });
     return grp;
   }, [settings]);
 
@@ -179,48 +136,22 @@ export default function PengaturanWhatsApp() {
     setSaving(true);
     try {
       const payload = {};
-      settings.forEach(s => {
-        const key = `${s.kategori}:${s.kunci}`;
-        if (key in tempValues) payload[key] = tempValues[key];
-      });
-      if (Object.keys(payload).length === 0) {
-        showToast("Tidak ada perubahan untuk disimpan.", "info");
-        setSaving(false);
-        return;
-      }
-      await mutateSave.mutateAsync({
-        path: "/whatsapp-settings",
-        method: "PUT",
-        body: { values: payload },
-      });
-      setTempValues({});
-      setDirty({});
+      settings.forEach(s => { const key = `${s.kategori}:${s.kunci}`; if (key in tempValues) payload[key] = tempValues[key]; });
+      if (Object.keys(payload).length === 0) { showToast("Tidak ada perubahan untuk disimpan.", "info"); setSaving(false); return; }
+      await mutateSave.mutateAsync({ path: "/whatsapp-settings", method: "PUT", body: { values: payload } });
+      setTempValues({}); setDirty({});
       showToast("Berhasil disimpan.", "success");
-    } catch (err) {
-      showToast(err.message || "Gagal menyimpan.", "error");
-    } finally {
-      setSaving(false);
-    }
+    } catch (err) { showToast(err.message || "Gagal menyimpan.", "error"); } finally { setSaving(false); }
   };
 
   const handleTestConnection = async () => {
-    setTesting(true);
-    setTestResult(null);
+    setTesting(true); setTestResult(null);
     try {
       const { api } = await import("@/lib/api");
-      // api() sudah parse JSON & throw on non-ok — langsung dapat response body
-      const data = await api("/whatsapp-settings/test-connection", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      setTestResult(data);
-      showToast(data.message, data.success ? "success" : "error");
-    } catch (err) {
-      setTestResult({ success: false, message: err.message });
-      showToast(err.message || "Gagal menguji koneksi.", "error");
-    } finally {
-      setTesting(false);
-    }
+      const res = await api("/whatsapp-settings/test-connection", { method: "POST", body: JSON.stringify({}) });
+      setTestResult(res);
+      showToast(res.message, res.success ? "success" : "error");
+    } catch (err) { setTestResult({ success: false, message: err.message }); showToast(err.message || "Gagal menguji koneksi.", "error"); } finally { setTesting(false); }
   };
 
   const handleTestSend = async () => {
@@ -229,285 +160,132 @@ export default function PengaturanWhatsApp() {
     if (!phone) { showToast("Nomor WhatsApp wajib diisi.", "error"); return; }
     if (!message) { showToast("Pesan wajib diisi.", "error"); return; }
     if (phone.length < 8) { showToast("Nomor WhatsApp minimal 8 digit.", "error"); return; }
-
-    setSendingTest(true);
-    setTestSendResult(null);
+    setSendingTest(true); setTestSendResult(null);
     try {
       const { api } = await import("@/lib/api");
-      // api() sudah parse JSON & throw on non-ok — langsung dapat response body
-      const data = await api("/whatsapp-settings/test-send", {
-        method: "POST",
-        body: JSON.stringify({ phone, message }),
-      });
-      setTestSendResult(data);
-      showToast(data.message, data.success ? "success" : "error");
-    } catch (err) {
-      const errBody = await err?.message || "Gagal mengirim pesan test.";
-      setTestSendResult({ success: false, message: errBody });
-      showToast(errBody, "error");
-    } finally {
-      setSendingTest(false);
-    }
+      const res = await api("/whatsapp-settings/test-send", { method: "POST", body: JSON.stringify({ phone, message }) });
+      setTestSendResult(res);
+      showToast(res.message, res.success ? "success" : "error");
+    } catch (err) { setTestSendResult({ success: false, message: err?.message || "Gagal mengirim pesan test." }); showToast(err?.message || "Gagal mengirim pesan test.", "error"); } finally { setSendingTest(false); }
   };
 
-  const showToast = (message, type = "success") => {
-    setToastMsg(message);
-    setToastType(type);
-    setTimeout(() => setToastMsg(null), 4000);
-  };
+  const showToast = (message, type = "success") => { setToastMsg(message); setToastType(type); setTimeout(() => setToastMsg(null), 4000); };
 
   const isEnabled = getVal("umum", "enabled") === "1";
   const hasDirty = Object.keys(dirty).length > 0;
+  const webhookUrl = getVal("whatsapp_cloud", "webhook_url") || "/api/webhooks/whatsapp";
+  const driverLabel = getVal("umum", "driver") === "fonnte" ? "Fonnte" : getVal("umum", "driver") === "log" ? "Log" : "Meta Cloud API";
 
   const renderField = (setting) => {
     const val = getVal(setting.kategori, setting.kunci);
     const tipe = setting.tipe;
-    const opts = (() => {
-      try {
-        const o = typeof setting.options === "string" ? JSON.parse(setting.options) : setting.options;
-        return o || {};
-      } catch { return {}; }
-    })();
+    const opts = (() => { try { const o = typeof setting.options === "string" ? JSON.parse(setting.options) : setting.options; return o || {}; } catch { return {}; } })();
 
-    if (tipe === "boolean") {
-      return (
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
-          <div
-            onClick={() => setVal(setting.kategori, setting.kunci, val === "1" ? "0" : "1")}
-            style={{
-              width: "44px", height: "24px", borderRadius: "12px",
-              background: val === "1" ? "#4CAF50" : "#CBD5E1",
-              position: "relative", transition: "background 0.2s", cursor: "pointer", flexShrink: 0,
-            }}
-          >
-            <div style={{
-              width: "20px", height: "20px", borderRadius: "50%", background: "#fff",
-              position: "absolute", top: "2px",
-              left: val === "1" ? "22px" : "2px",
-              transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-            }} />
-          </div>
-          <span style={{ fontSize: "13px", fontWeight: "500", color: "#374151" }}>
-            {setting.label}
-          </span>
+    if (tipe === "boolean") return (
+      <div className="flex items-center gap-2.5 cursor-pointer select-none" onClick={() => setVal(setting.kategori, setting.kunci, val === "1" ? "0" : "1")}>
+        <div className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors" style={{ background: val === "1" ? "#22C55E" : "#CBD5E1" }}>
+          <div className="h-5 w-5 rounded-full bg-white shadow transition-transform" style={{ transform: val === "1" ? "translateX(22px)" : "translateX(2px)" }} />
         </div>
-      );
-    }
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-500">{setting.label}</span>
+      </div>
+    );
 
     if (tipe === "select") {
       const choices = opts.choices || {};
-      const entries = Object.entries(choices);
       return (
-        <div>
-          <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-            {setting.label}
-          </label>
-          <select className="form-input" value={val}
-            onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)}>
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{setting.label}</Label>
+          <select className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={val} onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)}>
             <option value="">— Pilih —</option>
-            {entries.map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
-            ))}
+            {Object.entries(choices).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
       );
     }
 
-    if (tipe === "password") {
-      return (
-        <PasswordField
-          label={setting.label}
-          value={val}
-          placeholder={opts.placeholder || ""}
-          onChange={v => setVal(setting.kategori, setting.kunci, v)}
-        />
-      );
-    }
+    if (tipe === "password") return <PasswordField label={setting.label} value={val} onChange={v => setVal(setting.kategori, setting.kunci, v)} placeholder={opts.placeholder} />;
 
-    if (tipe === "number") {
-      return (
-        <div>
-          <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-            {setting.label}
-          </label>
-          <input className="form-input" type="number" value={val}
-            onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)} />
-        </div>
-      );
-    }
+    if (tipe === "number") return (
+      <div className="space-y-1.5">
+        <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{setting.label}</Label>
+        <Input type="number" value={val} onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)} />
+      </div>
+    );
 
     return (
-      <div>
-        <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-          {setting.label}
-        </label>
-        <input className="form-input" type="text" value={val}
-          placeholder={opts.placeholder || ""}
-          onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)} />
+      <div className="space-y-1.5">
+        <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{setting.label}</Label>
+        <Input value={val} onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)} placeholder={opts.placeholder || ""} />
       </div>
     );
   };
 
-  const renderGroup = (kategori) => {
-    const items = Object.values(grouped[kategori] || {});
-    return items.map(setting => (
-      <div key={setting.id} style={{ marginBottom: "16px" }}>
-        {renderField(setting)}
-        {setting.deskripsi && (
-          <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#94A3B8" }}>{setting.deskripsi}</p>
-        )}
-      </div>
-    ));
-  };
+  const renderGroup = (kategori) => Object.values(grouped[kategori] || {}).map(setting => (
+    <div key={setting.id}>
+      {renderField(setting)}
+      {setting.deskripsi && <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{setting.deskripsi}</p>}
+    </div>
+  ));
 
   if (isLoading) return <LoadingSpinner />;
 
-  const webhookUrl = getVal("whatsapp_cloud", "webhook_url") || "/api/webhooks/whatsapp";
-
   return (
-    <div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    <div className="space-y-5">
+      <PageHeader
+        title={<div className="flex items-center gap-3"><WhatsAppIcon /><span>Pengaturan WhatsApp</span></div>}
+        subtitle="Konfigurasi WhatsApp Business API (Meta WhatsApp Cloud)"
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleTestConnection} disabled={testing || !isEnabled} className="gap-2">
+              {testing ? <><div className="w-3.5 h-3.5 border-2 border-slate-300 border-t-green-500 rounded-full animate-spin" />Menguji...</> : "Uji Koneksi"}
+            </Button>
+            <Button onClick={handleSave} disabled={saving || !hasDirty}>{saving ? "Menyimpan..." : "Simpan Perubahan"}</Button>
+          </div>
+        }
+      />
 
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", gap: "16px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{
-            width: "40px", height: "40px", borderRadius: "10px",
-            background: "#25D366",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-          }}>
-            <svg viewBox="0 0 24 24" fill="#fff" width="22" height="22">
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-            </svg>
-          </div>
-          <div>
-            <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>
-              Pengaturan WhatsApp
-            </h1>
-            <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
-              Konfigurasi WhatsApp Business API (Meta WhatsApp Cloud)
-            </p>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-          <button
-            className="btn btn-secondary"
-            onClick={handleTestConnection}
-            disabled={testing || !isEnabled}
-            style={{ display: "flex", alignItems: "center", gap: "6px" }}
-          >
-            {testing ? (
-              <div style={{ width: "14px", height: "14px", border: "2px solid #94A3B8", borderTopColor: "#4CAF50", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-              </svg>
-            )}
-            {testing ? "Menguji..." : "Uji Koneksi"}
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={handleSave}
-            disabled={saving || !hasDirty}
-          >
-            {saving ? "Menyimpan..." : "Simpan Perubahan"}
-          </button>
-        </div>
+      <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium"
+        style={{ background: isEnabled ? "#DCFCE7" : "#FEE2E2", border: `1px solid ${isEnabled ? "#BBF7D0" : "#FECACA"}`, color: isEnabled ? "#166534" : "#991B1B" }}>
+        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: isEnabled ? "#25D366" : "#EF4444" }} />
+        WhatsApp Business API: <strong>{isEnabled ? "Aktif" : "Nonaktif"}</strong>
       </div>
 
-      {/* Status banner */}
-      <div style={{
-        padding: "12px 16px", borderRadius: "8px", marginBottom: "20px",
-        background: isEnabled ? "#DCFCE7" : "#FEE2E2",
-        border: `1px solid ${isEnabled ? "#BBF7D0" : "#FECACA"}`,
-        display: "flex", alignItems: "center", gap: "10px",
-      }}>
-        <div style={{
-          width: "10px", height: "10px", borderRadius: "50%",
-          background: isEnabled ? "#25D366" : "#EF4444", flexShrink: 0,
-        }} />
-        <span style={{ fontSize: "13px", fontWeight: "500", color: isEnabled ? "#166534" : "#991B1B" }}>
-          WhatsApp Business API: <strong>{isEnabled ? "Aktif" : "Nonaktif"}</strong>
-        </span>
-      </div>
-
-      {/* Test result */}
       {testResult && <TestResultBanner result={testResult} />}
 
-      {/* Webhook URL info */}
       {isEnabled && (
-        <div style={{
-          padding: "12px 16px", borderRadius: "8px", marginBottom: "20px",
-          background: "#EFF6FF", border: "1px solid #BFDBFE",
-        }}>
-          <div style={{ fontSize: "12px", fontWeight: "600", color: "#1E40AF", marginBottom: "6px" }}>
-            Webhook URL
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <code style={{
-              flex: 1, padding: "6px 12px",
-              background: "#EFF6FF", border: "1px solid #BFDBFE",
-              borderRadius: "6px", fontSize: "12px", color: "#1D4ED8",
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }}>
+        <Card className="p-4" style={{ background: "#EFF6FF", border: "1px solid #BFDBFE" }}>
+          <div className="text-[12px] font-semibold text-blue-800 mb-2">Webhook URL</div>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 px-3 py-2 rounded-md text-[12px]" style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", color: "#1D4ED8" }}>
               {window.location.origin}{webhookUrl}
             </code>
-            <button
-              onClick={() => navigator.clipboard.writeText(window.location.origin + webhookUrl)}
-              style={{
-                padding: "6px 12px",
-                border: "1px solid #BFDBFE", borderRadius: "6px",
-                background: "#fff", color: "#3B82F6",
-                fontSize: "11px", fontWeight: "500", cursor: "pointer", flexShrink: 0,
-              }}
-            >
-              Salin
-            </button>
+            <Button variant="outline" size="sm" className="gap-1 shrink-0" onClick={() => navigator.clipboard.writeText(window.location.origin + webhookUrl)}>
+              <Copy size={12} /> Salin
+            </Button>
           </div>
-          <div style={{ fontSize: "11px", color: "#64748B", marginTop: "6px" }}>
-            Daftarkan URL ini di Meta Developer Console → WhatsApp → Configuration → Webhooks. Gunakan <em>Verify Token</em> yang sama dengan yang dikonfigurasi di tab WhatsApp Cloud API.
-          </div>
-        </div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-2">Daftarkan URL ini di Meta Developer Console → WhatsApp → Configuration → Webhooks. Gunakan <em>Verify Token</em> yang sama dengan yang dikonfigurasi di tab WhatsApp Cloud API.</div>
+        </Card>
       )}
 
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: "4px", marginBottom: "20px", borderBottom: "1px solid #E2E8F0", paddingBottom: "0" }}>
+      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            style={{
-              padding: "8px 16px", border: "none",
-              borderBottom: activeTab === tab.id ? "2px solid #4CAF50" : "2px solid transparent",
-              background: "none", cursor: "pointer", fontSize: "13px",
-              fontWeight: activeTab === tab.id ? "600" : "400",
-              color: activeTab === tab.id ? "#4CAF50" : "#64748B", marginBottom: "-1px",
-            }}
-          >
+            className="px-4 py-2 text-sm border-b-2 transition-colors"
+            style={{ borderColor: activeTab === tab.id ? "#22C55E" : "transparent", color: activeTab === tab.id ? "#22C55E" : "#64748B", fontWeight: activeTab === tab.id ? 600 : 400, marginBottom: "-1px" }}>
             {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Tab: Umum */}
       {activeTab === "umum" && (
         <>
-          <div className="card" style={{ padding: "20px", marginBottom: "16px" }}>
-            <h3 style={{ margin: "0 0 16px", fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
-              Pengaturan Umum WhatsApp
-            </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {renderGroup("umum")}
-            </div>
-            <div style={{
-              marginTop: "20px", padding: "12px 16px",
-              background: "#FFF7ED", border: "1px solid #FED7AA",
-              borderRadius: "8px",
-            }}>
-              <div style={{ fontSize: "12px", fontWeight: "600", color: "#C2410C", marginBottom: "6px" }}>
-                Cara mendapatkan kredensial
-              </div>
-              <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "12px", color: "#7C2D12", lineHeight: "1.8" }}>
-                <li>Buka <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" style={{ color: "#EA580C" }}>developers.facebook.com</a> dan buat aplikasi baru bertipe <em>Business</em></li>
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4">Pengaturan Umum WhatsApp</h3>
+            <div className="flex flex-col gap-4">{renderGroup("umum")}</div>
+            <div className="mt-5 p-4 rounded-lg" style={{ background: "#FFF7ED", border: "1px solid #FED7AA" }}>
+              <div className="text-[12px] font-semibold text-orange-700 mb-2">Cara mendapatkan kredensial</div>
+              <ol className="text-[12px] text-orange-800 space-y-1 pl-4 list-decimal">
+                <li>Buka <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="text-orange-600">developers.facebook.com</a> dan buat aplikasi baru bertipe <em>Business</em></li>
                 <li>Tambahkan produk <strong>WhatsApp</strong> ke aplikasi Anda</li>
                 <li>Dapatkan <strong>App ID</strong> dan <strong>App Secret</strong> dari settings aplikasi</li>
                 <li>Ambil <strong>Phone Number ID</strong> dari menu WhatsApp → Getting Started</li>
@@ -515,259 +293,138 @@ export default function PengaturanWhatsApp() {
                 <li>Konfigurasi webhook dengan URL di atas dan Verify Token di tab WhatsApp Cloud API</li>
               </ol>
             </div>
-          </div>
+          </Card>
 
-          {/* Test Kirim Pesan — end-to-end smoke test ke driver aktif */}
-          <div className="card" style={{ padding: "20px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
-              <h3 style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
-                Test Kirim Pesan
-              </h3>
-              <span style={{
-                fontSize: "10px", fontWeight: "600",
-                padding: "2px 8px", borderRadius: "9999px",
-                background: "#EFF6FF", color: "#1E40AF",
-              }}>
-                End-to-end via {getVal("umum", "driver") === "fonnte" ? "Fonnte" : getVal("umum", "driver") === "log" ? "Log" : "Meta Cloud API"}
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Test Kirim Pesan</h3>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "#EFF6FF", color: "#1E40AF" }}>
+                End-to-end via {driverLabel}
               </span>
             </div>
-            <p style={{ margin: "4px 0 16px", fontSize: "12px", color: "#94A3B8" }}>
-              Kirim 1 pesan WhatsApp test untuk verifikasi bahwa driver benar-benar dapat mengirim (bukan hanya cek kredensial).
-              Pesan akan benar-benar terkirim ke nomor tujuan, bukan simulasi.
-            </p>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "12px" }}>
-              <div>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                  Nomor WhatsApp Tujuan
-                </label>
-                <input
-                  className="form-input"
-                  type="tel"
-                  value={testSend.phone}
-                  onChange={e => setTestSend(s => ({ ...s, phone: e.target.value }))}
-                  placeholder="cth: 081234567890 atau 6281234567890"
-                  maxLength={20}
-                />
-                <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px" }}>
-                  Format 08xx (otomatis dikonversi ke 628xx) atau langsung 62xxx.
-                </div>
+            <p className="text-[12px] text-slate-400 dark:text-slate-500 mb-4">Kirim 1 pesan WhatsApp test untuk verifikasi bahwa driver benar-benar dapat mengirim (bukan hanya cek kredensial). Pesan akan benar-benar terkirim ke nomor tujuan.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+              <div className="space-y-1.5 col-span-1">
+                <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Nomor WhatsApp Tujuan</Label>
+                <Input type="tel" value={testSend.phone} onChange={e => setTestSend(s => ({ ...s, phone: e.target.value }))} placeholder="cth: 081234567890" maxLength={20} />
+                <div className="text-[11px] text-slate-400 dark:text-slate-500">Format 08xx atau 62xxx.</div>
               </div>
-              <div>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                  Pesan
-                </label>
-                <textarea
-                  className="form-input"
-                  value={testSend.message}
-                  onChange={e => setTestSend(s => ({ ...s, message: e.target.value }))}
-                  rows={3}
-                  maxLength={1000}
-                  style={{ resize: "vertical", minHeight: "64px", fontFamily: "inherit" }}
-                />
-                <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "2px", textAlign: "right" }}>
-                  {testSend.message.length} / 1000
-                </div>
+              <div className="space-y-1.5 col-span-2">
+                <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Pesan</Label>
+                <Textarea rows={2} value={testSend.message} onChange={e => setTestSend(s => ({ ...s, message: e.target.value }))} maxLength={1000} />
+                <div className="text-[11px] text-slate-400 dark:text-slate-500 text-right">{testSend.message.length} / 1000</div>
               </div>
             </div>
-
-            <div style={{ display: "flex", gap: "8px", marginTop: "12px", alignItems: "center" }}>
-              <button
-                className="btn btn-primary"
-                onClick={handleTestSend}
-                disabled={sendingTest || !isEnabled || !testSend.phone.trim() || !testSend.message.trim()}
-                style={{ display: "flex", alignItems: "center", gap: "6px" }}
-              >
-                {sendingTest ? (
-                  <>
-                    <div style={{ width: "14px", height: "14px", border: "2px solid #fff", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-                    Mengirim...
-                  </>
-                ) : (
-                  <>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                    </svg>
-                    Kirim Pesan Test
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setTestSend({ phone: "", message: "Halo, ini pesan test dari sistem ERP LIPA Akreditasi." })}
-                disabled={sendingTest}
-                style={{ fontSize: "12px" }}
-              >
-                Reset
-              </button>
-              {!isEnabled && (
-                <span style={{ fontSize: "11px", color: "#94A3B8" }}>
-                  Aktifkan <strong>WhatsApp Aktif</strong> di atas untuk mengirim pesan.
-                </span>
-              )}
+            <div className="flex items-center gap-2">
+              <Button onClick={handleTestSend} disabled={sendingTest || !isEnabled || !testSend.phone.trim() || !testSend.message.trim()} className="gap-2">
+                {sendingTest ? <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Mengirim...</> : "Kirim Pesan Test"}
+              </Button>
+              <Button variant="ghost" size="sm" className="text-xs" onClick={() => setTestSend({ phone: "", message: "Halo, ini pesan test dari sistem ERP LIPA Akreditasi." })} disabled={sendingTest}>Reset</Button>
+              {!isEnabled && <span className="text-[11px] text-slate-400 dark:text-slate-500">Aktifkan <strong>WhatsApp Aktif</strong> di atas untuk mengirim pesan.</span>}
             </div>
 
             {testSendResult && (
-              <div style={{
-                marginTop: "16px",
-                padding: "12px 14px",
-                borderRadius: "8px",
-                background: testSendResult.success ? "#DCFCE7" : "#FEE2E2",
-                border: `1px solid ${testSendResult.success ? "#BBF7D0" : "#FECACA"}`,
-                display: "flex", alignItems: "flex-start", gap: "10px",
-              }}>
-                <div style={{
-                  width: "20px", height: "20px", borderRadius: "50%",
-                  background: testSendResult.success ? "#4CAF50" : "#EF4444",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  flexShrink: 0, marginTop: "1px",
-                }}>
-                  {testSendResult.success ? (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" width="12" height="12">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" width="12" height="12">
-                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  )}
+              <div className="mt-4 p-4 rounded-lg border flex items-start gap-3"
+                style={{ background: testSendResult.success ? "#DCFCE7" : "#FEE2E2", borderColor: testSendResult.success ? "#BBF7D0" : "#FECACA" }}>
+                <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: testSendResult.success ? "#22C55E" : "#EF4444" }}>
+                  {testSendResult.success ? <CheckCircle size={12} className="text-white" /> : <XCircle size={12} className="text-white" />}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "13px", fontWeight: "600", color: testSendResult.success ? "#166534" : "#991B1B" }}>
+                <div>
+                  <div className="text-sm font-semibold" style={{ color: testSendResult.success ? "#166534" : "#991B1B" }}>
                     {testSendResult.success ? "Pesan Terkirim" : "Pesan Gagal"}
                   </div>
-                  <div style={{ fontSize: "12px", color: testSendResult.success ? "#15803D" : "#B91C1C", marginTop: "4px" }}>
-                    {testSendResult.message}
-                  </div>
-                  {testSendResult.driver && (
-                    <div style={{ fontSize: "11px", color: "#64748B", marginTop: "4px" }}>
-                      Driver: <code style={{ background: "#fff", padding: "1px 6px", borderRadius: "3px" }}>{testSendResult.driver}</code>
-                    </div>
-                  )}
+                  <div className="text-[12px] mt-1" style={{ color: testSendResult.success ? "#15803D" : "#B91C1C" }}>{testSendResult.message}</div>
+                  {testSendResult.driver && <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">Driver: <code className="bg-white px-1.5 py-0.5 rounded">{testSendResult.driver}</code></div>}
                 </div>
               </div>
             )}
-          </div>
+          </Card>
         </>
       )}
 
-      {/* Tab: WhatsApp Cloud API */}
       {activeTab === "whatsapp_cloud" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-          <div className="card" style={{ padding: "20px" }}>
-            <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
-              Konfigurasi WhatsApp Cloud API
-            </h3>
-            <p style={{ margin: "0 0 16px", fontSize: "12px", color: "#94A3B8" }}>
-              Isikan kredensial dari Meta Developer Console.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              {renderGroup("whatsapp_cloud")}
-            </div>
-          </div>
-          <div className="card" style={{ padding: "20px", background: "#F8FAFC" }}>
-            <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "600", color: "#475569" }}>
-              Panduan Setup
-            </h3>
-            <div style={{ fontSize: "12px", color: "#64748B", lineHeight: "1.7" }}>
-              <div style={{ marginBottom: "16px" }}>
-                <strong style={{ color: "#475569", display: "block", marginBottom: "4px" }}>Kredensial yang dibutuhkan:</strong>
-                <ul style={{ margin: 0, paddingLeft: "16px", lineHeight: "2" }}>
+        <div className="grid grid-cols-2 gap-5">
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Konfigurasi WhatsApp Cloud API</h3>
+            <p className="text-[12px] text-slate-400 dark:text-slate-500 mb-4">Isikan kredensial dari Meta Developer Console.</p>
+            <div className="flex flex-col gap-4">{renderGroup("whatsapp_cloud")}</div>
+          </Card>
+          <Card className="p-5" style={{ background: "#F8FAFC" }}>
+            <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-3">Panduan Setup</h3>
+            <div className="text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500 space-y-4">
+              <div>
+                <strong className="text-slate-600 dark:text-slate-300 dark:text-slate-500 block mb-2">Kredensial yang dibutuhkan:</strong>
+                <ul className="pl-4 space-y-1 list-disc">
                   <li><strong>App ID</strong> — dari Meta Developer Console → Settings → Basic</li>
                   <li><strong>App Secret</strong> — dari halaman yang sama dengan App ID</li>
                   <li><strong>Phone Number ID</strong> — dari WhatsApp → Getting Started</li>
                   <li><strong>Business Account ID</strong> — dari Meta Business Suite</li>
                 </ul>
               </div>
-              <div style={{ marginBottom: "16px" }}>
-                <strong style={{ color: "#475569", display: "block", marginBottom: "4px" }}>Konfigurasi Webhook:</strong>
-                <ol style={{ margin: 0, paddingLeft: "16px", lineHeight: "2" }}>
+              <div>
+                <strong className="text-slate-600 dark:text-slate-300 dark:text-slate-500 block mb-2">Konfigurasi Webhook:</strong>
+                <ol className="pl-4 space-y-1 list-decimal">
                   <li>Buka <strong>WhatsApp → Configuration</strong> di Developer Console</li>
-                  <li>Isikan Callback URL: <code style={{ fontSize: "11px" }}>{window.location.origin}{webhookUrl}</code></li>
+                  <li>Isikan Callback URL: <code className="text-[11px] bg-white px-1 py-0.5 rounded">{window.location.origin}{webhookUrl}</code></li>
                   <li>Isikan Verify Token sama persis dengan field di atas</li>
                   <li>Klik <strong>Verify and Save</strong></li>
                   <li>Aktifkan webhook subscription untuk: <em>messages</em></li>
                 </ol>
               </div>
-              <div style={{ padding: "10px 12px", background: "#fff", borderRadius: "6px", border: "1px solid #E2E8F0" }}>
-                <strong style={{ color: "#475569", fontSize: "11px" }}>Catatan:</strong>
-                <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#64748B" }}>
-                  WhatsApp Cloud API menggunakan template pesan yang perlu disetujui Meta sebelum bisa digunakan untuk pesan di luar jendela 24 jam. Pastikan template yang dibutuhkan sudah disetujui.
-                </p>
+              <div className="p-3 rounded-md bg-white border border-slate-200 dark:border-slate-700">
+                <strong className="text-slate-600 dark:text-slate-300 dark:text-slate-500 text-[11px]">Catatan:</strong>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">WhatsApp Cloud API menggunakan template pesan yang perlu disetujui Meta sebelum bisa digunakan untuk pesan di luar jendela 24 jam.</p>
               </div>
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
-      {/* Tab: Fonnte */}
       {activeTab === "fonnte" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-          <div className="card" style={{ padding: "20px" }}>
-            <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
-              Konfigurasi Fonnte Gateway
-            </h3>
-            <p style={{ margin: "0 0 16px", fontSize: "12px", color: "#94A3B8" }}>
-              <strong>Catatan:</strong> tab ini hanya dipakai jika <em>Driver</em> di tab Umum dipilih <strong>"Fonnte (Gateway Indonesia)"</strong>.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              {renderGroup("fonnte")}
-            </div>
-          </div>
-          <div className="card" style={{ padding: "20px", background: "#F8FAFC" }}>
-            <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "600", color: "#475569" }}>
-              Panduan Setup Fonnte
-            </h3>
-            <div style={{ fontSize: "12px", color: "#64748B", lineHeight: "1.7" }}>
-              <div style={{ marginBottom: "16px" }}>
-                <strong style={{ color: "#475569", display: "block", marginBottom: "4px" }}>Cara mendapatkan API Token:</strong>
-                <ol style={{ margin: 0, paddingLeft: "16px", lineHeight: "2" }}>
-                  <li>Buka <a href="https://dashboard.fonnte.com" target="_blank" rel="noopener noreferrer" style={{ color: "#EA580C" }}>dashboard.fonnte.com</a> dan buat akun</li>
+        <div className="grid grid-cols-2 gap-5">
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Konfigurasi Fonnte Gateway</h3>
+            <p className="text-[12px] text-slate-400 dark:text-slate-500 mb-4">Tab ini hanya dipakai jika <em>Driver</em> di tab Umum dipilih <strong>"Fonnte (Gateway Indonesia)"</strong>.</p>
+            <div className="flex flex-col gap-4">{renderGroup("fonnte")}</div>
+          </Card>
+          <Card className="p-5" style={{ background: "#F8FAFC" }}>
+            <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-3">Panduan Setup Fonnte</h3>
+            <div className="text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500 space-y-4">
+              <div>
+                <strong className="text-slate-600 dark:text-slate-300 dark:text-slate-500 block mb-2">Cara mendapatkan API Token:</strong>
+                <ol className="pl-4 space-y-1 list-decimal">
+                  <li>Buka <a href="https://dashboard.fonnte.com" target="_blank" rel="noopener noreferrer" className="text-orange-600">dashboard.fonnte.com</a> dan buat akun</li>
                   <li>Hubungkan perangkat WhatsApp Anda via QR Code di menu <em>Device</em></li>
                   <li>Salin <strong>Token</strong> dari menu <em>Device → Token</em></li>
                   <li>Tempel token di field <strong>API Token</strong> di samping</li>
                 </ol>
               </div>
-              <div style={{ marginBottom: "16px" }}>
-                <strong style={{ color: "#475569", display: "block", marginBottom: "4px" }}>Kapan pakai Fonnte vs Meta Cloud API:</strong>
-                <ul style={{ margin: 0, paddingLeft: "16px", lineHeight: "2" }}>
+              <div>
+                <strong className="text-slate-600 dark:text-slate-300 dark:text-slate-500 block mb-2">Kapan pakai Fonnte vs Meta Cloud API:</strong>
+                <ul className="pl-4 space-y-1 list-disc">
                   <li><strong>Fonnte</strong> — setup cepat, cocok untuk volume rendah–menengah, tidak butuh approval template dari Meta</li>
                   <li><strong>Meta Cloud API</strong> — skala besar, gratis (per pesan), perlu proses approval template di Meta Console</li>
                 </ul>
               </div>
-              <div style={{ padding: "10px 12px", background: "#fff", borderRadius: "6px", border: "1px solid #E2E8F0" }}>
-                <strong style={{ color: "#475569", fontSize: "11px" }}>Catatan:</strong>
-                <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#64748B" }}>
-                  Fonnte menggunakan nomor perangkat yang sudah ter-scan QR — biaya mengikuti paket langganan Fonnte, bukan per-pesan dari Meta. Pastikan saldo Fonnte cukup sebelum produksi.
-                </p>
+              <div className="p-3 rounded-md bg-white border border-slate-200 dark:border-slate-700">
+                <strong className="text-slate-600 dark:text-slate-300 dark:text-slate-500 text-[11px]">Catatan:</strong>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">Fonnte menggunakan nomor perangkat yang sudah ter-scan QR — biaya mengikuti paket langganan Fonnte. Pastikan saldo Fonnte cukup sebelum produksi.</p>
               </div>
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
-      {/* Tab: Notifikasi */}
       {activeTab === "notifikasi" && (
-        <div className="card" style={{ padding: "20px" }}>
-          <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
-            Pengaturan Notifikasi WhatsApp
-          </h3>
-          <p style={{ margin: "0 0 16px", fontSize: "12px", color: "#94A3B8" }}>
-            Aktifkan atau nonaktifkan jenis notifikasi WhatsApp yang dikirim ke faskes dan admin.
-          </p>
-          <div style={{
-            padding: "12px 16px", borderRadius: "8px", marginBottom: "16px",
-            background: isEnabled ? "#DCFCE7" : "#F1F5F9",
-            border: `1px solid ${isEnabled ? "#BBF7D0" : "#E2E8F0"}`,
-            fontSize: "12px", color: isEnabled ? "#166534" : "#94A3B8",
-          }}>
+        <Card className="p-5">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Pengaturan Notifikasi WhatsApp</h3>
+          <p className="text-[12px] text-slate-400 dark:text-slate-500 mb-4">Aktifkan atau nonaktifkan jenis notifikasi WhatsApp yang dikirim ke faskes dan admin.</p>
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md text-[12px] mb-4"
+            style={{ background: isEnabled ? "#DCFCE7" : "#F1F5F9", border: `1px solid ${isEnabled ? "#BBF7D0" : "#E2E8F0"}`, color: isEnabled ? "#166534" : "#94A3B8" }}>
             Notifikasi WhatsApp hanya akan dikirim jika WhatsApp Business API dalam keadaan <strong>{isEnabled ? "AKTIF" : "NONAKTIF"}</strong> dan koneksi berhasil diuji.
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {renderGroup("notifikasi")}
-          </div>
-        </div>
+          <div className="flex flex-col gap-4">{renderGroup("notifikasi")}</div>
+        </Card>
       )}
 
       {toastMsg && <Toast message={toastMsg} type={toastType} />}

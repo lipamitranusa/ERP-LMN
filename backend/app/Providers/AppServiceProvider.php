@@ -11,6 +11,7 @@ use App\Models\HistoriAntrianPenugasan;
 use App\Models\Invoice;
 use App\Models\Laporan;
 use App\Models\LaporanKendala;
+use App\Models\LaporanPengerjaan;
 use App\Models\LaporanVerifikasi;
 use App\Models\LedgerEntry;
 use App\Models\MenuAction;
@@ -63,7 +64,7 @@ class AppServiceProvider extends ServiceProvider
         Route::model('kendala', LaporanKendala::class);
         Route::model('tenagaAhli', TenagaAhli::class);
         Route::model('histori', HistoriAntrianPenugasan::class);
-        Route::model('laporan', Laporan::class);
+        Route::model('laporan', LaporanPengerjaan::class);
         Route::model('laporanVerifikasi', LaporanVerifikasi::class);
         Route::model('verifikasiItem', VerifikasiItem::class);
         Route::model('notifikasiTagihan', NotifikasiTagihan::class);

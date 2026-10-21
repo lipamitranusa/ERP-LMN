@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useApi } from "@/hooks/useApi";
+import { Button } from "@/components/ui/button";
 
 async function apiBlob(path, options = {}) {
   const token = localStorage.getItem("token");
@@ -158,18 +159,18 @@ export default function BuktiPotong() {
             )}
 
             {ringkasan?.siap_export ? (
-              <button onClick={handleExportXml} className="btn btn-primary" disabled={exporting} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <Button onClick={handleExportXml} disabled={exporting}>
                 {exporting ? "Mengunduh..." : (
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                   </svg>
                 )}
                 Ekspor XML BP21 (Coretax)
-              </button>
+              </Button>
             ) : (
-              <button className="btn btn-ghost" disabled style={{ opacity: 0.5, cursor: "not-allowed" }}>
+              <Button variant="ghost" disabled style={{ opacity: 0.5, cursor: "not-allowed" }}>
                 {rekap.length === 0 ? "Tidak ada data" : "Lengkapi identitas pajak (NPWP, PTKP, KPP) terlebih dahulu"}
-              </button>
+              </Button>
             )}
           </div>
 

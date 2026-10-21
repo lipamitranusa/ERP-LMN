@@ -240,6 +240,8 @@ Route::prefix('penugasan')->middleware(['auth:sanctum', 'lembaga'])->group(funct
         ->post('/{penugasan}/replace', [PenugasanController::class, 'replace']);
     Route::middleware('privilege:Penugasan,Lihat')
         ->get('/{siklusId}/histori', [PenugasanController::class, 'histori']);
+    Route::middleware('privilege:Penugasan,Lihat')
+        ->get('/laporan-pengerjaan/{laporan}/download', [PenugasanController::class, 'downloadLaporan']);
 
     // Kandidat eligible
     Route::middleware('privilege:Penugasan,Lihat')
@@ -632,6 +634,10 @@ Route::prefix('master')->middleware(['auth:sanctum', 'lembaga'])->group(function
     Route::middleware('privilege:Master Data,Hapus')
         ->delete('/tenaga-ahli/{tenagaAhli}', [MasterTenagaAhliController::class, 'destroy']);
 });
+
+// Public endpoint: logo lembaga (bypass auth — logo image is not sensitive)
+// <img> tag tidak bisa kirim cookie/session, jadi endpoint ini public.
+Route::get('/master/lembaga/{lembaga}/logo', [LembagaController::class, 'getLogo']);
 
 // =============================================================================
 // Modul Keuangan — Konfigurasi Pajak (FR-5.7), Bukti Potong (FR-5.8/5.9),

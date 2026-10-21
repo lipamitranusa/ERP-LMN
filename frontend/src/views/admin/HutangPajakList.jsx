@@ -1,25 +1,23 @@
 import React, { useState, useMemo } from "react";
 import { useHistory } from "react-router-dom";
-import { formatDate } from "../../utils/dateFormat";
+import { formatDate } from "@/utils/dateFormat";
 import { useApi } from "@/hooks/useApi";
+import { PageHeader } from "@/components/PageHeader";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-function formatRp(n) {
-  return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
-}
-
-const STATUS_MAP = {
-  belum_dibayar: { label: "Belum Dibayar", bg: "#FEF9C3", text: "#854D0E" },
-  dibayar: { label: "Sudah Dibayar", bg: "#DCFCE7", text: "#166534" },
-};
+function formatRp(n) { return `Rp ${Number(n || 0).toLocaleString("id-ID")}`; }
 
 function StatusBadge({ status }) {
-  const s = STATUS_MAP[status] || { label: status, bg: "#F1F5F9", text: "#475569" };
+  const map = {
+    belum_dibayar: { label: "Belum Dibayar", bg: "#FEF9C3", text: "#854D0E" },
+    dibayar:       { label: "Sudah Dibayar", bg: "#DCFCE7", text: "#166534" },
+  };
+  const s = map[status] || { label: status, bg: "#F1F5F9", text: "#475569" };
   return (
-    <span style={{
-      padding: "3px 10px", borderRadius: "9999px",
-      fontSize: "11px", fontWeight: "600",
-      background: s.bg, color: s.text,
-    }}>
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: s.bg, color: s.text }}>
       {s.label}
     </span>
   );
@@ -27,8 +25,6 @@ function StatusBadge({ status }) {
 
 export default function HutangPajakList() {
   const history = useHistory();
-  const [error] = useState("");
-
   const [filterStatus, setFilterStatus] = useState("");
   const [filterBulan, setFilterBulan] = useState("");
   const [search, setSearch] = useState("");
@@ -37,13 +33,10 @@ export default function HutangPajakList() {
 
   const params = new URLSearchParams();
   if (filterStatus) params.set("status", filterStatus);
-  if (filterBulan) {
-    const [tahun, bulan] = filterBulan.split("-");
-    params.set("tahun", tahun);
-    params.set("bulan", bulan);
-  }
+  if (filterBulan) { const [tahun, bulan] = filterBulan.split("-"); params.set("tahun", tahun); params.set("bulan", bulan); }
   if (search.trim()) params.set("q", search);
   const qs = params.toString();
+
   const { data: listData, isLoading } = useApi(
     ["hutang-pajak-list", filterStatus, filterBulan],
     "/keuangan/hutang-pajak" + (qs ? "?" + qs : "")
@@ -63,148 +56,111 @@ export default function HutangPajakList() {
     );
   }, [data, search]);
 
-  if (isLoading && !data) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat data hutang pajak...</div>;
-  }
-  if (error && !data) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#DC2626", fontSize: "13px" }}>{error}</div>;
-  }
-  if (!data) return null;
-
   const belum = filteredEntries.filter(e => e.status === "belum_dibayar");
   const sudah = filteredEntries.filter(e => e.status === "dibayar");
 
-  return (
-    <div>
-      <div style={{ marginBottom: "24px" }}>
-        <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Hutang Pajak PPh 21</h1>
-        <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
-          Tracking hutang PPh 21 yang dipotong dari honor Surveior/Verifikator/Rekomendator.
-        </p>
-      </div>
+  if (isLoading && !data) return <div className="p-10 text-center text-sm" style={{ color: "#94A3B8" }}>Memuat data hutang pajak...</div>;
+  if (!data) return null;
 
-      {/* KPI */}
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="Hutang Pajak PPh 21"
+        subtitle="Tracking hutang PPh 21 yang dipotong dari honor Surveior/Verifikator/Rekomendator."
+      />
+
       {dashboard && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "16px" }}>
-          <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "12px 16px" }}>
-            <div style={{ fontSize: "10px", fontWeight: "600", color: "#64748B", textTransform: "uppercase" }}>Total Belum Dibayar</div>
-            <div style={{ fontSize: "18px", fontWeight: "700", color: "#991B1B" }}>{formatRp(dashboard.total_belum_dibayar)}</div>
-            <div style={{ fontSize: "11px", color: "#64748B" }}>{dashboard.jumlah_belum_dibayar} item</div>
-          </div>
-          <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "12px 16px" }}>
-            <div style={{ fontSize: "10px", fontWeight: "600", color: "#64748B", textTransform: "uppercase" }}>Dibayar Bulan Ini</div>
-            <div style={{ fontSize: "18px", fontWeight: "700", color: "#166534" }}>{formatRp(dashboard.total_dibayar_bulan_ini)}</div>
-            <div style={{ fontSize: "11px", color: "#64748B" }}>{dashboard.jumlah_dibayar_bulan_ini} item</div>
-          </div>
-          <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "12px 16px" }}>
-            <div style={{ fontSize: "10px", fontWeight: "600", color: "#64748B", textTransform: "uppercase" }}>Jumlah Item</div>
-            <div style={{ fontSize: "18px", fontWeight: "700", color: "#1E293B" }}>{data.entries.length}</div>
-          </div>
-          <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "12px 16px" }}>
-            <div style={{ fontSize: "10px", fontWeight: "600", color: "#64748B", textTransform: "uppercase" }}>Total Keseluruhan</div>
-            <div style={{ fontSize: "18px", fontWeight: "700", color: "#1E293B" }}>{formatRp(dashboard.total_seluruh)}</div>
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Card className="p-3 border" style={{ background: "#FEF9C3", borderColor: "#FDE68A" }}>
+            <div className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 dark:text-slate-500">Total Belum Dibayar</div>
+            <div className="text-lg font-bold" style={{ color: "#991B1B" }}>{formatRp(dashboard.total_belum_dibayar)}</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{dashboard.jumlah_belum_dibayar} item</div>
+          </Card>
+          <Card className="p-3 border" style={{ background: "#DCFCE7", borderColor: "#BBF7D0" }}>
+            <div className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 dark:text-slate-500">Dibayar Bulan Ini</div>
+            <div className="text-lg font-bold" style={{ color: "#166534" }}>{formatRp(dashboard.total_dibayar_bulan_ini)}</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{dashboard.jumlah_dibayar_bulan_ini} item</div>
+          </Card>
+          <Card className="p-3 border">
+            <div className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 dark:text-slate-500">Jumlah Item</div>
+            <div className="text-lg font-bold text-slate-800 dark:text-slate-200">{data.entries.length}</div>
+          </Card>
+          <Card className="p-3 border">
+            <div className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 dark:text-slate-500">Total Keseluruhan</div>
+            <div className="text-lg font-bold text-slate-800 dark:text-slate-200">{formatRp(dashboard.total_seluruh)}</div>
+          </Card>
         </div>
       )}
 
-      {/* Filters */}
-      <div className="card" style={{ padding: "16px 20px", marginBottom: "16px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: "12px", alignItems: "end" }}>
-          <div>
-            <label className="form-label">Cari NPWP / Nama / No. Pembayaran</label>
-            <input
-              className="form-input"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Ketik untuk mencari..."
-            />
+      <Card className="p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3 items-end">
+          <div className="col-span-2 space-y-1.5">
+            <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Cari NPWP / Nama / No. Pembayaran</Label>
+            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ketik untuk mencari..." />
           </div>
-          <div>
-            <label className="form-label">Status</label>
-            <select className="form-input" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-              <option value="">Semua</option>
-              <option value="belum_dibayar">Belum Dibayar</option>
-              <option value="dibayar">Sudah Dibayar</option>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Status</Label>
+            <select className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+              <option value="">Semua</option><option value="belum_dibayar">Belum Dibayar</option><option value="dibayar">Sudah Dibayar</option>
             </select>
           </div>
-          <div>
-            <label className="form-label">Periode Pemotongan</label>
-            <input
-              className="form-input"
-              type="month"
-              value={filterBulan}
-              onChange={e => setFilterBulan(e.target.value)}
-            />
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Periode Pemotongan</Label>
+            <Input type="month" value={filterBulan} onChange={e => setFilterBulan(e.target.value)} />
           </div>
-          {(filterStatus || filterBulan || search) && (
-            <button
-              className="btn btn-secondary"
-              style={{ fontSize: "12px", padding: "8px 12px" }}
-              onClick={() => { setFilterStatus(""); setFilterBulan(""); setSearch(""); }}
-            >
-              Reset
-            </button>
-          )}
         </div>
-      </div>
+        {(filterStatus || filterBulan || search) && (
+          <Button variant="ghost" size="sm" className="mt-3 text-xs" onClick={() => { setFilterStatus(""); setFilterBulan(""); setSearch(""); }}>
+            Reset
+          </Button>
+        )}
+      </Card>
 
-      {/* Summary row */}
-      <div style={{ display: "flex", gap: "12px", marginBottom: "12px" }}>
-        <div style={{ background: "#FEF9C3", border: "1px solid #FDE68A", borderRadius: "6px", padding: "6px 12px", fontSize: "12px", color: "#854D0E" }}>
+      <div className="flex gap-3">
+        <div className="px-3 py-1.5 rounded-md text-xs font-medium" style={{ background: "#FEF9C3", border: "1px solid #FDE68A", color: "#854D0E" }}>
           <strong>{belum.length}</strong> belum dibayar · {formatRp(belum.reduce((s, e) => s + e.jumlah_pajak, 0))}
         </div>
-        <div style={{ background: "#DCFCE7", border: "1px solid #BBF7D0", borderRadius: "6px", padding: "6px 12px", fontSize: "12px", color: "#166534" }}>
+        <div className="px-3 py-1.5 rounded-md text-xs font-medium" style={{ background: "#DCFCE7", border: "1px solid #BBF7D0", color: "#166534" }}>
           <strong>{sudah.length}</strong> sudah dibayar · {formatRp(sudah.reduce((s, e) => s + e.jumlah_pajak, 0))}
         </div>
       </div>
 
-      {/* Table */}
-      <div className="card" style={{ padding: 0 }}>
-        <div className="table-container" style={{ border: "none", borderRadius: 0, maxHeight: "600px", overflowY: "auto" }}>
-          <table className="data-table">
-            <thead>
+      <Card className="overflow-hidden">
+        <div className="overflow-y-auto" style={{ maxHeight: "600px" }}>
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-800/50 sticky top-0 z-10">
               <tr>
-                <th>NPWP</th>
-                <th>Nama Wajib Pajak</th>
-                <th>No. Pembayaran Honor</th>
-                <th>Tanggal Pemotongan</th>
-                <th>DPP</th>
-                <th style={{ textAlign: "right" }}>Tarif (%)</th>
-                <th style={{ textAlign: "right" }}>PPh 21 (Rp)</th>
-                <th>Jatuh Tempo</th>
-                <th>Status</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">NPWP</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Nama Wajib Pajak</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">No. Pembayaran Honor</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Tgl Pemotongan</th>
+                <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">DPP</th>
+                <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Tarif (%)</th>
+                <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">PPh 21</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Jatuh Tempo</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Status</th>
               </tr>
             </thead>
             <tbody>
               {filteredEntries.length === 0 ? (
-                <tr>
-                  <td colSpan="9" style={{ textAlign: "center", color: "#94A3B8", padding: "32px 16px" }}>
-                    Tidak ada data hutang pajak.
-                  </td>
-                </tr>
+                <tr><td colSpan={9} className="text-center py-8 text-sm" style={{ color: "#94A3B8" }}>Tidak ada data hutang pajak.</td></tr>
               ) : filteredEntries.map(e => (
-                <tr
-                  key={e.id}
-                  style={{ cursor: "pointer" }}
-                  onClick={() => history.push(`/admin/hutang-pajak/${e.id}`)}
-                >
-                  <td style={{ fontSize: "12px", fontFamily: "ui-monospace, monospace" }}>
-                    {e.nomor_pokok_wajib_pajak || "—"}
-                  </td>
-                  <td style={{ fontSize: "13px", fontWeight: "500" }}>{e.nama_wajib_pajak || "—"}</td>
-                  <td style={{ fontSize: "12px", fontFamily: "ui-monospace, monospace" }}>{e.nomor_pembayaran}</td>
-                  <td style={{ fontSize: "12px" }}>{formatDate(e.tanggal_pembayaran_honor)}</td>
-                  <td style={{ fontSize: "12px" }}>{formatRp(e.dpp)}</td>
-                  <td style={{ textAlign: "right", fontSize: "12px", color: "#64748B" }}>{e.tarif_persen}%</td>
-                  <td style={{ textAlign: "right", fontSize: "12px", fontWeight: "600", color: "#991B1B" }}>{formatRp(e.jumlah_pajak)}</td>
-                  <td style={{ fontSize: "12px", color: "#64748B" }}>{formatDate(e.tanggal_jatuh_tempo)}</td>
-                  <td><StatusBadge status={e.status} /></td>
+                <tr key={e.id} className="hover:bg-slate-50/50 cursor-pointer" onClick={() => history.push(`/admin/hutang-pajak/${e.id}`)}>
+                  <td className="px-4 py-2 font-mono text-[12px]">{e.nomor_pokok_wajib_pajak || "—"}</td>
+                  <td className="px-4 py-2 text-[13px] font-medium">{e.nama_wajib_pajak || "—"}</td>
+                  <td className="px-4 py-2 font-mono text-[12px]">{e.nomor_pembayaran}</td>
+                  <td className="px-4 py-2 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{formatDate(e.tanggal_pembayaran_honor)}</td>
+                  <td className="px-4 py-2 text-right text-[12px]">{formatRp(e.dpp)}</td>
+                  <td className="px-4 py-2 text-right text-[12px]" style={{ color: "#64748B" }}>{e.tarif_persen}%</td>
+                  <td className="px-4 py-2 text-right text-[12px] font-semibold text-red-600">{formatRp(e.jumlah_pajak)}</td>
+                  <td className="px-4 py-2 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{formatDate(e.tanggal_jatuh_tempo)}</td>
+                  <td className="px-4 py-2"><StatusBadge status={e.status} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

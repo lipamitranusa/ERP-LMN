@@ -1,6 +1,32 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useApi, useMutate } from "@/hooks/useApi";
 import { useLembaga } from "@/contexts/LembagaContext";
+import { PageHeader } from "@/components/PageHeader";
+import { StatusBadge } from "@/components/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 function formatRupiah(num) {
   return new Intl.NumberFormat("id-ID", {
@@ -22,6 +48,17 @@ const EMPTY = {
   status: "aktif",
 };
 
+const schema = z.object({
+  jenis_faskes_id: z.string().min(1, "Jenis faskes wajib dipilih"),
+  nama_biaya: z.string().min(1, "Nama biaya wajib diisi"),
+  jumlah: z.string().min(1, "Jumlah wajib diisi"),
+  satuan: z.string().default("per_siklus"),
+  tipe: z.string().default("per_siklus"),
+  wajib: z.boolean().default(true),
+  status: z.string().default("aktif"),
+  deskripsi: z.string().default(""),
+});
+
 const SATUAN_OPTIONS = [
   { value: "per_siklus", label: "Per Siklus" },
   { value: "per_sertifikat", label: "Per Sertifikat" },
@@ -36,39 +73,16 @@ const TIPE_OPTIONS = [
   { value: "tetap", label: "Tetap" },
 ];
 
-function Modal({ title, onClose, children }) {
-  return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 200,
-      background: "rgba(15,23,42,0.5)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: "20px",
-    }} onClick={onClose}>
-      <div style={{
-        background: "#fff", borderRadius: "12px", width: "100%", maxWidth: "560px",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.15)", overflow: "hidden",
-      }} onClick={e => e.stopPropagation()}>
-        <div style={{ padding: "20px 24px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600", color: "#1E293B" }}>{title}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", color: "#94A3B8" }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
+const TIPE_COLORS = {
+  tetap:   { bg: "#EDE9F6", color: "#6D28D9" },
+  per_sertifikat: { bg: "#FEE2E2", color: "#B91C1C" },
+  per_siklus: { bg: "#DCFCE7", color: "#166534" },
+};
 
 export default function MasterBiaya() {
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
-  const [form, setForm] = useState(EMPTY);
-  const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState(null);
-  // Increment this after a successful create so the query re-fetches fresh data
   const [refreshKey, setRefreshKey] = useState(0);
 
   const { data: biayaData, isLoading: biayaLoading } = useApi(
@@ -76,18 +90,19 @@ export default function MasterBiaya() {
     "/master/biaya/by-jenis"
   );
   const { data: jfData, isLoading: jfLoading } = useApi("jenis-faskes-options", "/master/biaya/jenis-faskes");
-  const { lembagaId: activeLembagaId, lembagaName: activeLembagaName } = useLembaga();
+  const { lembagaId: activeLembagaId } = useLembaga();
 
   const mutateCrud = useMutate({
-    onSuccess: () => { setRefreshKey(k => k + 1); },
+    onSuccess: () => {
+      setShowModal(false);
+      setRefreshKey(k => k + 1);
+    },
   });
 
   const grouped = biayaData?.data || [];
   const jenisFaskesOptions = jfData?.data || [];
-  const selectedJenis = jenisFaskesOptions.find(j => j.id === form.jenis_faskes_id) || null;
 
-  // Initialize activeTab from first grouped item
-  React.useEffect(() => {
+  useEffect(() => {
     if (grouped.length > 0 && !activeTab) {
       setActiveTab(grouped[0].jenis_faskes.id);
     }
@@ -96,16 +111,24 @@ export default function MasterBiaya() {
   const activeGroup = grouped.find(g => g.jenis_faskes.id === activeTab);
   const biayaList = activeGroup?.biaya || [];
 
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: EMPTY,
+  });
+
+  const watchedTipe = watch("tipe");
+  const watchedSatuan = watch("satuan");
+  const watchedWajib = watch("wajib");
+
   function openAdd() {
     setEditTarget(null);
-    setForm({ ...EMPTY, jenis_faskes_id: activeTab || "" });
-    setError("");
+    reset({ ...EMPTY, jenis_faskes_id: activeTab || "" });
     setShowModal(true);
   }
 
   function openEdit(item) {
     setEditTarget(item);
-    setForm({
+    reset({
       jenis_faskes_id: item.jenis_faskes_id,
       nama_biaya: item.nama_biaya || "",
       deskripsi: item.deskripsi || "",
@@ -115,31 +138,19 @@ export default function MasterBiaya() {
       wajib: !!item.wajib,
       status: item.status || "aktif",
     });
-    setError("");
     setShowModal(true);
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    try {
-      const body = {
-        ...form,
-        jumlah: parseFloat(form.jumlah),
-      };
-      await mutateCrud.mutateAsync({
-        path: editTarget ? `/master/biaya/${editTarget.id}` : "/master/biaya",
-        method: editTarget ? "PUT" : "POST",
-        body,
-      });
-      setShowModal(false);
-    } catch (err) {
-      setError(err.message);
-    }
-  }
+  const onSubmit = (formData) => {
+    mutateCrud.mutate({
+      path: editTarget ? `/master/biaya/${editTarget.id}` : "/master/biaya",
+      method: editTarget ? "PUT" : "POST",
+      body: { ...formData, jumlah: parseFloat(formData.jumlah) },
+    });
+  };
 
   async function handleDelete(item) {
-    if (!confirm(`Hapus biaya "${item.nama_biaya}" untuk ${item.jenis_faskes?.nama || ""}?`)) return;
+    if (!confirm(`Hapus biaya "${item.nama_biaya}"?`)) return;
     try {
       await mutateCrud.mutateAsync({
         path: `/master/biaya/${item.id}`,
@@ -151,285 +162,206 @@ export default function MasterBiaya() {
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px" }}>
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
-            <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Master Biaya per Jenis Faskes</h1>
-            {activeLembagaName && (
-              <span style={{
-                display: "inline-flex", alignItems: "center", gap: "4px",
-                padding: "2px 10px", borderRadius: "9999px",
-                fontSize: "11px", fontWeight: "600",
-                background: "#E0F2FE", color: "#075985",
-              }}>
-                Lembaga: {activeLembagaName}
-              </span>
-            )}
-          </div>
-          <p style={{ margin: 0, fontSize: "13px", color: "#64748B" }}>
-            {grouped.length} jenis faskes, {grouped.reduce((s, g) => s + g.biaya.length, 0)} komponen biaya
-          </p>
-        </div>
-        <button className="btn btn-primary" onClick={openAdd} disabled={!activeTab}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Tambah Biaya
-        </button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Master Biaya per Jenis Faskes"
+        subtitle={`${grouped.length} jenis faskes, ${grouped.reduce((s, g) => s + g.biaya.length, 0)} komponen biaya`}
+        actions={
+          <Button onClick={openAdd} disabled={!activeTab}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Tambah Biaya
+          </Button>
+        }
+      />
 
       {biayaLoading || jfLoading ? (
-        <div style={{ textAlign: "center", padding: "48px", color: "#94A3B8" }}>Memuat...</div>
+        <div className="text-center py-16 text-slate-400 dark:text-slate-500 text-sm">Memuat...</div>
       ) : (
         <>
-          {/* Tab bar */}
-          <div style={{ display: "flex", gap: "4px", marginBottom: "20px", flexWrap: "wrap", borderBottom: "1px solid #E2E8F0", paddingBottom: "0" }}>
-            {grouped.map(g => {
-              const lembagaName = g.jenis_faskes.lembaga?.nama;
-              const showLembaga = !!lembagaName && (!activeLembagaId || g.jenis_faskes.lembaga_id !== activeLembagaId);
-              return (
-                <button
-                  key={g.jenis_faskes.id}
-                  onClick={() => setActiveTab(g.jenis_faskes.id)}
-                  style={{
-                    padding: "8px 16px",
-                    border: "none",
-                    borderBottom: activeTab === g.jenis_faskes.id ? "2px solid #4CAF50" : "2px solid transparent",
-                    background: "none",
-                    cursor: "pointer",
-                    fontSize: "13px",
-                    fontWeight: activeTab === g.jenis_faskes.id ? "600" : "400",
-                    color: activeTab === g.jenis_faskes.id ? "#4CAF50" : "#64748B",
-                    marginBottom: "-1px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                  }}
-                >
-                  <span style={{
-                    display: "inline-block", padding: "1px 6px",
-                    borderRadius: "10px", fontSize: "11px", fontWeight: "600",
-                    background: "rgba(76,175,80,0.1)", color: "#4CAF50",
-                  }}>
-                    {g.biaya.length}
-                  </span>
-                  {g.jenis_faskes.kode} — {g.jenis_faskes.nama}
-                  {showLembaga && (
-                    <span style={{
-                      display: "inline-block", padding: "1px 6px",
-                      borderRadius: "4px", fontSize: "10px", fontWeight: "500",
-                      background: "#F1F5F9", color: "#475569",
-                      marginLeft: "4px",
-                    }}>
-                      {lembagaName}
+          <div className="border-b border-slate-200 dark:border-slate-700">
+            <div className="flex gap-1 flex-wrap">
+              {grouped.map(g => {
+                const lembagaName = g.jenis_faskes.lembaga?.nama;
+                const showLembaga = !!lembagaName && (!activeLembagaId || g.jenis_faskes.lembaga_id !== activeLembagaId);
+                return (
+                  <button
+                    key={g.jenis_faskes.id}
+                    onClick={() => setActiveTab(g.jenis_faskes.id)}
+                    className="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+                    style={{
+                      borderBottomColor: activeTab === g.jenis_faskes.id ? "#4CAF50" : "transparent",
+                      color: activeTab === g.jenis_faskes.id ? "#4CAF50" : "#64748B",
+                      background: "none",
+                      marginBottom: "-1px",
+                    }}
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700">
+                        {g.biaya.length}
+                      </span>
+                      {g.jenis_faskes.kode} — {g.jenis_faskes.nama}
+                      {showLembaga && (
+                        <Badge variant="secondary" className="text-[10px] h-4 px-1">{lembagaName}</Badge>
+                      )}
                     </span>
-                  )}
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Active group summary */}
           {activeGroup && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "20px" }}>
+            <div className="grid grid-cols-3 gap-3">
               {[
                 { label: "Total Biaya", value: formatRupiah(activeGroup.total), color: "#4CAF50" },
                 { label: "Jumlah Komponen", value: activeGroup.biaya.length, color: "#7E57C2" },
                 { label: "Jenis Faskes", value: activeGroup.jenis_faskes.nama, color: "#64748B" },
               ].map(stat => (
-                <div key={stat.label} style={{ background: "#fff", borderRadius: "10px", padding: "16px", border: "1px solid #E2E8F0" }}>
-                  <div style={{ fontSize: "12px", color: "#64748B", marginBottom: "4px" }}>{stat.label}</div>
-                  <div style={{ fontSize: "20px", fontWeight: "700", color: stat.color }}>{stat.value}</div>
-                </div>
+                <Card key={stat.label} className="p-4">
+                  <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-1">{stat.label}</div>
+                  <div className="text-xl font-bold" style={{ color: stat.color }}>{stat.value}</div>
+                </Card>
               ))}
             </div>
           )}
 
-          {/* Table */}
-          <div className="card" style={{ padding: 0 }}>
-            <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Nama Biaya</th>
-                    <th>Tipe</th>
-                    <th>Satuan</th>
-                    <th>Jumlah</th>
-                    <th>Wajib</th>
-                    <th>Status</th>
-                    <th style={{ width: "100px" }}>Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {biayaList.length === 0 ? (
-                    <tr>
-                      <td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>
-                        Belum ada data biaya untuk jenis faskes ini. Klik "Tambah Biaya" untuk memulai.
-                      </td>
-                    </tr>
-                  ) : biayaList.map(item => (
-                    <tr key={item.id}>
-                      <td>
-                        <div style={{ fontWeight: "500", color: "#1E293B" }}>{item.nama_biaya}</div>
-                        {item.deskripsi && (
-                          <div style={{ fontSize: "12px", color: "#94A3B8", marginTop: "2px", maxWidth: "300px" }}>{item.deskripsi}</div>
-                        )}
-                      </td>
-                      <td>
-                        <span style={{
-                          display: "inline-block", padding: "2px 8px", borderRadius: "20px",
-                          fontSize: "11px", fontWeight: "600",
-                          background: item.tipe === "tetap" ? "#EDE9FE" : item.tipe === "per_sertifikat" ? "#FEE2E2" : "#DCFCE7",
-                          color: item.tipe === "tetap" ? "#6D28D9" : item.tipe === "per_sertifikat" ? "#B91C1C" : "#166534",
-                        }}>
+          <Card className="overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-50 dark:bg-slate-800/50">
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Nama Biaya</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Tipe</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Satuan</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Jumlah</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Wajib</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Status</TableHead>
+                  <TableHead className="w-[100px] text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {biayaList.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">
+                      Belum ada data biaya untuk jenis faskes ini.
+                    </TableCell>
+                  </TableRow>
+                ) : biayaList.map(item => {
+                  const tc = TIPE_COLORS[item.tipe] || TIPE_COLORS.per_siklus;
+                  return (
+                    <TableRow key={item.id} className="hover:bg-slate-50/50">
+                      <TableCell>
+                        <div className="font-medium text-slate-900 dark:text-slate-100 text-sm">{item.nama_biaya}</div>
+                        {item.deskripsi && <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 max-w-xs truncate">{item.deskripsi}</div>}
+                      </TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: tc.bg, color: tc.color }}>
                           {TIPE_OPTIONS.find(o => o.value === item.tipe)?.label || item.tipe}
                         </span>
-                      </td>
-                      <td style={{ color: "#64748B", fontSize: "13px" }}>
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
                         {SATUAN_OPTIONS.find(o => o.value === item.satuan)?.label || item.satuan}
-                      </td>
-                      <td style={{ fontWeight: "600", color: "#1E293B", whiteSpace: "nowrap" }}>
+                      </TableCell>
+                      <TableCell className="font-semibold text-slate-900 dark:text-slate-100 text-sm whitespace-nowrap">
                         {formatRupiah(item.jumlah)}
-                      </td>
-                      <td>
-                        <span style={{
-                          display: "inline-block", padding: "2px 8px", borderRadius: "20px",
-                          fontSize: "11px", fontWeight: "600",
-                          background: item.wajib ? "#DCFCE7" : "#F1F5F9",
-                          color: item.wajib ? "#166534" : "#64748B",
-                        }}>
-                          {item.wajib ? "Wajib" : "Opsional"}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{
-                          display: "inline-block", padding: "2px 8px", borderRadius: "20px",
-                          fontSize: "11px", fontWeight: "600",
-                          background: item.status === "aktif" ? "#DCFCE7" : "#FEE2E2",
-                          color: item.status === "aktif" ? "#166534" : "#991B1B",
-                        }}>
-                          {item.status === "aktif" ? "Aktif" : "Nonaktif"}
-                        </span>
-                      </td>
-                      <td>
-                        <div style={{ display: "flex", gap: "4px" }}>
-                          <button className="btn btn-ghost btn-sm" style={{ color: "#4CAF50", padding: "4px 8px", fontSize: "12px" }} onClick={() => openEdit(item)}>Ubah</button>
-                          <button className="btn btn-ghost btn-sm" style={{ color: "#EF4444", padding: "4px 8px", fontSize: "12px" }} onClick={() => handleDelete(item)}>Hapus</button>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={item.wajib ? "lengkap" : "draft"} />
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={item.status === "aktif" ? "lengkap" : "ditolak"} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-green-600" onClick={() => openEdit(item)}>Ubah</Button>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-red-500" onClick={() => handleDelete(item)}>Hapus</Button>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Card>
         </>
       )}
 
-      {/* Modal */}
-      {showModal && (
-        <Modal title={editTarget ? "Ubah Komponen Biaya" : "Tambah Komponen Biaya"} onClose={() => setShowModal(false)}>
-          <form onSubmit={handleSubmit} style={{ padding: "24px" }}>
-            {error && (
-              <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: "6px", color: "#991B1B", fontSize: "13px" }}>{error}</div>
-            )}
-
+      <Dialog open={showModal} onOpenChange={v => { if (!mutateCrud.isLoading) setShowModal(v); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editTarget ? "Ubah Komponen Biaya" : "Tambah Komponen Biaya"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {!editTarget && (
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                  Jenis Faskes <span style={{ color: "#DC2626" }}>*</span>
-                </label>
+              <div className="space-y-2">
+                <Label htmlFor="biaya-jf">Jenis Faskes *</Label>
                 <select
-                  className="form-input"
-                  value={form.jenis_faskes_id}
-                  onChange={e => setForm(f => ({ ...f, jenis_faskes_id: e.target.value }))}
-                  required
+                  id="biaya-jf"
+                  className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+                  {...register("jenis_faskes_id")}
                 >
                   <option value="">— Pilih Jenis Faskes —</option>
-                  {jenisFaskesOptions.map(jf => {
-                    const showLembaga = jf.lembaga?.nama && (!activeLembagaId || jf.lembaga_id !== activeLembagaId);
-                    return (
-                      <option key={jf.id} value={jf.id}>
-                        {jf.kode} — {jf.nama}{showLembaga ? ` (${jf.lembaga.nama})` : ""}
-                      </option>
-                    );
-                  })}
+                  {jenisFaskesOptions.map(jf => (
+                    <option key={jf.id} value={jf.id}>
+                      {jf.kode} — {jf.nama}{jf.lembaga?.nama ? ` (${jf.lembaga.nama})` : ""}
+                    </option>
+                  ))}
                 </select>
-                {selectedJenis?.lembaga?.nama && (
-                  <div style={{ fontSize: "11px", color: "#64748B", marginTop: "4px" }}>
-                    Lembaga otomatis terikat: <strong>{selectedJenis.lembaga.nama}</strong> (mengikuti pemilik jenis faskes).
-                  </div>
-                )}
+                {errors.jenis_faskes_id && <p className="text-xs text-red-600">{errors.jenis_faskes_id.message}</p>}
               </div>
             )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-              <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                  Nama Biaya <span style={{ color: "#DC2626" }}>*</span>
-                </label>
-                <input className="form-input" value={form.nama_biaya} onChange={e => setForm(f => ({ ...f, nama_biaya: e.target.value }))} required placeholder="cth: Biaya Survei Akreditasi" />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="biaya-nama">Nama Biaya *</Label>
+                <Input id="biaya-nama" {...register("nama_biaya")} placeholder="cth: Biaya Survei Akreditasi" />
+                {errors.nama_biaya && <p className="text-xs text-red-600">{errors.nama_biaya.message}</p>}
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                  Jumlah (Rp) <span style={{ color: "#DC2626" }}>*</span>
-                </label>
-                <input className="form-input" type="number" min="0" step="1" value={form.jumlah} onChange={e => setForm(f => ({ ...f, jumlah: e.target.value }))} required placeholder="0" />
+              <div className="space-y-2">
+                <Label htmlFor="biaya-jumlah">Jumlah (Rp) *</Label>
+                <Input id="biaya-jumlah" type="number" min="0" step="1" {...register("jumlah")} placeholder="0" />
+                {errors.jumlah && <p className="text-xs text-red-600">{errors.jumlah.message}</p>}
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Tipe Biaya</label>
-                <select className="form-input" value={form.tipe} onChange={e => setForm(f => ({ ...f, tipe: e.target.value }))}>
+              <div className="space-y-2">
+                <Label htmlFor="biaya-tipe">Tipe</Label>
+                <select id="biaya-tipe" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register("tipe")}>
                   {TIPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Satuan</label>
-                <select className="form-input" value={form.satuan} onChange={e => setForm(f => ({ ...f, satuan: e.target.value }))}>
+              <div className="space-y-2">
+                <Label htmlFor="biaya-satuan">Satuan</Label>
+                <select id="biaya-satuan" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register("satuan")}>
                   {SATUAN_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
-
-              <div style={{ marginBottom: "14px", display: "flex", alignItems: "center", gap: "8px", paddingTop: "20px" }}>
-                <input
-                  type="checkbox"
-                  id="wajib-check"
-                  checked={form.wajib}
-                  onChange={e => setForm(f => ({ ...f, wajib: e.target.checked }))}
-                  style={{ width: "16px", height: "16px", cursor: "pointer" }}
-                />
-                <label htmlFor="wajib-check" style={{ fontSize: "12px", fontWeight: "600", color: "#374151", cursor: "pointer" }}>
-                  Wajib (tidak bisa dihapus saat ada kontrak aktif)
-                </label>
-              </div>
-
-              <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Status</label>
-                <select className="form-input" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} required>
+              <div className="space-y-2">
+                <Label htmlFor="biaya-status">Status</Label>
+                <select id="biaya-status" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register("status")}>
                   <option value="aktif">Aktif</option>
                   <option value="nonaktif">Nonaktif</option>
                 </select>
               </div>
-
-              <div style={{ gridColumn: "1 / -1", marginBottom: "0" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Deskripsi</label>
-                <textarea className="form-input" rows={2} value={form.deskripsi} onChange={e => setForm(f => ({ ...f, deskripsi: e.target.value }))} placeholder="Deskripsi singkat komponen biaya..." style={{ resize: "vertical" }} />
+              <div className="col-span-2 flex items-center gap-2">
+                <input type="checkbox" {...register("wajib")} id="biaya-wajib" className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary" />
+                <label htmlFor="biaya-wajib" className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-500 cursor-pointer">
+                  Wajib (tidak bisa dihapus saat ada kontrak aktif)
+                </label>
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="biaya-desc">Deskripsi</Label>
+                <Textarea id="biaya-desc" rows={2} {...register("deskripsi")} placeholder="Deskripsi singkat..." />
               </div>
             </div>
-
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "20px", borderTop: "1px solid #F1F5F9", paddingTop: "20px" }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
-              <button type="submit" className="btn btn-primary" disabled={mutateCrud.isPending}>
-                {mutateCrud.isPending ? "Menyimpan..." : editTarget ? "Simpan" : "Tambah"}
-              </button>
-            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setShowModal(false)} disabled={mutateCrud.isLoading}>Batal</Button>
+              <Button type="submit" disabled={mutateCrud.isLoading}>
+                {mutateCrud.isLoading ? "Menyimpan..." : editTarget ? "Simpan" : "Tambah"}
+              </Button>
+            </DialogFooter>
           </form>
-        </Modal>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,89 +1,84 @@
-import React from "react";
-import { NavLink, Link, useLocation, useHistory } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { Bell, LogOut, Menu, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { LMNIcon } from "@/components/LMNIcon";
+import { useLembaga } from "@/contexts/LembagaContext";
 
-const LMNIcon = () => (
-  <svg viewBox="0 0 36 36" width="36" height="36" fill="none">
-    <circle cx="18" cy="18" r="15" stroke="#2E7D32" strokeWidth="2.5" strokeDasharray="22 73" strokeDashoffset="0" strokeLinecap="round"/>
-    <path d="M18 11v14M12 18h12" stroke="#2E7D32" strokeWidth="2.5" strokeLinecap="round"/>
-    <circle cx="18" cy="3.5" r="2" fill="#7E57C2"/>
-    <circle cx="29.5" cy="9.5" r="2" fill="#EF5350"/>
-    <circle cx="32" cy="20" r="2" fill="#FF9800"/>
-    <circle cx="26" cy="30" r="2" fill="#FFEB3B"/>
-    <circle cx="10" cy="30" r="2" fill="#42A5F5"/>
-  </svg>
-);
-
-const icons = {
-  home: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-    </svg>
-  ),
-  upload: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-    </svg>
-  ),
-  lock: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-    </svg>
-  ),
-  file: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-    </svg>
-  ),
-  pen: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-    </svg>
-  ),
-  bill: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
-    </svg>
-  ),
-  logout: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-    </svg>
-  ),
-  chevron: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="9 18 15 12 9 6"/>
-    </svg>
-  ),
-};
-
-const FASKES_MENU = [
-  { name: "Status Pengajuan", path: "/faskes/", icon: "home" },
-  { name: "Unggah Dokumen", path: "/faskes/dokumen", icon: "upload" },
-  { name: "Kontrak & Tanda Tangan", path: "/faskes/kontrak", icon: "pen" },
-  { name: "Tagihan & Pembayaran", path: "/faskes/tagihan", icon: "bill" },
-  { name: "Ganti Password", path: "/faskes/ganti-password", icon: "lock" },
+const NAV = [
+  {
+    to: "/faskes/",
+    label: "Status Pengajuan",
+    exact: true,
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+    ),
+  },
+  {
+    to: "/faskes/dokumen",
+    label: "Unggah Dokumen",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+    ),
+  },
+  {
+    to: "/faskes/kontrak",
+    label: "Kontrak & Tanda Tangan",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+      </svg>
+    ),
+  },
+  {
+    to: "/faskes/tagihan",
+    label: "Tagihan & Pembayaran",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+        <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
+      </svg>
+    ),
+  },
+  {
+    to: "/faskes/ganti-password",
+    label: "Ganti Password",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+    ),
+  },
 ];
 
 export default function FaskesLayout({ children }) {
   const location = useLocation();
-  const history = useHistory();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  // Baca langsung dari localStorage agar langsung tampil saat render pertama
+  const lembagaName = localStorage.getItem("lembaga_name") || null;
+  const lembagaLogo = localStorage.getItem("lembaga_logo") || null;
+  const companyName = lembagaName || "LIPA MITRA NUSA";
 
-  React.useEffect(() => {
+  useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
-      history.replace("/auth/login");
-      return;
+      window.location.href = "/auth/login";
     }
-    if (location.pathname === "/faskes" || location.pathname === "/faskes/") {
-      // Already on faskes index — no redirect needed
-    }
-    document.documentElement.scrollTop = 0;
-    document.scrollingElement && (document.scrollingElement.scrollTop = 0);
-  }, [location, history]);
+  }, []);
 
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const currentNav = NAV.find(n =>
+    n.exact
+      ? location.pathname === "/faskes" || location.pathname === "/faskes/"
+      : location.pathname.startsWith(n.to)
+  );
 
-  function handleLogout() {
+  const handleLogout = () => {
     const token = localStorage.getItem("token");
     if (token) {
       fetch("/api/auth/logout", {
@@ -93,190 +88,207 @@ export default function FaskesLayout({ children }) {
     }
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    localStorage.removeItem("lembaga_name");
+    localStorage.removeItem("lembaga_logo");
     window.location.href = "/auth/login";
-  }
+  };
+
+  const initials = (user.nama || "F")
+    .split(" ")
+    .map(n => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#F8FAFC" }}>
-      {/* ── Faskes Sidebar ── */}
-      <nav style={{
-        width: "240px",
-        minHeight: "100vh",
-        background: "#FFFFFF",
-        borderRight: "1px solid #E2E8F0",
-        display: "flex",
-        flexDirection: "column",
-        position: "fixed",
-        top: 0,
-        left: 0,
-        bottom: 0,
-        zIndex: 100,
-      }}>
-        {/* Logo */}
-        <div style={{ padding: "24px 20px 20px", borderBottom: "1px solid #F1F5F9" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-            <LMNIcon />
-            <div>
-              <div style={{ fontSize: "13px", fontWeight: "700", color: "#1E293B", lineHeight: "1.2" }}>
-                LIPA MITRA
+    <TooltipProvider>
+    <div className="flex min-h-screen bg-background">
+      {/* Mobile sidebar drawer — custom, no Radix overhead */}
+      {mobileOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-50 bg-black/50"
+            onClick={() => setMobileOpen(false)}
+          />
+          {/* Sidebar */}
+          <aside className="fixed inset-y-0 left-0 z-50 w-72 flex flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shadow-xl">
+            {/* Logo */}
+            <div className="px-5 py-6 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {lembagaLogo ? (
+                    <img src={lembagaLogo} alt={companyName} className="w-9 h-9 rounded object-contain" />
+                  ) : (
+                    <LMNIcon size={28} />
+                  )}
+                  <div>
+                    <div className="text-slate-900 dark:text-slate-50 font-bold text-sm leading-tight tracking-tight">{lembagaName ? companyName : "LIPA MITRA"}</div>
+                    {lembagaName ? (
+                      <div className="text-slate-400 dark:text-slate-500 text-[10px] font-medium uppercase tracking-widest">Lembaga Akreditasi</div>
+                    ) : (
+                      <div className="text-slate-400 dark:text-slate-500 text-[10px] font-medium uppercase tracking-widest">Nusa</div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setMobileOpen(false)}
+                  className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
+                >
+                  <X size={18} />
+                </button>
               </div>
-              <div style={{ fontSize: "10px", fontWeight: "500", color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                Nusa
+              <div className="mt-3 inline-block rounded bg-green-700 px-2 py-0.5 text-[11px] font-semibold text-white">
+                Portal Faskes
               </div>
             </div>
+            {/* Nav */}
+            <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+              <div className="px-2 pb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Menu</span>
+              </div>
+              {NAV.map(n => {
+                const isActive = n.exact
+                  ? location.pathname === "/faskes" || location.pathname === "/faskes/"
+                  : location.pathname.startsWith(n.to);
+                return (
+                  <Link
+                    key={n.to}
+                    to={n.to}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-green-50 text-green-800 font-semibold dark:bg-green-950 dark:text-green-300"
+                        : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <span className={isActive ? "text-green-600 dark:text-green-400" : "text-slate-400 dark:text-slate-500"}>{n.icon}</span>
+                    {n.label}
+                  </Link>
+                );
+              })}
+            </nav>
+            {/* User + logout */}
+            <div className="px-4 py-4 border-t border-slate-100 space-y-3">
+              <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-green-50 text-green-700 text-xs font-bold">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <div className="text-slate-900 dark:text-slate-100 text-sm font-semibold truncate">{user.nama || "Faskes"}</div>
+                  <div className="text-slate-400 dark:text-slate-500 text-xs truncate">{user.role || "Faskes"}</div>
+                </div>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-slate-400 dark:text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+              >
+                <LogOut size={14} />
+                Keluar
+              </button>
+            </div>
+          </aside>
+        </>
+      )}
+
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex fixed top-0 left-0 z-40 h-screen w-[240px] bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex-col">
+        {/* Logo */}
+        <div className="px-5 py-6 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            {lembagaLogo ? (
+              <img src={lembagaLogo} alt={companyName} className="w-7 h-7 rounded object-contain" />
+            ) : (
+              <LMNIcon size={28} />
+            )}
+            <div>
+              <div className="text-slate-900 dark:text-slate-50 font-bold text-sm leading-tight tracking-tight">{lembagaName ? companyName : "LIPA MITRA"}</div>
+              {lembagaName ? (
+                <div className="text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 text-[10px] font-medium uppercase tracking-widest">Lembaga Akreditasi</div>
+              ) : (
+                <div className="text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 text-[10px] font-medium uppercase tracking-widest">Nusa</div>
+              )}
+            </div>
           </div>
-          <div style={{
-            fontSize: "11px",
-            fontWeight: "600",
-            color: "#FFFFFF",
-            background: "#2E7D32",
-            borderRadius: "4px",
-            padding: "2px 8px",
-            display: "inline-block",
-          }}>
+          <div className="mt-3 inline-block rounded bg-green-700 px-2 py-0.5 text-[11px] font-semibold text-white">
             Portal Faskes
           </div>
         </div>
-
-        {/* Nav items */}
-        <div style={{ flex: 1, padding: "12px 8px" }}>
-          <div style={{ fontSize: "10px", fontWeight: "600", color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em", padding: "0 8px", marginBottom: "4px" }}>
-            Menu
+        {/* Nav */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+          <div className="px-2 pb-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500">Menu</span>
           </div>
-          {FASKES_MENU.map((item) => {
-            const isActive = item.path === "/faskes/"
+          {NAV.map(n => {
+            const isActive = n.exact
               ? location.pathname === "/faskes" || location.pathname === "/faskes/"
-              : location.pathname.startsWith(item.path);
+              : location.pathname.startsWith(n.to);
             return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  padding: "9px 10px",
-                  borderRadius: "8px",
-                  fontSize: "13px",
-                  fontWeight: isActive ? "600" : "400",
-                  color: isActive ? "#2E7D32" : "#64748B",
-                  background: isActive ? "#E8F5E9" : "transparent",
-                  textDecoration: "none",
-                  marginBottom: "2px",
-                  transition: "all 0.15s",
-                }}
+              <Link
+                key={n.to}
+                to={n.to}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                  isActive
+                    ? "bg-green-50 text-green-800 font-semibold dark:bg-green-950 dark:text-green-300"
+                    : "text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:bg-slate-800/50 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                }`}
               >
-                <span style={{ width: "18px", height: "18px", opacity: isActive ? 1 : 0.6, flexShrink: 0 }}>
-                  {icons[item.icon]}
-                </span>
-                {item.name}
-              </NavLink>
+                <span className={isActive ? "text-green-600" : "text-slate-400 dark:text-slate-500"}>{n.icon}</span>
+                {n.label}
+              </Link>
             );
           })}
-        </div>
-
-        {/* User + Logout */}
-        <div style={{ padding: "16px", borderTop: "1px solid #F1F5F9" }}>
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            padding: "10px 12px",
-            background: "#F8FAFC",
-            borderRadius: "8px",
-            marginBottom: "8px",
-          }}>
-            <div style={{
-              width: "32px", height: "32px",
-              borderRadius: "50%",
-              background: "#E8F5E9",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              flexShrink: 0,
-            }}>
-              <span style={{ fontSize: "13px", fontWeight: "700", color: "#2E7D32" }}>
-                {(user.nama || "F").charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div style={{ overflow: "hidden", flex: 1 }}>
-              <div style={{ fontSize: "13px", fontWeight: "600", color: "#1E293B", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {user.nama || "Faskes"}
-              </div>
-              <div style={{ fontSize: "11px", color: "#94A3B8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {user.role || "Faskes"}
-              </div>
+        </nav>
+        {/* User + logout */}
+        <div className="px-4 py-4 border-t border-slate-100 space-y-3">
+          <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-green-50 text-green-700 text-xs font-bold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <div className="text-slate-900 text-sm font-semibold truncate">{user.nama || "Faskes"}</div>
+              <div className="text-slate-400 dark:text-slate-500 text-xs truncate">{user.role || "Faskes"}</div>
             </div>
           </div>
           <button
             onClick={handleLogout}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              width: "100%",
-              padding: "8px 12px",
-              border: "none",
-              borderRadius: "8px",
-              background: "transparent",
-              color: "#94A3B8",
-              fontSize: "13px",
-              cursor: "pointer",
-              transition: "all 0.15s",
-            }}
-            onMouseOver={e => { e.currentTarget.style.background = "#FEE2E2"; e.currentTarget.style.color = "#DC2626"; }}
-            onMouseOut={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#94A3B8"; }}
+            className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-slate-400 dark:text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors"
           >
-            <span style={{ width: "18px", height: "18px" }}>{icons.logout}</span>
+            <LogOut size={14} />
             Keluar
           </button>
         </div>
-      </nav>
+      </aside>
 
-      {/* ── Main Content ── */}
-      <div style={{ marginLeft: "240px", flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      {/* Main content */}
+      <div className="flex-1 lg:ml-[240px] flex flex-col min-h-screen">
         {/* Top bar */}
-        <header style={{
-          height: "60px",
-          background: "#FFFFFF",
-          borderBottom: "1px solid #E2E8F0",
-          display: "flex",
-          alignItems: "center",
-          padding: "0 32px",
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", color: "#64748B" }}>
-            <Link to="/faskes/" style={{ color: "#64748B", textDecoration: "none" }}>Portal Faskes</Link>
-            <span style={{ color: "#CBD5E1" }}>/</span>
-            <span style={{ color: "#334155", fontWeight: "500" }}>
-              {FASKES_MENU.find(m => location.pathname.startsWith(m.path) && m.path !== "/faskes/")?.name ||
-               "Status Pengajuan"}
-            </span>
+        <header className="sticky top-0 z-30 h-16 flex items-center border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 lg:px-6">
+          <Button variant="ghost" size="icon" className="lg:hidden h-8 w-8 mr-2" onClick={() => setMobileOpen(true)}>
+            <Menu size={18} />
+          </Button>
+          <div className="flex-1 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
+            <span className="dark:text-slate-400 dark:text-slate-500">Portal Faskes</span>
+            <span className="text-slate-300 dark:text-slate-600">/</span>
+            <span className="font-medium text-slate-700 dark:text-slate-200">{currentNav?.label || "Status Pengajuan"}</span>
           </div>
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Bell size={16} />
+          </Button>
         </header>
-
-        {/* Page content */}
-        <main style={{ flex: 1, padding: "28px 32px" }}>
-          {children}
-        </main>
-
-        {/* Footer */}
-        <footer style={{
-          padding: "16px 32px",
-          borderTop: "1px solid #E2E8F0",
-          background: "#FFFFFF",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}>
-          <span style={{ fontSize: "12px", color: "#CBD5E1" }}>
-            &copy; {new Date().getFullYear()} LIPA MITRA NUSA — Portal Faskes
+        <main className="flex-1 p-4 lg:p-6 bg-slate-50 dark:bg-slate-800/50 dark:bg-slate-950">{children}</main>
+        <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 lg:px-6 py-4 flex items-center justify-between">
+          <span className="text-xs text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500">
+            &copy; {new Date().getFullYear()} {companyName} — Portal Faskes
           </span>
-          <span style={{ fontSize: "12px", color: "#CBD5E1" }}>
-            ERP Akreditasi Faskes
-          </span>
+          <span className="text-xs text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 hidden sm:block">ERP Akreditasi Faskes</span>
         </footer>
       </div>
     </div>
+    </TooltipProvider>
   );
 }

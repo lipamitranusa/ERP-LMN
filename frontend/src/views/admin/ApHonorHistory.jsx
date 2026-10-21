@@ -1,35 +1,20 @@
 import React, { useState } from "react";
 import { useHistory } from "react-router-dom";
-import { formatDate } from "../../utils/dateFormat";
+import { formatDate } from "@/utils/dateFormat";
 import { useApi } from "@/hooks/useApi";
+import { PageHeader } from "@/components/PageHeader";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft } from "lucide-react";
 
-function formatRp(n) {
-  return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
-}
-
-const STATUS_MAP = {
-  draft:      { label: "Draft",      bg: "#F1F5F9", text: "#475569" },
-  disetujui:  { label: "Disetujui",  bg: "#DCFCE7", text: "#166534" },
-  dibatalkan: { label: "Dibatalkan", bg: "#FEE2E2", text: "#991B1B" },
-};
-
-const METODE_MAP = {
-  transfer_bank: "Transfer Bank",
-  tunai: "Tunai",
-  lainnya: "Lainnya",
-};
-
+function formatRp(n) { return `Rp ${Number(n || 0).toLocaleString("id-ID")}`; }
+const METODE_MAP = { transfer_bank: "Transfer Bank", tunai: "Tunai", lainnya: "Lainnya" };
 function StatusBadge({ status }) {
-  const s = STATUS_MAP[status] || STATUS_MAP.draft;
-  return (
-    <span style={{
-      padding: "2px 8px", borderRadius: "9999px",
-      fontSize: "11px", fontWeight: "600",
-      background: s.bg, color: s.text,
-    }}>
-      {s.label}
-    </span>
-  );
+  const map = { draft: { label: "Draft", bg: "#F1F5F9", text: "#475569" }, disetujui: { label: "Disetujui", bg: "#DCFCE7", text: "#166534" }, dibatalkan: { label: "Dibatalkan", bg: "#FEE2E2", text: "#991B1B" } };
+  const s = map[status] || map.draft;
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: s.bg, color: s.text }}>{s.label}</span>;
 }
 
 export default function ApHonorHistory() {
@@ -39,14 +24,10 @@ export default function ApHonorHistory() {
 
   const params = new URLSearchParams();
   if (filterStatus) params.set("status", filterStatus);
-  if (filterBulan) {
-    const [tahun, bulanNum] = filterBulan.split("-");
-    params.set("tahun", tahun);
-    params.set("bulan", bulanNum);
-  }
+  if (filterBulan) { const [tahun, bulanNum] = filterBulan.split("-"); params.set("tahun", tahun); params.set("bulan", bulanNum); }
   const qs = params.toString();
 
-  const { data, isLoading, error } = useApi(
+  const { data, isLoading } = useApi(
     ["ap-honor-history", filterStatus, filterBulan],
     `/keuangan/ap-honor/payments${qs ? "?" + qs : ""}`
   );
@@ -55,130 +36,82 @@ export default function ApHonorHistory() {
   const total = payments.reduce((s, p) => s + (p.total_nominal || 0), 0);
   const totalDisetujui = payments.filter(p => p.status === "disetujui").reduce((s, p) => s + (p.total_nominal || 0), 0);
 
-  if (isLoading && !data) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat riwayat pembayaran...</div>;
-  }
-  if (error) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#DC2626", fontSize: "13px" }}>{error.message}</div>;
-  }
-
   return (
-    <div>
-      {/* Header */}
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <button
-            className="btn btn-ghost"
-            onClick={() => history.push("/admin/ap-honor")}
-            style={{ fontSize: "12px", padding: "4px 8px", marginBottom: "8px" }}
-          >
-            ← Dasbor AP
-          </button>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Riwayat Pembayaran Honor</h1>
-        </div>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button
-            className="btn btn-primary"
-            onClick={() => history.push("/admin/ap-honor/list")}
-          >
-            Bayar Honor Baru
-          </button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Riwayat Pembayaran Honor"
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => history.push("/admin/ap-honor")}><ArrowLeft size={16} /> Dasbor AP</Button>
+            <Button onClick={() => history.push("/admin/ap-honor/list")}>Bayar Honor Baru</Button>
+          </div>
+        }
+      />
 
-      {/* Filters */}
-      <div className="card" style={{ padding: "12px 20px", marginBottom: "16px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "12px", alignItems: "end" }}>
-          <div>
-            <label className="form-label">Status</label>
-            <select className="form-input" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+      <Card className="p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Status</Label>
+            <select className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
               <option value="">Semua status</option>
-              <option value="draft">Draft</option>
-              <option value="disetujui">Disetujui</option>
-              <option value="dibatalkan">Dibatalkan</option>
+              <option value="draft">Draft</option><option value="disetujui">Disetujui</option><option value="dibatalkan">Dibatalkan</option>
             </select>
           </div>
-          <div>
-            <label className="form-label">Periode</label>
-            <input
-              className="form-input"
-              type="month"
-              value={filterBulan}
-              onChange={e => setFilterBulan(e.target.value)}
-            />
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Periode</Label>
+            <Input type="month" value={filterBulan} onChange={e => setFilterBulan(e.target.value)} />
           </div>
           {(filterStatus || filterBulan) && (
-            <button
-              className="btn btn-secondary"
-              onClick={() => { setFilterStatus(""); setFilterBulan(""); }}
-            >
-              Reset
-            </button>
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setFilterStatus(""); setFilterBulan(""); }}>Reset</Button>
           )}
         </div>
+      </Card>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="p-3 border">
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Total semua status</div>
+          <div className="text-xl font-bold text-slate-800 dark:text-slate-200">{formatRp(total)}</div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{payments.length} pembayaran</div>
+        </Card>
+        <Card className="p-3 border" style={{ background: "#DCFCE7", borderColor: "#BBF7D0" }}>
+          <div className="text-[11px] uppercase" style={{ color: "#166534" }}>Total disetujui</div>
+          <div className="text-xl font-bold" style={{ color: "#166534" }}>{formatRp(totalDisetujui)}</div>
+          <div className="text-[11px]" style={{ color: "#166534" }}>{payments.filter(p => p.status === "disetujui").length} pembayaran</div>
+        </Card>
       </div>
 
-      {/* Summary */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
-        <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "12px 16px" }}>
-          <div style={{ fontSize: "11px", color: "#64748B", textTransform: "uppercase" }}>Total semua status</div>
-          <div style={{ fontSize: "20px", fontWeight: "700" }}>{formatRp(total)}</div>
-          <div style={{ fontSize: "11px", color: "#64748B" }}>{payments.length} pembayaran</div>
-        </div>
-        <div style={{ background: "#DCFCE7", border: "1px solid #BBF7D0", borderRadius: "8px", padding: "12px 16px" }}>
-          <div style={{ fontSize: "11px", color: "#166534", textTransform: "uppercase" }}>Total disetujui</div>
-          <div style={{ fontSize: "20px", fontWeight: "700", color: "#166534" }}>{formatRp(totalDisetujui)}</div>
-          <div style={{ fontSize: "11px", color: "#166534" }}>
-            {payments.filter(p => p.status === "disetujui").length} pembayaran
-          </div>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="card" style={{ padding: 0 }}>
-        <div className="table-container" style={{ border: "none", borderRadius: 0, maxHeight: "600px", overflowY: "auto" }}>
-          <table className="data-table">
-            <thead>
+      <Card className="overflow-hidden">
+        <div className="overflow-y-auto" style={{ maxHeight: "600px" }}>
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-800/50 sticky top-0 z-10">
               <tr>
-                <th>Nomor</th>
-                <th>Tanggal</th>
-                <th>Metode</th>
-                <th>Status</th>
-                <th style={{ textAlign: "center" }}>Line</th>
-                <th style={{ textAlign: "right" }}>Total</th>
-                <th>Dibuat oleh</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Nomor</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Tanggal</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Metode</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Status</th>
+                <th className="text-center px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Line</th>
+                <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Total</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Dibuat oleh</th>
               </tr>
             </thead>
             <tbody>
               {payments.length === 0 ? (
-                <tr>
-                  <td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "32px 16px" }}>
-                    Tidak ada pembayaran yang cocok dengan filter.
-                  </td>
-                </tr>
+                <tr><td colSpan={7} className="text-center py-8 text-sm" style={{ color: "#94A3B8" }}>Tidak ada pembayaran.</td></tr>
               ) : payments.map(p => (
-                <tr
-                  key={p.id}
-                  style={{ cursor: "pointer" }}
-                  onClick={() => history.push(`/admin/ap-honor/payment/${p.id}`)}
-                  onMouseEnter={e => e.currentTarget.style.background = "#F8FAFC"}
-                  onMouseLeave={e => e.currentTarget.style.background = ""}
-                >
-                  <td style={{ fontFamily: "ui-monospace, monospace", fontSize: "12px", fontWeight: "500" }}>
-                    {p.nomor_pembayaran}
-                  </td>
-                  <td style={{ fontSize: "12px" }}>{formatDate(p.tanggal_pembayaran)}</td>
-                  <td style={{ fontSize: "12px" }}>{METODE_MAP[p.metode] || p.metode}</td>
-                  <td><StatusBadge status={p.status} /></td>
-                  <td style={{ textAlign: "center", fontSize: "12px", color: "#475569" }}>{p.jumlah_line_item}</td>
-                  <td style={{ textAlign: "right", fontSize: "12px", fontWeight: "600" }}>{formatRp(p.total_nominal)}</td>
-                  <td style={{ fontSize: "12px", color: "#475569" }}>{p.dibuat_oleh || "—"}</td>
+                <tr key={p.id} className="hover:bg-slate-50/50 cursor-pointer" onClick={() => history.push(`/admin/ap-honor/payment/${p.id}`)}>
+                  <td className="px-4 py-2 font-mono text-[12px] font-medium">{p.nomor_pembayaran}</td>
+                  <td className="px-4 py-2 text-[12px]">{formatDate(p.tanggal_pembayaran)}</td>
+                  <td className="px-4 py-2 text-[12px]">{METODE_MAP[p.metode] || p.metode}</td>
+                  <td className="px-4 py-2"><StatusBadge status={p.status} /></td>
+                  <td className="px-4 py-2 text-center text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{p.jumlah_line_item}</td>
+                  <td className="px-4 py-2 text-right text-[12px] font-semibold">{formatRp(p.total_nominal)}</td>
+                  <td className="px-4 py-2 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{p.dibuat_oleh || "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

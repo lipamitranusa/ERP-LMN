@@ -1,27 +1,39 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { useParams, useHistory } from "react-router-dom";
 import InvoiceStatusCard from "@/components/InvoiceStatusCard";
 import PaymentMethodSelector from "@/components/PaymentMethodSelector";
-import { formatDate, formatDateTime } from "../../utils/dateFormat";
+import { formatDate, formatDateTime } from "@/utils/dateFormat";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Copy, Check, Clock, AlertTriangle } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
 }
 
 const BUKTI_STATUS = {
-  menunggu: { label: "Menunggu verifikasi", color: "#FEF9C3", text: "#854D0E" },
-  diterima: { label: "Diterima", color: "#DCFCE7", text: "#166534" },
-  ditolak: { label: "Ditolak", color: "#FEE2E2", text: "#991B1B" },
+  menunggu: { label: "Menunggu verifikasi", bg: "#FEF9C3", fg: "#854D0E" },
+  diterima: { label: "Diterima", bg: "#DCFCE7", fg: "#166534" },
+  ditolak: { label: "Ditolak", bg: "#FEE2E2", fg: "#991B1B" },
 };
+
+const transferSchema = z.object({
+  nominal: z.string().min(1, "Nominal wajib diisi"),
+  nomor_referensi: z.string().min(1, "No. Referensi wajib diisi"),
+  dari_rekening: z.string().min(1, "Dari rekening wajib diisi"),
+});
 
 function CopyButton({ text, label = "Salin" }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
     } catch {
       const el = document.createElement("textarea");
       el.value = text;
@@ -29,44 +41,18 @@ function CopyButton({ text, label = "Salin" }) {
       el.select();
       document.execCommand("copy");
       document.body.removeChild(el);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
     }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
   return (
-    <button
-      onClick={handleCopy}
-      style={{
-        padding: "4px 12px",
-        border: "1px solid #4CAF50",
-        borderRadius: "6px",
-        background: copied ? "#DCFCE7" : "#fff",
-        color: copied ? "#166534" : "#4CAF50",
-        fontSize: "12px",
-        fontWeight: "600",
-        cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        gap: "4px",
-        transition: "all 0.15s",
-      }}
+    <Button variant="outline" size="sm" onClick={handleCopy}
+      className="h-7 px-3 text-xs gap-1.5"
+      style={{ borderColor: "#4CAF50", color: copied ? "#166534" : "#4CAF50", background: copied ? "#DCFCE7" : "#fff" }}
     >
-      {copied ? (
-        <>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="12" height="12">
-            <path d="M20 6L9 17l-5-5"/>
-          </svg>
-          Tersalin!
-        </>
-      ) : (
-        <>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
-            <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
-          </svg>
-          {label}
-        </>
-      )}
-    </button>
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+      {copied ? "Tersalin!" : label}
+    </Button>
   );
 }
 
@@ -76,14 +62,9 @@ function CountdownTimer({ expiredAt }) {
 
   const calc = useCallback(() => {
     if (!expiredAt) return null;
-    const now = new Date();
-    const exp = new Date(expiredAt);
-    const diff = exp - now;
+    const diff = new Date(expiredAt) - new Date();
     if (diff <= 0) return { h: 0, m: 0, s: 0, expired: true };
-    const h = Math.floor(diff / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
-    return { h, m, s, expired: false };
+    return { h: Math.floor(diff / 3600000), m: Math.floor((diff % 3600000) / 60000), s: Math.floor((diff % 60000) / 1000), expired: false };
   }, [expiredAt]);
 
   useEffect(() => {
@@ -100,21 +81,8 @@ function CountdownTimer({ expiredAt }) {
 
   if (timeLeft.expired) {
     return (
-      <div style={{
-        padding: "10px 14px",
-        background: "#FEE2E2",
-        border: "1px solid #FECACA",
-        borderRadius: "8px",
-        color: "#991B1B",
-        fontSize: "12px",
-        fontWeight: "600",
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-      }}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-        </svg>
+      <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
+        <AlertTriangle size={16} className="shrink-0" />
         VA/QRIS telah expired — klik "Dapatkan Nomor VA Baru" untuk membuat ulang.
       </div>
     );
@@ -123,47 +91,38 @@ function CountdownTimer({ expiredAt }) {
   const { h, m, s } = timeLeft;
   const isUrgent = h < 1;
   return (
-    <div style={{
-      padding: "10px 14px",
-      background: isUrgent ? "#FEF9C3" : "#EFF6FF",
-      border: `1px solid ${isUrgent ? "#FDE68A" : "#BFDBFE"}`,
-      borderRadius: "8px",
-      color: isUrgent ? "#92400E" : "#1E40AF",
-      fontSize: "12px",
-      fontWeight: "600",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: "8px",
-    }}>
-      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
-          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-        </svg>
-        Berakhir dalam:
-      </span>
-      <span style={{
-        fontFamily: "monospace",
-        fontSize: "14px",
-        fontWeight: "700",
-        color: isUrgent ? "#DC2626" : "#1E40AF",
-      }}>
-        {String(h).padStart(2, "0")}:{String(m).padStart(2, "0")}:{String(s).padStart(2, "0")}
+    <div className="flex items-center justify-between p-2.5 rounded-lg text-xs font-semibold"
+      style={{ background: isUrgent ? "#FEF9C3" : "#EFF6FF", border: `1px solid ${isUrgent ? "#FDE68A" : "#BFDBFE"}`, color: isUrgent ? "#92400E" : "#1E40AF" }}
+    >
+      <span className="flex items-center gap-1.5"><Clock size={15} />Berakhir dalam:</span>
+      <span className="font-mono text-sm font-bold" style={{ color: isUrgent ? "#DC2626" : "#1E40AF" }}>
+        {String(h).padStart(2,"0")}:{String(m).padStart(2,"0")}:{String(s).padStart(2,"0")}
       </span>
     </div>
   );
 }
 
-function VaInstructions({ method, vaNumber, gateway, selectedBank }) {
-  const banks = method === "qris" ? null : getBankInstructions(vaNumber, gateway, selectedBank);
+function getBankInstructions(vaNumber, gateway) {
+  const total = gateway?.total ? formatRp(gateway.total) : "nominal tagihan";
+  return [
+    { key: "bca",     name: "BCA",     icon: "🏦", steps: [<span key="b">Pilih <strong>menu Multi Payment</strong> → <strong>BCA</strong>.</span>, <span key="b">Masukkan kode perusahaan / <strong>VA: {vaNumber}</strong>.</span>, <span key="b">Masukkan <strong>{total}</strong> sebagai jumlah.</span>, <span key="b">Ikuti instruksi sampai <strong>konfirmasi</strong>. Simpan bukti.</span>] },
+    { key: "bni",     name: "BNI",     icon: "🏛️", steps: [<span key="b">Pilih <strong>Menu Lain → Transfer → Virtual Account Billing</strong>.</span>, <span key="b">Pilih rekening debet dan masukkan <strong>{vaNumber}</strong>.</span>, <span key="b">Pilih <strong>{total}</strong>. Lanjutkan dan <strong>konfirmasi</strong>.</span>] },
+    { key: "mandiri", name: "Mandiri", icon: "🏪", steps: [<span key="b">Pilih <strong>Bayar → Multi Payment</strong>.</span>, <span key="b">Pilih <strong>Lembaga → VA</strong>, masukkan <strong>{vaNumber}</strong>.</span>, <span key="b">Masukkan <strong>{total}</strong>. <strong>Konfirmasi</strong> dan simpan bukti.</span>] },
+    { key: "bri",     name: "BRI",     icon: "🏢", steps: [<span key="b">Pilih <strong>Menu Bayar → Multi Payment</strong>.</span>, <span key="b">Pilih layanan <strong>BRIVA</strong>.</span>, <span key="b">Masukkan <strong>{vaNumber}</strong>, nominal <strong>{total}</strong>.</span>, <span key="b"><strong>Konfirmasi</strong>, masukkan PIN, selesai.</span>] },
+    { key: "permata", name: "Permata", icon: "💎", steps: [<span key="b">Pilih <strong>Bayar → Virtual Account Permata</strong>.</span>, <span key="b">Masukkan <strong>{vaNumber}</strong>.</span>, <span key="b">Nominal <strong>{total}</strong>. <strong>Konfirmasi</strong>.</span>] },
+  ];
+}
+
+function VaInstructions({ method, vaNumber, gateway }) {
+  const banks = method === "qris" ? null : getBankInstructions(vaNumber, gateway);
   return (
-    <div style={{ marginTop: "16px" }}>
-      <h3 style={{ margin: "0 0 10px", fontSize: "13px", fontWeight: "600", color: "#374151" }}>
+    <div className="mt-4">
+      <h3 className="text-[13px] font-semibold text-slate-700 dark:text-slate-300 dark:text-slate-500 mb-2.5">
         {method === "qris" ? "Petunjuk Pembayaran QRIS" : "Petunjuk Pembayaran Virtual Account"}
       </h3>
       {method === "qris" ? (
-        <div style={{ background: "#F8FAFC", borderRadius: "8px", padding: "14px", fontSize: "12px", color: "#475569", lineHeight: "1.7" }}>
-          <ol style={{ margin: 0, paddingLeft: "18px" }}>
+        <div className="rounded-lg bg-slate-50 dark:bg-slate-800/50 p-3.5 text-[12px] text-slate-600 dark:text-slate-300 dark:text-slate-500 leading-relaxed">
+          <ol className="list-decimal list-inside space-y-1">
             <li>Buka aplikasi <strong>m-BCA / BCA Mobile</strong>, atau aplikasi bank lainnya yang mendukung QRIS.</li>
             <li>Pilih menu <strong>Scan QR</strong>.</li>
             <li>Scan kode QR yang tersedia di halaman ini.</li>
@@ -171,26 +130,21 @@ function VaInstructions({ method, vaNumber, gateway, selectedBank }) {
             <li>Masukkan PIN / konfirmasi pembayaran.</li>
             <li>Simpan bukti pembayaran (screenshot).</li>
           </ol>
-          <div style={{ marginTop: "10px", padding: "8px 10px", background: "#DCFCE7", borderRadius: "4px", fontSize: "11px", color: "#166534" }}>
-            Pembayaran akan diverifikasi otomatis dalam 1-5 menit.
-          </div>
+          <div className="mt-2.5 p-2 rounded bg-green-100 text-green-800 text-[11px]">Pembayaran akan diverifikasi otomatis dalam 1-5 menit.</div>
         </div>
       ) : banks ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <div className="flex flex-col gap-2.5">
           {banks.map(bank => (
-            <div key={bank.name} style={{ background: "#F8FAFC", borderRadius: "8px", padding: "12px 14px", border: "1px solid #E2E8F0" }}>
-              <div style={{ fontSize: "12px", fontWeight: "700", color: "#1E293B", marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ fontSize: "18px" }}>{bank.icon}</span>
-                {bank.name}
+            <div key={bank.name} className="rounded-lg bg-slate-50 dark:bg-slate-800/50 p-3 border border-slate-200 dark:border-slate-700">
+              <div className="text-[12px] font-bold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-2">
+                <span className="text-lg">{bank.icon}</span>{bank.name}
               </div>
-              <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "12px", color: "#475569", lineHeight: "1.8" }}>
-                {bank.steps.map((s, i) => <li key={i}>{s}</li>)}
-              </ol>
+              <ol className="list-decimal list-inside text-[12px] text-slate-600 dark:text-slate-300 dark:text-slate-500 space-y-0.5">{bank.steps}</ol>
             </div>
           ))}
         </div>
       ) : (
-        <div style={{ background: "#F8FAFC", borderRadius: "8px", padding: "14px", fontSize: "12px", color: "#475569", lineHeight: "1.7" }}>
+        <div className="rounded-lg bg-slate-50 dark:bg-slate-800/50 p-3.5 text-[12px] text-slate-600 dark:text-slate-300 dark:text-slate-500 leading-relaxed">
           Lunasi ke nomor Virtual Account di atas melalui ATM, mobile banking, atau internet banking.
         </div>
       )}
@@ -198,113 +152,27 @@ function VaInstructions({ method, vaNumber, gateway, selectedBank }) {
   );
 }
 
-function getBankInstructions(vaNumber, gateway, selectedBank) {
-  const total = gateway?.total ? formatRp(gateway.total) : "nominal tagihan";
-  const allBanks = [
-    {
-      key: "bca",
-      name: "BCA",
-      icon: "🏦",
-      steps: [
-        <>Pilih <strong>menu Multi Payment</strong> → <strong>BCA</strong>.</>,
-        <>Masukkan kode perusahaan / <strong>VA: {vaNumber}</strong>.</>,
-        <>Masukkan <strong>{total}</strong> sebagai jumlah.</>,
-        <>Ikuti instruksi sampai <strong>konfirmasi</strong>. Simpan bukti.</>,
-      ],
-    },
-    {
-      key: "bni",
-      name: "BNI",
-      icon: "🏛️",
-      steps: [
-        <>Pilih <strong>Menu Lain → Transfer → Virtual Account Billing</strong>.</>,
-        <>Pilih rekening debet dan masukkan <strong>{vaNumber}</strong>.</>,
-        <>Pilih <strong>{total}</strong>. Lanjutkan dan <strong>konfirmasi</strong>.</>,
-      ],
-    },
-    {
-      key: "mandiri",
-      name: "Mandiri",
-      icon: "🏪",
-      steps: [
-        <>Pilih <strong>Bayar → Multi Payment</strong>.</>,
-        <>Pilih <strong>Lembaga → VA</strong>, masukkan <strong>{vaNumber}</strong>.</>,
-        <>Masukkan <strong>{total}</strong>. <strong>Konfirmasi</strong> dan simpan bukti.</>,
-      ],
-    },
-    {
-      key: "bri",
-      name: "BRI",
-      icon: "🏢",
-      steps: [
-        <>Pilih <strong>Menu Bayar → Multi Payment</strong>.</>,
-        <>Pilih layanan <strong>BRIVA</strong>.</>,
-        <>Masukkan <strong>{vaNumber}</strong>, nominal <strong>{total}</strong>.</>,
-        <><strong>Konfirmasi</strong>, masukkan PIN, selesai.</>,
-      ],
-    },
-    {
-      key: "permata",
-      name: "Permata",
-      icon: "💎",
-      steps: [
-        <>Pilih <strong>Bayar → Virtual Account Permata</strong>.</>,
-        <>Masukkan <strong>{vaNumber}</strong>.</>,
-        <>Nominal <strong>{total}</strong>. <strong>Konfirmasi</strong>.</>,
-      ],
-    },
-  ];
-
-  if (selectedBank) {
-    const bank = allBanks.find(b => b.key === selectedBank);
-    return bank ? [bank] : allBanks;
-  }
-
-  return allBanks;
-}
-
 export default function TagihanDetail() {
   const { id } = useParams();
   const history = useHistory();
   const [method, setMethod] = useState("virtual_account");
-  const [error, setError] = useState("");
-
-  // Manual transfer form
   const [nominal, setNominal] = useState("");
   const [noRef, setNoRef] = useState("");
   const [dariRek, setDariRek] = useState("");
   const [fileBukti, setFileBukti] = useState(null);
-
-  // VA/QRIS display state
+  const [fileError, setFileError] = useState("");
   const [vaData, setVaData] = useState(null);
-
-  // Ganti metode pembayaran
   const [showMethodPicker, setShowMethodPicker] = useState(false);
   const [pendingMethod, setPendingMethod] = useState(null);
 
-  // Fetch invoice detail
-  const {
-    data: invoiceData,
-    isLoading: loading,
-    refetch: refetchInvoice,
-    isFetching,
-  } = useApi(
-    ["invoice", id],
-    `/invoice/${id}`,
-    {
-      enabled: !!id,
-      // Polling: refetch every 10 seconds for faster payment detection
-      refetchInterval: (data) => {
-        // Stop polling once paid
-        if (data?.status === "lunas") return false;
-        return 10000;
-      },
+  const { data: invoiceData, isLoading: loading, refetch: refetchInvoice, isFetching } = useApi(
+    ["invoice", id], `/invoice/${id}`, { enabled: !!id,
+      refetchInterval: (data) => data?.status === "lunas" ? false : 10000,
     }
   );
 
   const invoice = invoiceData?.data || null;
 
-  // Sync vaData from invoice data
   React.useEffect(() => {
     if (invoice?.payment_reference) {
       setVaData({
@@ -316,16 +184,9 @@ export default function TagihanDetail() {
     }
   }, [invoice]);
 
-  // Fetch bukti list
-  const { data: buktiData } = useApi(
-    ["invoice-bukti", id],
-    `/invoice/${id}/bukti`,
-    { enabled: !!id }
-  );
-
+  const { data: buktiData } = useApi(["invoice-bukti", id], `/invoice/${id}/bukti`, { enabled: !!id });
   const bukti = buktiData?.data || [];
 
-  // Gateway payment mutation (VA or QRIS)
   const gatewayMutation = useMutateKeys(["invoice", id, "invoices"], {
     onSuccess: (data) => {
       setVaData({
@@ -334,32 +195,11 @@ export default function TagihanDetail() {
         metode: method === "qris" ? "qris" : "va",
         bank: data.data.bank,
       });
-      // Reload after DB update
       setTimeout(() => refetchInvoice(), 500);
     },
-    onError: (err) => {
-      setError(err.message);
-    },
+    onError: (err) => { setFileError(err.message); },
   });
 
-  // Ganti metode mutation
-  const gantiMetodeMutation = useMutateKeys(["invoice", id, "invoices"], {
-    onSuccess: (data) => {
-      setVaData({
-        reference: pendingMethod === "qris" ? data.data.reference : data.data.nomor_va,
-        expiredAt: data.data.expired_at,
-        metode: pendingMethod === "qris" ? "qris" : "va",
-        bank: data.data.bank,
-      });
-      setMethod(pendingMethod);
-      setTimeout(() => refetchInvoice(), 500);
-    },
-    onError: (err) => {
-      setError(err.message);
-    },
-  });
-
-  // Manual bukti upload mutation
   const buktiMutation = useMutateKeys(["invoice", id, "invoices", "invoice-bukti", id], {
     onSuccess: () => {
       setShowMethodPicker(false);
@@ -369,54 +209,45 @@ export default function TagihanDetail() {
       refetchInvoice();
       alert("Bukti transfer berhasil diunggah. Admin akan memverifikasi dalam 1x24 jam kerja.");
     },
-    onError: (err) => {
-      setError(err.message);
-    },
+    onError: (err) => { setFileError(err.message); },
   });
 
+  const submitting = gatewayMutation.isPending || buktiMutation.isPending;
+
   function handleGatewayPayment(forceNew = false) {
-    setError("");
+    setFileError("");
     const endpoint = method === "qris" ? "bayar-qris" : "bayar-va";
     const path = forceNew ? `/invoice/${id}/${endpoint}?force=true` : `/invoice/${id}/${endpoint}`;
-    gatewayMutation.mutate({
-      path,
-      method: "POST",
-      body: {},
-    });
+    gatewayMutation.mutate({ path, method: "POST", body: {} });
   }
 
   function handleGantiMetode() {
     if (!pendingMethod) return;
-    setError("");
+    setFileError("");
     setShowMethodPicker(false);
     const endpoint = pendingMethod === "qris" ? "bayar-qris" : "bayar-va";
-    gantiMetodeMutation.mutate({
-      path: `/invoice/${id}/${endpoint}?force=true`,
-      method: "POST",
-      body: {},
-    });
+    gatewayMutation.mutate({ path: `/invoice/${id}/${endpoint}?force=true`, method: "POST", body: {} });
   }
 
-  function handleManualSubmit(e) {
-    e.preventDefault();
-    setError("");
-    if (!fileBukti) { setError("Pilih file bukti transfer."); return; }
+  function handleFileChange(file) {
+    if (!file) { setFileBukti(null); setFileError(""); return; }
+    if (file.size > 10 * 1024 * 1024) { setFileError("Ukuran file maksimal 10 MB."); setFileBukti(null); return; }
+    setFileError("");
+    setFileBukti(file);
+  }
+
+  function handleManualSubmit() {
+    if (!fileBukti) { setFileError("Pilih file bukti transfer."); return; }
     const fd = new FormData();
     fd.append("nominal", nominal);
     fd.append("nomor_referensi", noRef);
     fd.append("dari_rekening", dariRek);
     fd.append("bukti", fileBukti);
-    buktiMutation.mutate({
-      path: `/invoice/${id}/bukti-manual`,
-      method: "POST",
-      body: fd,
-    });
+    buktiMutation.mutate({ path: `/invoice/${id}/bukti-manual`, method: "POST", body: fd });
   }
 
-  const submitting = gatewayMutation.isPending || gantiMetodeMutation.isPending || buktiMutation.isPending;
-
   if (loading || !invoice) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>;
+    return <div className="p-10 text-center text-slate-400 dark:text-slate-500 text-sm">Memuat...</div>;
   }
 
   const items = invoice.items || [];
@@ -424,366 +255,260 @@ export default function TagihanDetail() {
   const isRefunded = invoice.status === "refunded";
   const metode = vaData?.metode || invoice.metode_pembayaran;
   const isQris = metode === "qris" || method === "qris";
-  const TIPE_LABEL = { tetap: "Tetap", per_siklus: "Per Siklus", per_sertifikat: "Per Sertifikat" };
   const SATUAN_LABEL = { tetap: "Tetap", per_siklus: "Per Siklus", per_sertifikat: "Per Sertifikat", per_tahun: "Per Tahun", periksa: "Per Periksa", sekali: "Sekali Bayar" };
   const activeBukti = bukti.find(b => b.status_verifikasi === "menunggu" || b.status_verifikasi === "diterima");
 
   return (
-    <div style={{ maxWidth: "720px", margin: "0 auto" }}>
-      <button
+    <div className="max-w-[720px] mx-auto">
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => history.push("/faskes/tagihan")}
-        className="btn btn-ghost btn-sm"
-        style={{ marginBottom: "16px", padding: "6px 0" }}
+        className="mb-4 pl-0 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:text-slate-500"
       >
         ← Kembali ke Daftar Tagihan
-      </button>
+      </Button>
 
-      <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Detail Tagihan</h1>
-      <p style={{ margin: "4px 0 20px", fontSize: "13px", color: "#64748B" }}>
-        Jatuh tempo: <strong style={{ color: "#334155" }}>{formatDate(invoice.due_date)}</strong>
+      <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-1">Detail Tagihan</h1>
+      <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-5">
+        Jatuh tempo: <strong className="text-slate-700 dark:text-slate-300 dark:text-slate-500">{formatDate(invoice.due_date)}</strong>
       </p>
 
       <InvoiceStatusCard invoice={invoice} />
 
-      {/* Bukti aktif sedang diverifikasi/diterima */}
       {activeBukti && !isLunas && (
-        <div className="card" style={{ padding: "16px 20px", marginTop: "20px", background: activeBukti.status_verifikasi === "diterima" ? "#DCFCE7" : "#FEF9C3", border: `1px solid ${activeBukti.status_verifikasi === "diterima" ? "#BBF7D0" : "#FDE68A"}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{
-              width: "32px", height: "32px", borderRadius: "50%",
-              background: activeBukti.status_verifikasi === "diterima" ? "#4CAF50" : "#F59E0B",
-              color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
-              flexShrink: 0,
-            }}>
-              {activeBukti.status_verifikasi === "diterima" ? (
-                <svg viewBox="0 0 16 16" fill="none" width="16" height="16">
-                  <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              ) : (
-                <svg viewBox="0 0 16 16" fill="none" width="16" height="16">
-                  <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v4l3 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              )}
+        <Card className="p-4 mt-5 flex items-center gap-2.5"
+          style={{ background: activeBukti.status_verifikasi === "diterima" ? "#DCFCE7" : "#FEF9C3", border: `1px solid ${activeBukti.status_verifikasi === "diterima" ? "#BBF7D0" : "#FDE68A"}` }}
+        >
+          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: activeBukti.status_verifikasi === "diterima" ? "#4CAF50" : "#F59E0B" }}>
+            {activeBukti.status_verifikasi === "diterima" ? (
+              <Check size={16} className="text-white" />
+            ) : (
+              <Clock size={16} className="text-white" />
+            )}
+          </div>
+          <div>
+            <div className="text-[13px] font-semibold" style={{ color: activeBukti.status_verifikasi === "diterima" ? "#166534" : "#92400E" }}>
+              {activeBukti.status_verifikasi === "diterima" ? "Bukti Diterima" : "Bukti Menunggu Verifikasi"}
             </div>
-            <div>
-              <div style={{ fontSize: "13px", fontWeight: "600", color: activeBukti.status_verifikasi === "diterima" ? "#166534" : "#92400E" }}>
-                {activeBukti.status_verifikasi === "diterima" ? "Bukti Diterima" : "Bukti Menunggu Verifikasi"}
-              </div>
-              <div style={{ fontSize: "12px", color: activeBukti.status_verifikasi === "diterima" ? "#15803D" : "#A16207" }}>
-                {activeBukti.status_verifikasi === "diterima"
-                  ? "Pembayaran telah diverifikasi. Invoice akan diperbarui secara otomatis."
-                  : `Bukti transfer ${formatRp(activeBukti.nominal)} sedang diverifikasi admin. Mohon tunggu 1x24 jam kerja.`}
-              </div>
+            <div className="text-[12px]" style={{ color: activeBukti.status_verifikasi === "diterima" ? "#15803D" : "#A16207" }}>
+              {activeBukti.status_verifikasi === "diterima"
+                ? "Pembayaran telah diverifikasi. Invoice akan diperbarui secara otomatis."
+                : `Bukti transfer ${formatRp(activeBukti.nominal)} sedang diverifikasi admin. Mohon tunggu 1x24 jam kerja.`}
             </div>
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* VA / QRIS Display Card */}
       {vaData && !isLunas && !isRefunded && !activeBukti && (
-        <div className="card" style={{ padding: "20px", marginTop: "20px", border: "2px solid #4CAF50" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <div style={{
-                width: "32px", height: "32px", borderRadius: "50%",
-                background: "#DCFCE7", display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
+        <Card className="p-5 mt-5" style={{ border: "2px solid #4CAF50" }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
                 {isQris ? (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="#166534" strokeWidth="2" width="18" height="18">
-                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                    <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-                  </svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#166534" strokeWidth="2" width="18" height="18" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                 ) : (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="#166534" strokeWidth="2" width="18" height="18">
-                    <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
-                  </svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#166534" strokeWidth="2" width="18" height="18" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
                 )}
               </div>
               <div>
-                <div style={{ fontSize: "13px", fontWeight: "600", color: "#1E293B" }}>
-                  {isQris ? "QRIS" : "Virtual Account"}
-                </div>
-                <div style={{ fontSize: "11px", color: "#64748B" }}>Aktif</div>
+                <div className="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{isQris ? "QRIS" : "Virtual Account"}</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">Aktif</div>
               </div>
             </div>
-            <span style={{
-              padding: "3px 10px", borderRadius: "20px",
-              background: "#DCFCE7", color: "#166534",
-              fontSize: "11px", fontWeight: "600",
-            }}>
-              Otomatis
-            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-green-100 text-green-700 text-[11px] font-semibold">Otomatis</span>
           </div>
 
-          {/* Countdown */}
           <CountdownTimer expiredAt={vaData.expiredAt} />
 
-          {/* VA Number */}
           {vaData.reference && !isQris && (
-            <div style={{
-              marginTop: "14px", padding: "14px",
-              background: "#F8FAFC", borderRadius: "8px",
-              border: "1px solid #E2E8F0",
-            }}>
-              <div style={{ fontSize: "11px", color: "#64748B", marginBottom: "4px" }}>
-                Nomor Virtual Account
-              </div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
-                <div style={{ fontFamily: "monospace", fontSize: "18px", fontWeight: "700", color: "#1E293B", letterSpacing: "1px" }}>
-                  {vaData.reference}
-                </div>
+            <div className="mt-3.5 p-3.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-1">Nomor Virtual Account</div>
+              <div className="flex items-center justify-between gap-2.5">
+                <div className="font-mono text-lg font-bold text-slate-800 dark:text-slate-200 tracking-wide">{vaData.reference}</div>
                 <CopyButton text={vaData.reference} label="Salin VA" />
               </div>
             </div>
           )}
 
-          {/* Total */}
-          <div style={{
-            marginTop: "12px", padding: "10px 14px",
-            background: "#EFF6FF", borderRadius: "6px",
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-          }}>
-            <span style={{ fontSize: "12px", color: "#475569" }}>Total Pembayaran</span>
-            <span style={{ fontSize: "15px", fontWeight: "700", color: "#1E40AF" }}>{formatRp(invoice.total_tagihan)}</span>
+          <div className="mt-3 p-2.5 rounded-md bg-blue-50 flex justify-between items-center">
+            <span className="text-[12px] text-slate-600 dark:text-slate-300 dark:text-slate-500">Total Pembayaran</span>
+            <span className="text-[15px] font-bold text-blue-700">{formatRp(invoice.total_tagihan)}</span>
           </div>
 
-          {/* Expired note */}
-          <div style={{ marginTop: "10px", fontSize: "11px", color: "#94A3B8", textAlign: "center" }}>
+          <div className="mt-2.5 text-[11px] text-slate-400 dark:text-slate-500 text-center">
             Pembayaran akan diverifikasi otomatis 1-5 menit setelah transfer.
           </div>
 
-          {/* VA Instructions */}
           <VaInstructions method={isQris ? "qris" : "va"} vaNumber={vaData.reference} gateway={invoice} selectedBank={vaData.bank} />
 
-          {/* Cek status pembayaran manual — untuk kasus webhook belum sampai */}
-          <button
-            onClick={refetchInvoice}
-            disabled={isFetching}
-            className="btn btn-ghost"
-            style={{ width: "100%", marginTop: "12px", fontSize: "12px", color: "#475569" }}
-            title="Paksa refresh status invoice dari server"
-          >
+          <Button variant="ghost" size="sm" onClick={refetchInvoice} disabled={isFetching} className="w-full mt-3 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500" >
             {isFetching ? "Memuat..." : "Cek Status Pembayaran"}
-          </button>
-
-          {/* Refresh VA — selalu generate VA baru dari Midtrans */}
-          <button
-            onClick={() => handleGatewayPayment(true)}
-            className="btn btn-secondary"
-            style={{ width: "100%", marginTop: "8px", fontSize: "12px" }}
-          >
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleGatewayPayment(true)} className="w-full mt-2 text-[12px]">
             Dapatkan Nomor VA Baru
-          </button>
-
-          {/* Ganti metode pembayaran */}
-          <button
-            onClick={() => { setShowMethodPicker(true); setPendingMethod(method); }}
-            className="btn btn-ghost"
-            style={{ width: "100%", marginTop: "8px", fontSize: "12px", color: "#64748B" }}
-          >
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => { setShowMethodPicker(true); setPendingMethod(method); }} className="w-full mt-1.5 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500">
             Ganti Metode Pembayaran
-          </button>
-        </div>
+          </Button>
+        </Card>
       )}
 
-      {/* Form Ganti Metode — tampil di luar card VA/QRIS */}
       {showMethodPicker && (
-        <div className="card" style={{ padding: "24px", marginTop: "20px", border: "2px solid #4CAF50" }}>
-          <h2 style={{ margin: "0 0 4px", fontSize: "15px", fontWeight: "600", color: "#1E293B" }}>
-            Ganti Metode Pembayaran
-          </h2>
-          <p style={{ margin: "0 0 16px", fontSize: "13px", color: "#64748B" }}>
+        <Card className="p-6 mt-5" style={{ border: "2px solid #4CAF50" }}>
+          <h2 className="text-[15px] font-semibold text-slate-800 dark:text-slate-200 mb-1">Ganti Metode Pembayaran</h2>
+          <p className="text-[13px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-4">
             Nomor VA/QRIS sebelumnya akan <strong>dibatalkan</strong>.
           </p>
           <PaymentMethodSelector value={pendingMethod} onChange={setPendingMethod} disabled={submitting} />
 
           {pendingMethod === "transfer_manual" ? (
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              setError("");
-              if (!fileBukti) { setError("Pilih file bukti transfer."); return; }
-              const fd = new FormData();
-              fd.append("nominal", nominal);
-              fd.append("nomor_referensi", noRef);
-              fd.append("dari_rekening", dariRek);
-              fd.append("bukti", fileBukti);
-              buktiMutation.mutate({
-                path: `/invoice/${id}/bukti-manual`,
-                method: "POST",
-                body: fd,
-              });
-            }} style={{ marginTop: "16px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div>
-                  <label className="form-label">Nominal *</label>
-                  <input type="number" className="form-input" value={nominal} onChange={e => setNominal(e.target.value)} placeholder="5000000" required />
+            <div className="mt-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="ganti-nominal">Nominal *</Label>
+                  <Input id="ganti-nominal" type="number" value={nominal} onChange={e => setNominal(e.target.value)} placeholder="5000000" />
                 </div>
-                <div>
-                  <label className="form-label">No. Referensi Transfer *</label>
-                  <input className="form-input" value={noRef} onChange={e => setNoRef(e.target.value)} placeholder="TRX-202610-001" required />
+                <div className="space-y-1.5">
+                  <Label htmlFor="ganti-ref">No. Referensi Transfer *</Label>
+                  <Input id="ganti-ref" value={noRef} onChange={e => setNoRef(e.target.value)} placeholder="TRX-202610-001" />
                 </div>
               </div>
-              <div style={{ marginTop: "12px" }}>
-                <label className="form-label">Dari rekening *</label>
-                <input className="form-input" value={dariRek} onChange={e => setDariRek(e.target.value)} placeholder="BCA 123-456-7890 a.n. Nama" required />
+              <div className="mt-3 space-y-1.5">
+                <Label htmlFor="ganti-rek">Dari rekening *</Label>
+                <Input id="ganti-rek" value={dariRek} onChange={e => setDariRek(e.target.value)} placeholder="BCA 123-456-7890 a.n. Nama" />
               </div>
-              <div style={{ marginTop: "12px" }}>
-                <label className="form-label">File bukti (PDF / gambar) *</label>
-                <input type="file" accept=".pdf,image/*" onChange={e => setFileBukti(e.target.files?.[0])} required className="form-input" />
+              <div className="mt-3 space-y-1.5">
+                <Label htmlFor="ganti-bukti">File bukti (PDF / gambar) *</Label>
+                <Input id="ganti-bukti" type="file" accept=".pdf,image/*" onChange={e => handleFileChange(e.target.files?.[0])} />
               </div>
-              {error && <div style={{ marginTop: "12px", padding: "10px 12px", background: "#FEE2E2", color: "#991B1B", borderRadius: "6px", fontSize: "12px" }}>{error}</div>}
-              <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
-                <button type="button" onClick={() => setShowMethodPicker(false)} className="btn btn-ghost" style={{ flex: 1 }} disabled={submitting}>Batal</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={submitting}>{submitting ? "Mengunggah..." : "Kirim Bukti Transfer"}</button>
+              {fileError && <div className="mt-3 p-2.5 rounded-md bg-red-50 border border-red-200 text-red-700 text-[12px]">{fileError}</div>}
+              <div className="flex gap-2.5 mt-5">
+                <Button type="button" variant="outline" onClick={() => setShowMethodPicker(false)} disabled={submitting} className="flex-1">Batal</Button>
+                <Button onClick={handleManualSubmit} disabled={submitting} className="flex-1">{submitting ? "Mengunggah..." : "Kirim Bukti Transfer"}</Button>
               </div>
-            </form>
+            </div>
           ) : (
             <>
-              <div style={{ marginTop: "16px", padding: "12px", background: "#FEF9C3", color: "#854D0E", fontSize: "12px", borderRadius: "6px" }}>
-                Total yang harus dibayar: <strong>{formatRp(invoice.total_tagihan)}</strong>
-              </div>
-              {error && <div style={{ marginTop: "12px", padding: "10px 12px", background: "#FEE2E2", color: "#991B1B", borderRadius: "6px", fontSize: "12px" }}>{error}</div>}
-              <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
-                <button onClick={() => setShowMethodPicker(false)} className="btn btn-ghost" style={{ flex: 1 }} disabled={submitting}>Batal</button>
-                <button onClick={handleGantiMetode} className="btn btn-primary" style={{ flex: 1 }} disabled={submitting || !pendingMethod}>
+              {fileError && <div className="mt-3 p-2.5 rounded-md bg-red-50 border border-red-200 text-red-700 text-[12px]">{fileError}</div>}
+              <div className="flex gap-2.5 mt-4">
+                <Button variant="outline" onClick={() => setShowMethodPicker(false)} disabled={submitting} className="flex-1">Batal</Button>
+                <Button onClick={handleGantiMetode} disabled={submitting || !pendingMethod} className="flex-1">
                   {submitting ? "Memproses..." : pendingMethod === "qris" ? "Generate QRIS Baru" : "Dapatkan VA Baru"}
-                </button>
+                </Button>
               </div>
             </>
           )}
-        </div>
+        </Card>
       )}
 
-      {/* Rincian Biaya */}
       {items.length > 0 && (
-        <div className="card" style={{ padding: 0, marginTop: "20px" }}>
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #F1F5F9" }}>
-            <span style={{ fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>Rincian Biaya</span>
+        <Card className="mt-5 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100">
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">Rincian Biaya</span>
             {invoice.siklus?.faskes?.jenis_faskes && (
-              <span style={{ marginLeft: "8px", fontSize: "12px", color: "#64748B" }}>
-                — {invoice.siklus.faskes.jenis_faskes.nama}
-              </span>
+              <span className="ml-2 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500">— {invoice.siklus.faskes.jenis_faskes.nama}</span>
             )}
           </div>
-          <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
-            <table className="data-table">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
               <thead>
-                <tr>
-                  <th>Komponen Biaya</th>
-                  <th>Tipe</th>
-                  <th style={{ textAlign: "right" }}>Jumlah</th>
+                <tr className="border-b border-slate-100">
+                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wide">Komponen Biaya</th>
+                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wide">Tipe</th>
+                  <th className="text-right px-5 py-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wide">Jumlah</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map(item => (
-                  <tr key={item.id}>
-                    <td>
-                      <div style={{ fontWeight: "500", color: "#1E293B" }}>{item.nama_biaya}</div>
-                      {item.deskripsi && <div style={{ fontSize: "12px", color: "#94A3B8", marginTop: "2px" }}>{item.deskripsi}</div>}
+                  <tr key={item.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-5 py-3">
+                      <div className="font-medium text-slate-800 dark:text-slate-200 text-[13px]">{item.nama_biaya}</div>
+                      {item.deskripsi && <div className="text-[12px] text-slate-400 dark:text-slate-500 mt-0.5">{item.deskripsi}</div>}
                     </td>
-                    <td>
-                      <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: "600", background: "#F1F5F9", color: "#475569" }}>
-                        {SATUAN_LABEL[item.satuan] || item.satuan}
-                      </span>
+                    <td className="px-5 py-3">
+                      <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 dark:text-slate-500">{SATUAN_LABEL[item.satuan] || item.satuan}</span>
                     </td>
-                    <td style={{ textAlign: "right", fontWeight: "600", color: "#1E293B", whiteSpace: "nowrap" }}>{formatRp(item.jumlah)}</td>
+                    <td className="px-5 py-3 text-right font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap text-[13px]">{formatRp(item.jumlah)}</td>
                   </tr>
                 ))}
-                <tr style={{ background: "#F8FAFC" }}>
-                  <td colSpan="2" style={{ fontWeight: "600", color: "#1E293B", textAlign: "right", paddingRight: "16px" }}>Total Tagihan</td>
-                  <td style={{ fontWeight: "700", color: "#1E293B", textAlign: "right", whiteSpace: "nowrap", fontSize: "15px" }}>{formatRp(invoice.total_tagihan)}</td>
+                <tr className="bg-slate-50 dark:bg-slate-800/50">
+                  <td colSpan="2" className="px-5 py-3 text-right font-semibold text-slate-800 dark:text-slate-200 text-[13px]">Total Tagihan</td>
+                  <td className="px-5 py-3 text-right font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap text-[15px]">{formatRp(invoice.total_tagihan)}</td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Payment method selection */}
       {!isLunas && !isRefunded && !vaData && !activeBukti && (
-        <div className="card" style={{ padding: "24px", marginTop: "20px" }}>
-          <h2 style={{ margin: 0, fontSize: "15px", fontWeight: "600", color: "#1E293B", marginBottom: "16px" }}>
+        <Card className="p-6 mt-5">
+          <h2 className="text-[15px] font-semibold text-slate-800 dark:text-slate-200 mb-4">
             Pilih Metode Pembayaran
           </h2>
           <PaymentMethodSelector value={method} onChange={setMethod} disabled={submitting} />
 
           {method === "transfer_manual" ? (
-            <form onSubmit={handleManualSubmit} style={{ marginTop: "20px" }}>
-              <h3 style={{ fontSize: "13px", fontWeight: "600", color: "#475569", marginBottom: "12px" }}>Unggah Bukti Transfer</h3>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div>
-                  <label className="form-label">Nominal *</label>
-                  <input type="number" className="form-input" value={nominal} onChange={e => setNominal(e.target.value)} placeholder="5000000" required />
+            <div className="mt-5">
+              <h3 className="text-[13px] font-semibold text-slate-600 dark:text-slate-300 dark:text-slate-500 mb-3">Unggah Bukti Transfer</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="tf-nominal">Nominal *</Label>
+                  <Input id="tf-nominal" type="number" value={nominal} onChange={e => setNominal(e.target.value)} placeholder="5000000" />
                 </div>
-                <div>
-                  <label className="form-label">No. Referensi Transfer *</label>
-                  <input className="form-input" value={noRef} onChange={e => setNoRef(e.target.value)} placeholder="TRX-202610-001" required />
+                <div className="space-y-1.5">
+                  <Label htmlFor="tf-ref">No. Referensi Transfer *</Label>
+                  <Input id="tf-ref" value={noRef} onChange={e => setNoRef(e.target.value)} placeholder="TRX-202610-001" />
                 </div>
               </div>
-              <div style={{ marginTop: "12px" }}>
-                <label className="form-label">Dari rekening *</label>
-                <input className="form-input" value={dariRek} onChange={e => setDariRek(e.target.value)} placeholder="BCA 123-456-7890 a.n. RS Permata" required />
+              <div className="mt-3 space-y-1.5">
+                <Label htmlFor="tf-rek">Dari rekening *</Label>
+                <Input id="tf-rek" value={dariRek} onChange={e => setDariRek(e.target.value)} placeholder="BCA 123-456-7890 a.n. RS Permata" />
               </div>
-              <div style={{ marginTop: "12px" }}>
-                <label className="form-label">File bukti (PDF / gambar) *</label>
-                <input type="file" accept=".pdf,image/*" onChange={e => setFileBukti(e.target.files?.[0])} required className="form-input" />
+              <div className="mt-3 space-y-1.5">
+                <Label htmlFor="tf-bukti">File bukti (PDF / gambar) *</Label>
+                <Input id="tf-bukti" type="file" accept=".pdf,image/*" onChange={e => handleFileChange(e.target.files?.[0])} />
               </div>
-              {error && (
-                <div style={{ marginTop: "12px", padding: "10px 12px", background: "#FEE2E2", color: "#991B1B", borderRadius: "6px", fontSize: "12px" }}>{error}</div>
-              )}
-              <button type="submit" className="btn btn-primary" disabled={submitting} style={{ width: "100%", marginTop: "16px" }}>
-                {submitting ? "Mengunggah..." : "Kirim Bukti Transfer"}
-              </button>
-            </form>
+              {fileError && <div className="mt-3 p-2.5 rounded-md bg-red-50 border border-red-200 text-red-700 text-[12px]">{fileError}</div>}
+              <Button onClick={handleManualSubmit} disabled={submitting} className="w-full mt-4">{submitting ? "Mengunggah..." : "Kirim Bukti Transfer"}</Button>
+            </div>
           ) : (
-            <div style={{ marginTop: "20px" }}>
-              <div style={{ padding: "12px", background: "#FEF9C3", color: "#854D0E", fontSize: "12px", borderRadius: "6px", marginBottom: "12px" }}>
-                Total yang harus dibayar: <strong>{formatRp(invoice.total_tagihan)}</strong>
-              </div>
-              {error && (
-                <div style={{ padding: "10px 12px", background: "#FEE2E2", color: "#991B1B", borderRadius: "6px", fontSize: "12px", marginBottom: "12px" }}>{error}</div>
-              )}
-              <button onClick={() => handleGatewayPayment(false)} className="btn btn-primary" disabled={submitting} style={{ width: "100%" }}>
-                {submitting ? "Memproses..." : method === "qris" ? "Generate QRIS" : "Dapatkan Nomor VA"}
-              </button>
+            <div className="mt-5">
+              <div className="p-3 rounded-md bg-amber-50 text-amber-800 text-[12px] mb-3">Total yang harus dibayar: <strong>{formatRp(invoice.total_tagihan)}</strong></div>
+              {fileError && <div className="p-2.5 rounded-md bg-red-50 border border-red-200 text-red-700 text-[12px] mb-3">{fileError}</div>}
+              <Button onClick={() => handleGatewayPayment(false)} disabled={submitting} className="w-full">{submitting ? "Memproses..." : method === "qris" ? "Generate QRIS" : "Dapatkan Nomor VA"}</Button>
             </div>
           )}
-        </div>
+        </Card>
       )}
 
-      {/* Riwayat bukti pembayaran */}
       {bukti.length > 0 && (
-        <div className="card" style={{ marginTop: "20px", padding: 0 }}>
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #E2E8F0" }}>
-            <span style={{ fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>Riwayat Pembayaran</span>
+        <Card className="mt-5 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100">
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">Riwayat Pembayaran</span>
           </div>
-          <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
-            <table className="data-table">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
               <thead>
-                <tr>
-                  <th>Tanggal</th>
-                  <th>Metode</th>
-                  <th style={{ textAlign: "right" }}>Nominal</th>
-                  <th>Status</th>
+                <tr className="border-b border-slate-100">
+                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wide">Tanggal</th>
+                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wide">Metode</th>
+                  <th className="text-right px-5 py-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wide">Nominal</th>
+                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wide">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {bukti.map(b => {
                   const statusInfo = BUKTI_STATUS[b.status_verifikasi] || BUKTI_STATUS.menunggu;
                   return (
-                    <tr key={b.id}>
-                      <td style={{ fontSize: "12px", color: "#475569" }}>{formatDateTime(b.tanggal_submit)}</td>
-                      <td style={{ fontSize: "12px", color: "#475569" }}>
-                        {b.metode === "transfer_manual" ? "Transfer" : b.metode === "qris" ? "QRIS" : "VA"}
-                      </td>
-                      <td style={{ textAlign: "right", fontWeight: "500", color: "#1E293B" }}>{formatRp(b.nominal)}</td>
-                      <td>
-                        <span style={{ padding: "2px 8px", borderRadius: "9999px", fontSize: "11px", fontWeight: "600", background: statusInfo.color, color: statusInfo.text }}>
-                          {statusInfo.label}
-                        </span>
-                        {b.alasan_penolakan && (
-                          <div style={{ fontSize: "11px", color: "#991B1B", marginTop: "4px" }}>{b.alasan_penolakan}</div>
-                        )}
+                    <tr key={b.id} className="border-b border-slate-50 last:border-0">
+                      <td className="px-5 py-3 text-[12px] text-slate-600 dark:text-slate-300 dark:text-slate-500">{formatDateTime(b.tanggal_submit)}</td>
+                      <td className="px-5 py-3 text-[12px] text-slate-600 dark:text-slate-300 dark:text-slate-500">{b.metode === "transfer_manual" ? "Transfer" : b.metode === "qris" ? "QRIS" : "VA"}</td>
+                      <td className="px-5 py-3 text-right font-medium text-slate-800 dark:text-slate-200 text-[13px]">{formatRp(b.nominal)}</td>
+                      <td className="px-5 py-3">
+                        <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: statusInfo.bg, color: statusInfo.fg }}>{statusInfo.label}</span>
+                        {b.alasan_penolakan && <div className="text-[11px] text-red-600 mt-1">{b.alasan_penolakan}</div>}
                       </td>
                     </tr>
                   );
@@ -791,7 +516,7 @@ export default function TagihanDetail() {
               </tbody>
             </table>
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

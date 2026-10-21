@@ -1,90 +1,59 @@
 import React, { useState, useMemo } from "react";
 import { useApi, useMutate } from "@/hooks/useApi";
+import { PageHeader } from "@/components/PageHeader";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Eye, EyeOff, CheckCircle, XCircle } from "lucide-react";
 
-function PasswordField({ value, onChange, label }) {
+function formatRp(n) { return `Rp ${Number(n || 0).toLocaleString("id-ID")}`; }
+
+function PasswordField({ label, value, onChange }) {
   const [show, setShow] = useState(false);
   return (
-    <div>
-      <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-        {label}
-      </label>
-      <div style={{ position: "relative" }}>
-        <input
-          className="form-input"
-          type={show ? "text" : "password"}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder="••••••••••"
-          style={{ paddingRight: "40px" }}
-        />
-        <button
-          type="button"
-          onClick={() => setShow(s => !s)}
-          style={{
-            position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)",
-            background: "none", border: "none", cursor: "pointer", color: "#94A3B8", fontSize: "12px",
-          }}
-        >
-          {show ? "Sembunyikan" : "Tampilkan"}
+    <div className="space-y-1.5">
+      <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{label}</Label>
+      <div className="relative">
+        <Input type={show ? "text" : "password"} value={value} onChange={e => onChange(e.target.value)} className="pr-10" />
+        <button type="button" onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-300 dark:text-slate-500">
+          {show ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>
       </div>
     </div>
   );
 }
 
-
 function LoadingSpinner({ label = "Memuat..." }) {
   return (
-    <div style={{ textAlign: "center", padding: "48px", color: "#94A3B8", fontSize: "13px" }}>
-      <div style={{
-        width: "28px", height: "28px", border: "3px solid #E2E8F0",
-        borderTopColor: "#4CAF50", borderRadius: "50%",
-        animation: "spin 0.7s linear infinite",
-        margin: "0 auto 10px",
-      }} />
+    <div className="flex flex-col items-center justify-center py-12 text-slate-400 dark:text-slate-500 text-sm">
+      <div className="w-7 h-7 border-[3px] border-slate-200 dark:border-slate-700 border-t-green-500 rounded-full animate-spin mb-3" />
       {label}
     </div>
   );
 }
 
 function Toast({ message, type = "success" }) {
+  const colors = {
+    success: { bg: "#DCFCE7", text: "#166534", border: "#BBF7D0" },
+    error:   { bg: "#FEE2E2", text: "#991B1B", border: "#FECACA" },
+    info:    { bg: "#FEF9C3", text: "#854D0E", border: "#FDE68A" },
+  };
+  const c = colors[type] || colors.success;
   return (
-    <div style={{
-      position: "fixed", bottom: "24px", right: "24px", zIndex: 9999,
-      padding: "12px 20px", borderRadius: "8px", fontSize: "13px", fontWeight: "500",
-      boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
-      background: type === "success" ? "#DCFCE7" : type === "error" ? "#FEE2E2" : "#FEF9C3",
-      color: type === "success" ? "#166534" : type === "error" ? "#991B1B" : "#854D0E",
-      border: `1px solid ${type === "success" ? "#BBF7D0" : type === "error" ? "#FECACA" : "#FDE68A"}`,
-    }}>
+    <div className="fixed bottom-6 right-6 z-50 p-3 rounded-lg text-sm font-medium shadow-lg border"
+      style={{ background: c.bg, color: c.text, borderColor: c.border }}>
       {message}
     </div>
   );
 }
 
 const CATEGORIES = [
-  { id: "gateway", label: "Gateway", icon: "⚙️" },
-  { id: "midtrans", label: "Midtrans", icon: "💳" },
-  { id: "xendit", label: "Xendit", icon: "💰" },
-  { id: "general", label: "Pengaturan Umum", icon: "🏢" },
+  { id: "gateway", label: "Gateway" },
+  { id: "midtrans", label: "Midtrans" },
+  { id: "xendit", label: "Xendit" },
+  { id: "general", label: "Pengaturan Umum" },
 ];
-
-const VA_BANK_OPTIONS = {
-  midtrans: [
-    { value: "bca", label: "BCA" },
-    { value: "bni", label: "BNI" },
-    { value: "mandiri", label: "Mandiri" },
-    { value: "permata", label: "Permata" },
-    { value: "bri", label: "BRI" },
-  ],
-  xendit: [
-    { value: "BCA", label: "BCA" },
-    { value: "BNI", label: "BNI" },
-    { value: "MANDIRI", label: "Mandiri" },
-    { value: "BRI", label: "BRI" },
-    { value: "PERMATA", label: "Permata" },
-  ],
-};
 
 export default function PengaturanPembayaran() {
   const [saving, setSaving] = useState(false);
@@ -101,18 +70,13 @@ export default function PengaturanPembayaran() {
 
   const grouped = useMemo(() => {
     const grp = {};
-    settings.forEach(s => {
-      if (!grp[s.kategori]) grp[s.kategori] = {};
-      grp[s.kategori][s.kunci] = s;
-    });
+    settings.forEach(s => { if (!grp[s.kategori]) grp[s.kategori] = {}; grp[s.kategori][s.kunci] = s; });
     return grp;
   }, [settings]);
 
   const getVal = (kat, kunci) => {
     const key = `${kat}:${kunci}`;
-    const fromTemp = key in tempValues ? tempValues[key] : undefined;
-    const fromGrouped = grouped[kat]?.[kunci]?.nilai;
-    return fromTemp !== undefined ? fromTemp : (fromGrouped ?? "");
+    return key in tempValues ? tempValues[key] : (grouped[kat]?.[kunci]?.nilai ?? "");
   };
 
   const setVal = (kat, kunci, val) => {
@@ -125,32 +89,12 @@ export default function PengaturanPembayaran() {
     setSaving(true);
     try {
       const payload = {};
-      settings.forEach(s => {
-        const key = `${s.kategori}:${s.kunci}`;
-        if (key in tempValues) {
-          payload[`${s.kategori}:${s.kunci}`] = tempValues[key];
-        }
-      });
-
-      if (Object.keys(payload).length === 0) {
-        showToast("Tidak ada perubahan untuk disimpan.", "info");
-        setSaving(false);
-        return;
-      }
-
-      await mutateSave.mutateAsync({
-        path: "/payment-settings",
-        method: "PUT",
-        body: { values: payload },
-      });
-      setTempValues({});
-      setDirty({});
+      settings.forEach(s => { const key = `${s.kategori}:${s.kunci}`; if (key in tempValues) payload[key] = tempValues[key]; });
+      if (Object.keys(payload).length === 0) { showToast("Tidak ada perubahan untuk disimpan.", "info"); setSaving(false); return; }
+      await mutateSave.mutateAsync({ path: "/payment-settings", method: "PUT", body: { values: payload } });
+      setTempValues({}); setDirty({});
       showToast("Berhasil disimpan.", "success");
-    } catch (err) {
-      showToast(err.message || "Gagal menyimpan.", "error");
-    } finally {
-      setSaving(false);
-    }
+    } catch (err) { showToast(err.message || "Gagal menyimpan.", "error"); } finally { setSaving(false); }
   };
 
   const handleTestConnection = async () => {
@@ -158,141 +102,67 @@ export default function PengaturanPembayaran() {
     const mode = getVal("gateway", "mode") || "sandbox";
     const serverKey = getVal("midtrans", "server_key");
     const apiKey = getVal("xendit", "api_key");
-
     setTesting(true);
     try {
       const body = { driver, mode };
       if (driver === "midtrans") body.server_key = serverKey;
       if (driver === "xendit") body.api_key = apiKey;
-
       const { api } = await import("@/lib/api");
-      // api() sudah parse JSON & throw on non-ok — langsung dapat response body
-      const data = await api("/payment-settings/test-connection", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      showToast(data.message, "success");
-    } catch (err) {
-      showToast(err.message || "Gagal koneksi.", "error");
-    } finally {
-      setTesting(false);
-    }
+      const res = await api("/payment-settings/test-connection", { method: "POST", body: JSON.stringify(body) });
+      showToast(res.message, "success");
+    } catch (err) { showToast(err.message || "Gagal koneksi.", "error"); } finally { setTesting(false); }
   };
 
-  const showToast = (message, type = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
-  };
+  const showToast = (message, type = "success") => { setToast({ message, type }); setTimeout(() => setToast(null), 3500); };
 
-  const activeSettings = grouped[activeTab] || {};
   const isGatewayEnabled = getVal("gateway", "enabled") === "1";
   const activeDriver = getVal("gateway", "driver") || "midtrans";
   const hasDirty = Object.keys(dirty).length > 0;
 
   const renderField = (setting) => {
     const val = getVal(setting.kategori, setting.kunci);
-    const key = `${setting.kategori}:${setting.kunci}`;
+    const tipe = setting.tipe;
 
-    if (setting.tipe === "boolean") {
-      return (
-        <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
-          <div
-            onClick={() => setVal(setting.kategori, setting.kunci, val === "1" ? "0" : "1")}
-            style={{
-              width: "44px", height: "24px", borderRadius: "12px",
-              background: val === "1" ? "#4CAF50" : "#CBD5E1",
-              position: "relative", transition: "background 0.2s", cursor: "pointer",
-            }}
-          >
-            <div style={{
-              width: "20px", height: "20px", borderRadius: "50%",
-              background: "#fff",
-              position: "absolute", top: "2px",
-              left: val === "1" ? "22px" : "2px",
-              transition: "left 0.2s",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-            }} />
-          </div>
-          <span style={{ fontSize: "13px", fontWeight: "500", color: "#374151" }}>
-            {setting.label}
-          </span>
-        </label>
-      );
-    }
+    if (tipe === "boolean") return (
+      <div className="flex items-center gap-2.5 cursor-pointer select-none" onClick={() => setVal(setting.kategori, setting.kunci, val === "1" ? "0" : "1")}>
+        <div className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors" style={{ background: val === "1" ? "#22C55E" : "#CBD5E1" }}>
+          <div className="h-5 w-5 rounded-full bg-white shadow transition-transform" style={{ transform: val === "1" ? "translateX(22px)" : "translateX(2px)" }} />
+        </div>
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-500">{setting.label}</span>
+      </div>
+    );
 
-    if (setting.tipe === "select") {
+    if (tipe === "select") {
       let options = [];
       try {
-        let raw = setting.options;
-        if (typeof raw === "string") {
-          raw = JSON.parse(raw);
-        }
-        if (raw?.choices) {
-          options = Object.entries(raw.choices).map(([v, l]) => ({ value: v, label: l }));
-        } else if (Array.isArray(raw)) {
-          options = raw;
-        }
-      } catch (err) {
-        console.error("[select options parse]", setting.kunci, err);
-      }
-
+        let raw = typeof setting.options === "string" ? JSON.parse(setting.options) : setting.options;
+        if (raw?.choices) options = Object.entries(raw.choices).map(([v, l]) => ({ value: v, label: l }));
+        else if (Array.isArray(raw)) options = raw;
+      } catch { /* ignore */ }
       return (
-        <div>
-          <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-            {setting.label}
-          </label>
-          <select
-            className="form-input"
-            value={val}
-            onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)}
-          >
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{setting.label}</Label>
+          <select className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={val} onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)}>
             <option value="">— Pilih —</option>
-            {options.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
+            {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
       );
     }
 
-    if (setting.tipe === "password") {
-      return (
-        <PasswordField
-          label={setting.label}
-          value={val}
-          onChange={v => setVal(setting.kategori, setting.kunci, v)}
-        />
-      );
-    }
+    if (tipe === "password") return <PasswordField label={setting.label} value={val} onChange={v => setVal(setting.kategori, setting.kunci, v)} />;
 
-    if (setting.tipe === "number") {
-      return (
-        <div>
-          <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-            {setting.label}
-          </label>
-          <input
-            className="form-input"
-            type="number"
-            value={val}
-            min={1} max={365}
-            onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)}
-          />
-        </div>
-      );
-    }
+    if (tipe === "number") return (
+      <div className="space-y-1.5">
+        <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{setting.label}</Label>
+        <Input type="number" value={val} min={1} max={365} onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)} />
+      </div>
+    );
 
     return (
-      <div>
-        <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-          {setting.label}
-        </label>
-        <input
-          className="form-input"
-          type="text"
-          value={val}
-          onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)}
-        />
+      <div className="space-y-1.5">
+        <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{setting.label}</Label>
+        <Input value={val} onChange={e => setVal(setting.kategori, setting.kunci, e.target.value)} />
       </div>
     );
   };
@@ -300,197 +170,107 @@ export default function PengaturanPembayaran() {
   if (isLoading) return <LoadingSpinner />;
 
   return (
-    <div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    <div className="space-y-5">
+      <PageHeader
+        title="Pengaturan Pembayaran"
+        subtitle="Konfigurasi gateway pembayaran & parameter invoice"
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleTestConnection} disabled={testing || !isGatewayEnabled} className="gap-2">
+              {testing ? <><div className="w-3.5 h-3.5 border-2 border-slate-300 border-t-green-500 rounded-full animate-spin" />Menguji...</> : "Test Koneksi"}
+            </Button>
+            <Button onClick={handleSave} disabled={saving || !hasDirty}>{saving ? "Menyimpan..." : "Simpan Perubahan"}</Button>
+          </div>
+        }
+      />
 
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>
-            Pengaturan Pembayaran
-          </h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
-            Konfigurasi gateway pembayaran &amp; parameter invoice
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button
-            className="btn btn-secondary"
-            onClick={handleTestConnection}
-            disabled={testing || !isGatewayEnabled}
-            style={{ display: "flex", alignItems: "center", gap: "6px" }}
-          >
-            {testing ? (
-              <div style={{ width: "14px", height: "14px", border: "2px solid #94A3B8", borderTopColor: "#4CAF50", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-              </svg>
-            )}
-            {testing ? "Menguji..." : "Test Koneksi"}
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={handleSave}
-            disabled={saving || !hasDirty}
-          >
-            {saving ? "Menyimpan..." : "Simpan Perubahan"}
-          </button>
-        </div>
+      <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium"
+        style={{ background: isGatewayEnabled ? "#DCFCE7" : "#FEE2E2", border: `1px solid ${isGatewayEnabled ? "#BBF7D0" : "#FECACA"}`, color: isGatewayEnabled ? "#166534" : "#991B1B" }}>
+        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: isGatewayEnabled ? "#22C55E" : "#EF4444" }} />
+        Payment Gateway: <strong>{isGatewayEnabled ? `${activeDriver.toUpperCase()} ${getVal("gateway", "mode") === "production" ? "(Production)" : "(Sandbox)"}` : "Nonaktif"}</strong>
       </div>
 
-      {/* Status Banner */}
-      <div style={{
-        padding: "12px 16px", borderRadius: "8px", marginBottom: "20px",
-        background: isGatewayEnabled ? "#DCFCE7" : "#FEE2E2",
-        border: `1px solid ${isGatewayEnabled ? "#BBF7D0" : "#FECACA"}`,
-        display: "flex", alignItems: "center", gap: "10px",
-      }}>
-        <div style={{
-          width: "10px", height: "10px", borderRadius: "50%",
-          background: isGatewayEnabled ? "#4CAF50" : "#EF4444",
-          flexShrink: 0,
-        }} />
-        <span style={{ fontSize: "13px", fontWeight: "500", color: isGatewayEnabled ? "#166534" : "#991B1B" }}>
-          Payment Gateway: <strong>{isGatewayEnabled ? `Aktif — ${activeDriver.toUpperCase()} ${getVal("gateway", "mode") === "production" ? "(Production)" : "(Sandbox)"}` : "Nonaktif"}</strong>
-        </span>
-      </div>
-
-      {/* Tab bar */}
-      <div style={{ display: "flex", gap: "4px", marginBottom: "20px", borderBottom: "1px solid #E2E8F0", paddingBottom: "0" }}>
+      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
         {CATEGORIES.map(cat => (
-          <button
-            key={cat.id}
-            onClick={() => setActiveTab(cat.id)}
-            style={{
-              padding: "8px 16px",
-              border: "none",
-              borderBottom: activeTab === cat.id ? "2px solid #4CAF50" : "2px solid transparent",
-              background: "none",
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: activeTab === cat.id ? "600" : "400",
-              color: activeTab === cat.id ? "#4CAF50" : "#64748B",
-              marginBottom: "-1px",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-          >
+          <button key={cat.id} onClick={() => setActiveTab(cat.id)}
+            className="px-4 py-2 text-sm border-b-2 transition-colors"
+            style={{ borderColor: activeTab === cat.id ? "#22C55E" : "transparent", color: activeTab === cat.id ? "#22C55E" : "#64748B", fontWeight: activeTab === cat.id ? 600 : 400, marginBottom: "-1px" }}>
             {cat.label}
           </button>
         ))}
       </div>
 
-      {/* Tab content */}
-      <div style={{ display: "grid", gridTemplateColumns: activeTab === "gateway" ? "1fr" : "1fr 1fr", gap: "16px" }}>
+      <div className={activeTab === "gateway" ? "grid grid-cols-2 gap-5" : "grid grid-cols-2 gap-5"}>
         {activeTab === "gateway" && (
           <>
-            <div className="card" style={{ padding: "20px" }}>
-              <h3 style={{ margin: "0 0 16px", fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
-                Konfigurasi Gateway
-              </h3>
-              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <Card className="p-5">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4">Konfigurasi Gateway</h3>
+              <div className="flex flex-col gap-4">
                 {Object.values(grouped["gateway"] || {}).map(setting => (
                   <div key={setting.id}>
                     {renderField(setting)}
-                    {setting.deskripsi && (
-                      <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#94A3B8" }}>{setting.deskripsi}</p>
-                    )}
+                    {setting.deskripsi && <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{setting.deskripsi}</p>}
                   </div>
                 ))}
               </div>
-            </div>
-
-            {/* Driver guide */}
-            <div className="card" style={{ padding: "20px", background: "#F8FAFC" }}>
-              <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "600", color: "#475569" }}>
-                Panduan Gateway
-              </h3>
-              <div style={{ fontSize: "12px", color: "#64748B", lineHeight: "1.7" }}>
-                <p style={{ margin: "0 0 10px" }}>
-                  <strong>Fake (Development)</strong> — hanya untuk testing. VA/QRIS terbuat otomatis tanpa koneksi ke pihak ketiga.
-                </p>
-                <p style={{ margin: "0 0 10px" }}>
-                  <strong>Midtrans</strong> — gateway populer Indonesia. Daftar di <a href="https://dashboard.midtrans.com" target="_blank" rel="noopener noreferrer" style={{ color: "#4CAF50" }}>dashboard.midtrans.com</a> untuk dapat Server Key &amp; Client Key.
-                </p>
-                <p style={{ margin: "0 0 0" }}>
-                  <strong>Xendit</strong> — alternatif gateway. Daftar di <a href="https://dashboard.xendit.co" target="_blank" rel="noopener noreferrer" style={{ color: "#4CAF50" }}>dashboard.xendit.co</a>.
-                </p>
-                <div style={{ marginTop: "16px", padding: "10px", background: "#FEF9C3", borderRadius: "6px", fontSize: "11px" }}>
-                  <strong style={{ color: "#854D0E" }}>Tips:</strong>{" "}
-                  <span style={{ color: "#92400E" }}>
-                    Untuk testing, gunakan <em>Fake (Development)</em>. Ganti ke Midtrans/Xendit Sandbox saat UAT, lalu Production saat go-live.
-                  </span>
+            </Card>
+            <Card className="p-5" style={{ background: "#F8FAFC" }}>
+              <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-3">Panduan Gateway</h3>
+              <div className="text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500 space-y-3">
+                <p><strong>Fake (Development)</strong> — hanya untuk testing. VA/QRIS terbuat otomatis tanpa koneksi ke pihak ketiga.</p>
+                <p><strong>Midtrans</strong> — gateway populer Indonesia. Daftar di <a href="https://dashboard.midtrans.com" target="_blank" rel="noopener noreferrer" className="text-green-600">dashboard.midtrans.com</a> untuk dapat Server Key &amp; Client Key.</p>
+                <p><strong>Xendit</strong> — alternatif gateway. Daftar di <a href="https://dashboard.xendit.co" target="_blank" rel="noopener noreferrer" className="text-green-600">dashboard.xendit.co</a>.</p>
+                <div className="p-3 rounded-md" style={{ background: "#FEF9C3", border: "1px solid #FDE68A" }}>
+                  <strong className="text-orange-700">Tips:</strong>{" "}
+                  <span className="text-orange-800">Untuk testing, gunakan <em>Fake (Development)</em>. Ganti ke Midtrans/Xendit Sandbox saat UAT, lalu Production saat go-live.</span>
                 </div>
               </div>
-            </div>
+            </Card>
           </>
         )}
 
         {activeTab === "midtrans" && (
-          <>
-            <div className="card" style={{ padding: "20px" }}>
-              <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
-                Kredensial Midtrans
-              </h3>
-              <p style={{ margin: "0 0 16px", fontSize: "12px", color: "#94A3B8" }}>
-                Dapatkan dari <a href="https://dashboard.midtrans.com" target="_blank" rel="noopener noreferrer" style={{ color: "#4CAF50" }}>dashboard.midtrans.com</a> → Settings → Access Keys
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                {Object.values(grouped["midtrans"] || {}).map(setting => (
-                  <div key={setting.id}>
-                    {renderField(setting)}
-                    {setting.deskripsi && (
-                      <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#94A3B8" }}>{setting.deskripsi}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Kredensial Midtrans</h3>
+            <p className="text-[12px] text-slate-400 dark:text-slate-500 mb-4">Dapatkan dari <a href="https://dashboard.midtrans.com" target="_blank" rel="noopener noreferrer" className="text-green-600">dashboard.midtrans.com</a> → Settings → Access Keys</p>
+            <div className="flex flex-col gap-4">
+              {Object.values(grouped["midtrans"] || {}).map(setting => (
+                <div key={setting.id}>
+                  {renderField(setting)}
+                  {setting.deskripsi && <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{setting.deskripsi}</p>}
+                </div>
+              ))}
             </div>
-          </>
+          </Card>
         )}
 
         {activeTab === "xendit" && (
-          <>
-            <div className="card" style={{ padding: "20px" }}>
-              <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
-                Kredensial Xendit
-              </h3>
-              <p style={{ margin: "0 0 16px", fontSize: "12px", color: "#94A3B8" }}>
-                Dapatkan dari <a href="https://dashboard.xendit.co" target="_blank" rel="noopener noreferrer" style={{ color: "#4CAF50" }}>dashboard.xendit.co</a> → Developers → API Keys
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                {Object.values(grouped["xendit"] || {}).map(setting => (
-                  <div key={setting.id}>
-                    {renderField(setting)}
-                    {setting.deskripsi && (
-                      <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#94A3B8" }}>{setting.deskripsi}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Kredensial Xendit</h3>
+            <p className="text-[12px] text-slate-400 dark:text-slate-500 mb-4">Dapatkan dari <a href="https://dashboard.xendit.co" target="_blank" rel="noopener noreferrer" className="text-green-600">dashboard.xendit.co</a> → Developers → API Keys</p>
+            <div className="flex flex-col gap-4">
+              {Object.values(grouped["xendit"] || {}).map(setting => (
+                <div key={setting.id}>
+                  {renderField(setting)}
+                  {setting.deskripsi && <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{setting.deskripsi}</p>}
+                </div>
+              ))}
             </div>
-          </>
+          </Card>
         )}
 
         {activeTab === "general" && (
-          <>
-            <div className="card" style={{ padding: "20px" }}>
-              <h3 style={{ margin: "0 0 16px", fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
-                Pengaturan Umum Pembayaran
-              </h3>
-              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                {Object.values(grouped["general"] || {}).map(setting => (
-                  <div key={setting.id}>
-                    {renderField(setting)}
-                    {setting.deskripsi && (
-                      <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#94A3B8" }}>{setting.deskripsi}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4">Pengaturan Umum Pembayaran</h3>
+            <div className="flex flex-col gap-4">
+              {Object.values(grouped["general"] || {}).map(setting => (
+                <div key={setting.id}>
+                  {renderField(setting)}
+                  {setting.deskripsi && <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{setting.deskripsi}</p>}
+                </div>
+              ))}
             </div>
-          </>
+          </Card>
         )}
       </div>
 

@@ -1,59 +1,4 @@
 import React from "react";
-import Login from "@/views/auth/Login";
-import Dashboard from "@/views/admin/Dashboard";
-import SiklusList from "@/views/admin/SiklusList";
-import SiklusDetail from "@/views/admin/SiklusDetail";
-import PenugasanList from "@/views/admin/PenugasanList";
-import MasterBiayaTA from "@/views/admin/MasterBiayaTA";
-import Roles from "@/views/admin/Roles";
-import Privileges from "@/views/admin/Privileges";
-import AuditTrail from "@/views/admin/AuditTrail";
-import KontrakInvoicing from "@/views/admin/KontrakInvoicing";
-import VerifikasiPembayaran from "@/views/admin/VerifikasiPembayaran";
-import PiutangDashboard from "@/views/admin/PiutangDashboard";
-import PiutangDetail from "@/views/admin/PiutangDetail";
-import FaskesDashboard from "@/views/faskes/Dashboard";
-import FaskesKontrak from "@/views/faskes/Kontrak";
-import FaskesTagihan from "@/views/faskes/Tagihan";
-import FaskesTagihanDetail from "@/views/faskes/TagihanDetail";
-import FaskesDokumen from "@/views/faskes/Dokumen";
-import FaskesChangePassword from "@/views/faskes/ChangePassword";
-import RefundApproval from "@/views/keuangan/RefundApproval";
-import LedgerJournal from "@/views/keuangan/LedgerJournal";
-import SlipHonorarium from "@/views/keuangan/SlipHonorarium";
-import ApHonorDashboard from "@/views/admin/ApHonorDashboard";
-import ApHonorList from "@/views/admin/ApHonorList";
-import ApHonorBayar from "@/views/admin/ApHonorBayar";
-import ApHonorHistory from "@/views/admin/ApHonorHistory";
-import ApHonorPaymentDetail from "@/views/admin/ApHonorPaymentDetail";
-import HutangPajakList from "@/views/admin/HutangPajakList";
-import HutangPajakDetail from "@/views/admin/HutangPajakDetail";
-import RekonsiliasiDashboard from "@/views/keuangan/RekonsiliasiDashboard";
-import BuktiPotong from "@/views/keuangan/BuktiPotong";
-import KonfigurasiPajak from "@/views/keuangan/KonfigurasiPajak";
-import AccountingDashboard from "@/views/accounting/Dashboard";
-import AccountingCoa from "@/views/accounting/CoaList";
-import AccountingKategori from "@/views/accounting/KategoriJurnal";
-import AccountingJurnal from "@/views/accounting/JurnalUmum";
-import AccountingBukuBesar from "@/views/accounting/BukuBesar";
-import BankReceipt from "@/views/accounting/BankReceipt";
-import BankDisbursement from "@/views/accounting/BankDisbursement";
-import CashReceipt from "@/views/accounting/CashReceipt";
-import CashDisbursement from "@/views/accounting/CashDisbursement";
-import SettlementList from "@/views/accounting/SettlementList";
-import MasterLembaga from "@/views/admin/MasterLembaga";
-import MasterJenisFaskes from "@/views/admin/MasterJenisFaskes";
-import MasterFaskes from "@/views/admin/MasterFaskes";
-import UserManagement from "@/views/admin/UserManagement";
-import PksTemplateSettings from "@/views/admin/PksTemplateSettings";
-import MasterTenagaAhli from "@/views/admin/MasterTenagaAhli";
-import MasterBiaya from "@/views/admin/MasterBiaya";
-import PengaturanPembayaran from "@/views/admin/PengaturanPembayaran";
-import PengaturanMail from "@/views/admin/PengaturanMail";
-import PengaturanWhatsApp from "@/views/admin/PengaturanWhatsApp";
-import ProfilePage from "@/views/admin/ProfilePage";
-import RekomendasiWorkspace from "@/views/rekomendator/RekomendasiWorkspace";
-import RekomendasiSettings from "@/views/rekomendator/RekomendasiSettings";
 import { Icon } from "@/components/navIcons";
 
 const NavIcon = ({ name }) => React.createElement(Icon, { name, size: 18 });
@@ -63,7 +8,7 @@ var routes = [
   {
     path: "/login",
     name: "Login",
-    component: Login,
+    componentName: "Login",
     layout: "/auth",
   },
 
@@ -72,13 +17,13 @@ var routes = [
     path: "/",
     name: "Status Pengajuan",
     icon: NavIcon({ name: "home" }),
-    component: FaskesDashboard,
+    componentName: "FaskesDashboard",
     layout: "/faskes",
   },
   {
     path: "/kontrak/:id",
     name: "Kontrak PKS",
-    component: FaskesKontrak,
+    componentName: "FaskesKontrak",
     layout: "/faskes",
     hideInSidebar: true,
   },
@@ -86,27 +31,27 @@ var routes = [
     path: "/kontrak",
     name: "Kontrak & Tanda Tangan",
     icon: NavIcon({ name: "pen" }),
-    component: FaskesKontrak,
+    componentName: "FaskesKontrak",
     layout: "/faskes",
   },
   {
     path: "/dokumen",
     name: "Unggah Dokumen",
     icon: NavIcon({ name: "upload" }),
-    component: FaskesDokumen,
+    componentName: "FaskesDokumen",
     layout: "/faskes",
   },
   {
     path: "/tagihan",
     name: "Tagihan",
     icon: NavIcon({ name: "bill" }),
-    component: FaskesTagihan,
+    componentName: "FaskesTagihan",
     layout: "/faskes",
   },
   {
     path: "/tagihan/:id",
     name: "Detail Tagihan",
-    component: FaskesTagihanDetail,
+    componentName: "FaskesTagihanDetail",
     layout: "/faskes",
     hideInSidebar: true,
   },
@@ -114,7 +59,7 @@ var routes = [
     path: "/ganti-password",
     name: "Ganti Password",
     icon: NavIcon({ name: "lock" }),
-    component: FaskesChangePassword,
+    componentName: "FaskesChangePassword",
     layout: "/faskes",
   },
 
@@ -126,7 +71,7 @@ var routes = [
         path: "/dashboard",
         name: "Dashboard",
         icon: NavIcon({ name: "dashboard" }),
-        component: Dashboard,
+        componentName: "Dashboard",
         layout: "/admin",
         privilege: ["Dasbor Eksekutif", "Lihat"],
       },
@@ -134,7 +79,7 @@ var routes = [
         path: "/pendaftaran",
         name: "Pendaftaran",
         icon: NavIcon({ name: "register" }),
-        component: SiklusList,
+        componentName: "SiklusList",
         layout: "/admin",
         privilege: ["Pendaftaran & Validasi Dokumen", "Lihat"],
       },
@@ -142,7 +87,7 @@ var routes = [
         path: "/kontrak-invoicing",
         name: "Kontrak & Invoicing",
         icon: NavIcon({ name: "contract" }),
-        component: KontrakInvoicing,
+        componentName: "KontrakInvoicing",
         layout: "/admin",
         privilege: ["Kontrak & Invoicing", "Lihat"],
       },
@@ -150,7 +95,7 @@ var routes = [
         path: "/verifikasi-pembayaran",
         name: "Verifikasi Pembayaran",
         icon: NavIcon({ name: "payment" }),
-        component: VerifikasiPembayaran,
+        componentName: "VerifikasiPembayaran",
         layout: "/admin",
         privilege: ["Kontrak & Invoicing", "Lihat"],
       },
@@ -158,7 +103,7 @@ var routes = [
         path: "/penugasan",
         name: "Penugasan",
         icon: NavIcon({ name: "assignment" }),
-        component: PenugasanList,
+        componentName: "PenugasanList",
         layout: "/admin",
         privilege: ["Penugasan", "Lihat"],
       },
@@ -172,7 +117,7 @@ var routes = [
         path: "/piutang",
         name: "Dasbor Piutang",
         icon: NavIcon({ name: "money" }),
-        component: PiutangDashboard,
+        componentName: "PiutangDashboard",
         layout: "/admin",
         privilege: ["Dasbor Eksekutif", "Lihat"],
       },
@@ -180,7 +125,7 @@ var routes = [
         path: "/refund-approval",
         name: "Approval Refund",
         icon: NavIcon({ name: "rotate" }),
-        component: RefundApproval,
+        componentName: "RefundApproval",
         layout: "/admin",
         privilege: ["Kontrak & Invoicing", "Setujui"],
       },
@@ -188,7 +133,7 @@ var routes = [
         path: "/ap-honor",
         name: "Dasbor AP Honor",
         icon: NavIcon({ name: "coins" }),
-        component: ApHonorDashboard,
+        componentName: "ApHonorDashboard",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
@@ -196,7 +141,7 @@ var routes = [
         path: "/ap-honor/list",
         name: "Bayar Honor",
         icon: NavIcon({ name: "payment" }),
-        component: ApHonorList,
+        componentName: "ApHonorList",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
@@ -204,7 +149,7 @@ var routes = [
         path: "/ap-honor/history",
         name: "Riwayat Pembayaran",
         icon: NavIcon({ name: "log" }),
-        component: ApHonorHistory,
+        componentName: "ApHonorHistory",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
         hideInSidebar: false,
@@ -213,14 +158,14 @@ var routes = [
         path: "/hutang-pajak",
         name: "Hutang Pajak",
         icon: NavIcon({ name: "tax" }),
-        component: HutangPajakList,
+        componentName: "HutangPajakList",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
       {
         path: "/hutang-pajak/:id",
         name: "Detail Hutang Pajak",
-        component: HutangPajakDetail,
+        componentName: "HutangPajakDetail",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
         hideInSidebar: true,
@@ -229,7 +174,7 @@ var routes = [
         path: "/rekonsiliasi",
         name: "Rekonsiliasi",
         icon: NavIcon({ name: "balance" }),
-        component: RekonsiliasiDashboard,
+        componentName: "RekonsiliasiDashboard",
         layout: "/admin",
         privilege: ["Dasbor Eksekutif", "Lihat"],
       },
@@ -237,7 +182,7 @@ var routes = [
         path: "/bukti-potong",
         name: "Bukti Potong PPh",
         icon: NavIcon({ name: "doc" }),
-        component: BuktiPotong,
+        componentName: "BuktiPotong",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
@@ -245,7 +190,7 @@ var routes = [
         path: "/ledger-journal",
         name: "Ledger Journal",
         icon: NavIcon({ name: "log" }),
-        component: LedgerJournal,
+        componentName: "LedgerJournal",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
@@ -253,7 +198,7 @@ var routes = [
         path: "/slip-honor",
         name: "Slip Honorarium",
         icon: NavIcon({ name: "bill" }),
-        component: SlipHonorarium,
+        componentName: "SlipHonorarium",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
@@ -261,7 +206,7 @@ var routes = [
         path: "/konfigurasi-pajak",
         name: "Konfigurasi Pajak",
         icon: NavIcon({ name: "tax" }),
-        component: KonfigurasiPajak,
+        componentName: "KonfigurasiPajak",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
@@ -269,7 +214,7 @@ var routes = [
         path: "/rekomendasi",
         name: "Rekomendasi",
         icon: NavIcon({ name: "doc" }),
-        component: RekomendasiWorkspace,
+        componentName: "RekomendasiWorkspace",
         layout: "/admin",
         privilege: ["Rekomendasi", "Lihat"],
       },
@@ -283,7 +228,7 @@ var routes = [
         path: "/accounting/dashboard",
         name: "Dasbor Akuntansi",
         icon: NavIcon({ name: "balance" }),
-        component: AccountingDashboard,
+        componentName: "AccountingDashboard",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
@@ -291,7 +236,7 @@ var routes = [
         path: "/accounting/bank-masuk",
         name: "Bank Masuk (BKM)",
         icon: NavIcon({ name: "money" }),
-        component: BankReceipt,
+        componentName: "BankReceipt",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Tambah"],
       },
@@ -299,7 +244,7 @@ var routes = [
         path: "/accounting/bank-keluar",
         name: "Bank Keluar (BKK)",
         icon: NavIcon({ name: "money" }),
-        component: BankDisbursement,
+        componentName: "BankDisbursement",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Tambah"],
       },
@@ -307,7 +252,7 @@ var routes = [
         path: "/accounting/kas-kecil-masuk",
         name: "Kas Kecil Masuk (KKM)",
         icon: NavIcon({ name: "coins" }),
-        component: CashReceipt,
+        componentName: "CashReceipt",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Tambah"],
       },
@@ -315,7 +260,7 @@ var routes = [
         path: "/accounting/kas-kecil-keluar",
         name: "Kas Kecil Keluar (KKK)",
         icon: NavIcon({ name: "coins" }),
-        component: CashDisbursement,
+        componentName: "CashDisbursement",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Tambah"],
       },
@@ -323,7 +268,7 @@ var routes = [
         path: "/accounting/coa",
         name: "Chart of Accounts",
         icon: NavIcon({ name: "doc" }),
-        component: AccountingCoa,
+        componentName: "AccountingCoa",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
@@ -331,7 +276,7 @@ var routes = [
         path: "/accounting/kategori-jurnal",
         name: "Kategori Jurnal",
         icon: NavIcon({ name: "tag" }),
-        component: AccountingKategori,
+        componentName: "AccountingKategori",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
@@ -339,7 +284,7 @@ var routes = [
         path: "/accounting/jurnal",
         name: "Jurnal Umum",
         icon: NavIcon({ name: "log" }),
-        component: AccountingJurnal,
+        componentName: "AccountingJurnal",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
@@ -347,7 +292,7 @@ var routes = [
         path: "/accounting/buku-besar",
         name: "Buku Besar",
         icon: NavIcon({ name: "book" }),
-        component: AccountingBukuBesar,
+        componentName: "AccountingBukuBesar",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
@@ -355,7 +300,7 @@ var routes = [
         path: "/accounting/settlement",
         name: "Jurnal Settlement",
         icon: NavIcon({ name: "balance" }),
-        component: SettlementList,
+        componentName: "SettlementList",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
@@ -369,7 +314,7 @@ var routes = [
         path: "/master-lembaga",
         name: "Master Lembaga",
         icon: NavIcon({ name: "building" }),
-        component: MasterLembaga,
+        componentName: "MasterLembaga",
         layout: "/admin",
         privilege: ["Master Data", "Lihat"],
       },
@@ -377,7 +322,7 @@ var routes = [
         path: "/master-jenis-faskes",
         name: "Master Jenis Faskes",
         icon: NavIcon({ name: "tag" }),
-        component: MasterJenisFaskes,
+        componentName: "MasterJenisFaskes",
         layout: "/admin",
         privilege: ["Master Data", "Lihat"],
       },
@@ -385,7 +330,7 @@ var routes = [
         path: "/master-faskes",
         name: "Master Faskes",
         icon: NavIcon({ name: "badge" }),
-        component: MasterFaskes,
+        componentName: "MasterFaskes",
         layout: "/admin",
         privilege: ["Master Data", "Lihat"],
       },
@@ -393,7 +338,7 @@ var routes = [
         path: "/master-tenaga-ahli",
         name: "Master Tenaga Ahli",
         icon: NavIcon({ name: "users" }),
-        component: MasterTenagaAhli,
+        componentName: "MasterTenagaAhli",
         layout: "/admin",
         privilege: ["Master Data", "Lihat"],
       },
@@ -401,7 +346,7 @@ var routes = [
         path: "/master-biaya",
         name: "Master Biaya",
         icon: NavIcon({ name: "coins" }),
-        component: MasterBiaya,
+        componentName: "MasterBiaya",
         layout: "/admin",
         privilege: ["Master Data", "Lihat"],
       },
@@ -409,7 +354,7 @@ var routes = [
         path: "/master-biaya-ta",
         name: "Master Biaya Honor TA",
         icon: NavIcon({ name: "tax" }),
-        component: MasterBiayaTA,
+        componentName: "MasterBiayaTA",
         layout: "/admin",
         privilege: ["Master Data", "Lihat"],
       },
@@ -417,7 +362,7 @@ var routes = [
         path: "/user-management",
         name: "Manajemen Akun",
         icon: NavIcon({ name: "user" }),
-        component: UserManagement,
+        componentName: "UserManagement",
         layout: "/admin",
         privilege: ["Master Data", "Lihat"],
       },
@@ -425,7 +370,7 @@ var routes = [
         path: "/pks-template-settings",
         name: "Template PKS",
         icon: NavIcon({ name: "diploma" }),
-        component: PksTemplateSettings,
+        componentName: "PksTemplateSettings",
         layout: "/admin",
         privilege: ["Master Data", "Lihat"],
       },
@@ -439,7 +384,7 @@ var routes = [
         path: "/pengaturan-pembayaran",
         name: "Payment Gateway",
         icon: NavIcon({ name: "card" }),
-        component: PengaturanPembayaran,
+        componentName: "PengaturanPembayaran",
         layout: "/admin",
         privilege: ["Kontrak & Invoicing", "Ubah"],
       },
@@ -447,7 +392,7 @@ var routes = [
         path: "/pengaturan-mail",
         name: "Mail Server",
         icon: NavIcon({ name: "mail" }),
-        component: PengaturanMail,
+        componentName: "PengaturanMail",
         layout: "/admin",
         privilege: ["Pengaturan Hak Akses", "Ubah"],
       },
@@ -455,7 +400,7 @@ var routes = [
         path: "/pengaturan-whatsapp",
         name: "WhatsApp",
         icon: NavIcon({ name: "whatsapp" }),
-        component: PengaturanWhatsApp,
+        componentName: "PengaturanWhatsApp",
         layout: "/admin",
         privilege: ["Pengaturan Hak Akses", "Ubah"],
       },
@@ -464,7 +409,7 @@ var routes = [
         path: "/profile",
         name: "Profil Saya",
         title: "Profil Saya",
-        component: ProfilePage,
+        componentName: "ProfilePage",
         layout: "/admin",
         hidden: true,
       },
@@ -473,7 +418,7 @@ var routes = [
         path: "/rekomendasi-settings",
         name: "Rekomendator",
         icon: NavIcon({ name: "doc" }),
-        component: RekomendasiSettings,
+        componentName: "RekomendasiSettings",
         layout: "/admin",
         privilege: ["Rekomendasi", "Ubah"],
       },
@@ -481,7 +426,7 @@ var routes = [
         path: "/roles",
         name: "Role & Hak Akses",
         icon: NavIcon({ name: "lock" }),
-        component: Roles,
+        componentName: "Roles",
         layout: "/admin",
         privilege: ["Pengaturan Hak Akses", "Lihat"],
       },
@@ -489,7 +434,7 @@ var routes = [
         path: "/privileges",
         name: "Matriks Privilege",
         icon: NavIcon({ name: "settings" }),
-        component: Privileges,
+        componentName: "Privileges",
         layout: "/admin",
         privilege: ["Pengaturan Hak Akses", "Lihat"],
       },
@@ -497,7 +442,7 @@ var routes = [
         path: "/audit-trail",
         name: "Audit Trail",
         icon: NavIcon({ name: "log" }),
-        component: AuditTrail,
+        componentName: "AuditTrail",
         layout: "/admin",
         privilege: ["Pengaturan Hak Akses", "Lihat"],
       },
@@ -508,7 +453,7 @@ var routes = [
   {
     path: "/pendaftaran/:id",
     name: "Detail Pendaftaran",
-    component: SiklusDetail,
+    componentName: "SiklusDetail",
     layout: "/admin",
     privilege: ["Pendaftaran & Validasi Dokumen", "Lihat"],
     hideInSidebar: true,
@@ -516,7 +461,7 @@ var routes = [
   {
     path: "/piutang/:id",
     name: "Detail Piutang",
-    component: PiutangDetail,
+    componentName: "PiutangDetail",
     layout: "/admin",
     privilege: ["Dasbor Eksekutif", "Lihat"],
     hideInSidebar: true,
@@ -524,7 +469,7 @@ var routes = [
   {
     path: "/ap-honor/bayar",
     name: "Buat Pembayaran Honor",
-    component: ApHonorBayar,
+    componentName: "ApHonorBayar",
     layout: "/admin",
     privilege: ["Ledger/Keuangan", "Tambah"],
     hideInSidebar: true,
@@ -532,7 +477,7 @@ var routes = [
   {
     path: "/ap-honor/payment/:id",
     name: "Detail Pembayaran Honor",
-    component: ApHonorPaymentDetail,
+    componentName: "ApHonorPaymentDetail",
     layout: "/admin",
     privilege: ["Ledger/Keuangan", "Lihat"],
     hideInSidebar: true,

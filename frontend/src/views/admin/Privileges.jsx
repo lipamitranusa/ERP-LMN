@@ -1,32 +1,30 @@
 import React, { useState, useEffect } from "react";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { PageHeader } from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Check } from "lucide-react";
 
 const ACTION_COLORS = {
-  Lihat: { bg: "#DBEAFE", text: "#1E40AF" },
-  Tambah: { bg: "#D1FAE5", text: "#065F46" },
-  Ubah: { bg: "#FEF3C7", text: "#92400E" },
-  Hapus: { bg: "#FEE2E2", text: "#991B1B" },
-  Setujui: { bg: "#EDE9F6", text: "#5E35B1" },
-  Ekspor: { bg: "#E0F2FE", text: "#0369A1" },
-  Final: { bg: "#FFEDD5", text: "#9A3412" },
+  Lihat:    { light: "bg-blue-50 text-blue-700", dark: "dark:bg-blue-900/40 dark:text-blue-300" },
+  Tambah:   { light: "bg-green-50 text-green-700", dark: "dark:bg-green-900/40 dark:text-green-300" },
+  Ubah:     { light: "bg-amber-50 text-amber-700", dark: "dark:bg-amber-900/40 dark:text-amber-300" },
+  Hapus:    { light: "bg-red-50 text-red-700", dark: "dark:bg-red-900/40 dark:text-red-300" },
+  Setujui:  { light: "bg-purple-50 text-purple-700", dark: "dark:bg-purple-900/40 dark:text-purple-300" },
+  Ekspor:   { light: "bg-cyan-50 text-cyan-700", dark: "dark:bg-cyan-900/40 dark:text-cyan-300" },
+  Final:    { light: "bg-orange-50 text-orange-700", dark: "dark:bg-orange-900/40 dark:text-orange-300" },
 };
 
 function ActionBadge({ action }) {
-  const c = ACTION_COLORS[action] || { bg: "#F1F5F9", text: "#475569" };
+  const c = ACTION_COLORS[action] || { light: "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 dark:text-slate-500", dark: "dark:bg-slate-800 dark:text-slate-300 dark:text-slate-500" };
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center",
-      padding: "1px 6px", borderRadius: "9999px",
-      fontSize: "10px", fontWeight: "600",
-      background: c.bg, color: c.text,
-    }}>
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${c.light} ${c.dark}`}>
       {action}
     </span>
   );
 }
 
 export default function Privileges() {
-  // Local edits: { [roleId]: { [actionId]: true|false } }
   const [edits, setEdits] = useState({});
   const [dirtyRoles, setDirtyRoles] = useState(new Set());
   const [saving, setSaving] = useState(false);
@@ -34,15 +32,12 @@ export default function Privileges() {
   const { data, isLoading, error, refetch } = useApi("privilege-matrix", "/admin/privilege-matrix");
   const mutate = useMutateKeys(["privilege-matrix"]);
 
-  // Reset edits when data refetches after mutation
   useEffect(() => {
     if (data) {
       setEdits({});
       setDirtyRoles(new Set());
     }
   }, [data]);
-
-  const errMsg = error ? error.message : "";
 
   function hasPrivilege(roleId, actionId) {
     if (edits[roleId] && Object.prototype.hasOwnProperty.call(edits[roleId], actionId)) {
@@ -117,103 +112,105 @@ export default function Privileges() {
   }
 
   if (isLoading) {
-    return <div style={{ textAlign: "center", color: "#94A3B8", padding: "64px 16px" }}>Memuat matriks privilege...</div>;
-  }
-  if (errMsg) {
     return (
-      <div style={{ textAlign: "center", padding: "64px 16px" }}>
-        <div style={{ color: "#DC2626", fontSize: "13px", marginBottom: "16px" }}>{errMsg}</div>
-        <button className="btn btn-secondary" onClick={() => refetch()}>Coba lagi</button>
+      <div className="space-y-5">
+        <PageHeader title="Matriks Privilege" subtitle="Memuat..." />
+        <div className="text-center py-16 text-slate-400 dark:text-slate-500">Memuat matriks privilege...</div>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="space-y-5">
+        <PageHeader title="Matriks Privilege" />
+        <div className="text-center py-16">
+          <p className="text-red-600 text-sm mb-4">{error.message}</p>
+          <Button variant="outline" onClick={() => refetch()}>Coba lagi</Button>
+        </div>
       </div>
     );
   }
   if (!data) return null;
 
-  const { roles = [], modules = [], privilege_map = {} } = data;
+  const { roles = [], modules = [] } = data;
+  const totalActions = modules.reduce((s, m) => s + (m.actions?.length || 0), 0);
 
   return (
-    <div>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Matriks Privilege</h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
-            {roles.length} role × {(modules || []).reduce((s, m) => s + (m.actions?.length || 0), 0)} action — ubah dengan klik sel pada matriks.
-          </p>
-        </div>
-        {dirtyRoles.size > 0 && (
-          <button className="btn btn-primary" onClick={saveAll} disabled={saving}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-            </svg>
-            Simpan {dirtyRoles.size} perubahan
-          </button>
-        )}
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Matriks Privilege"
+        subtitle={`${roles.length} role × ${totalActions} action — ubah dengan klik sel pada matriks.`}
+        actions={
+          dirtyRoles.size > 0 ? (
+            <Button onClick={saveAll} disabled={saving}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+              </svg>
+              Simpan {dirtyRoles.size} perubahan
+            </Button>
+          ) : null
+        }
+      />
 
-      {/* Matrix */}
-      <div className="card" style={{ padding: 0, overflowX: "auto" }}>
-        <table className="data-table" style={{ minWidth: "700px", whiteSpace: "nowrap" }}>
+      <Card className="overflow-auto">
+        <table className="w-full text-sm" style={{ minWidth: "700px", whiteSpace: "nowrap" }}>
           <thead>
             <tr>
-              <th style={{ minWidth: "220px", position: "sticky", left: 0, background: "#F8FAFC", zIndex: 2, borderRight: "1px solid #E2E8F0" }}>
+              <th
+                className="sticky left-0 z-10 bg-muted border-r border-border px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                style={{ minWidth: "220px" }}
+              >
                 Modul / Action
               </th>
               {roles.map(r => (
-                <th key={r.id} style={{ minWidth: "110px", textAlign: "center", background: "#F8FAFC" }}>
-                  <div style={{ fontWeight: "600", color: "#1E293B", fontSize: "12px" }}>{r.nama_role}</div>
-                  {r.is_default ? (
-                    <div style={{ fontSize: "10px", color: "#94A3B8", fontWeight: "400" }}>default</div>
-                  ) : (
-                    <div style={{ fontSize: "10px", color: "#7E57C2", fontWeight: "400" }}>kustom</div>
-                  )}
+                <th
+                  key={r.id}
+                  className="px-3 py-3 text-center bg-muted"
+                  style={{ minWidth: "110px" }}
+                >
+                  <div className="font-semibold text-foreground text-xs">{r.nama_role}</div>
+                  <div className={`text-[10px] font-normal ${r.is_default ? "text-muted-foreground" : "text-purple-700 dark:text-purple-300"}`}>
+                    {r.is_default ? "default" : "kustom"}
+                  </div>
                   {dirtyRoles.has(r.id) && (
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      style={{ fontSize: "10px", padding: "2px 6px", color: "#4CAF50", marginTop: "2px" }}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-1 h-5 px-2 text-[10px] text-green-600 hover:text-green-700"
                       onClick={() => saveRole(r.id)}
                       disabled={saving}
                     >
                       Simpan
-                    </button>
+                    </Button>
                   )}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {(modules || []).map(mod => (
+            {modules.map(mod => (
               <React.Fragment key={mod.modul}>
-                {/* Module header row */}
-                <tr style={{ background: "#F1F5F9" }}>
-                  <td colSpan={roles.length + 1} style={{ padding: "6px 12px", fontSize: "12px", fontWeight: "700", color: "#475569" }}>
+                <tr className="bg-slate-100 dark:bg-slate-800 dark:bg-slate-800">
+                  <td colSpan={roles.length + 1} className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 dark:text-slate-500">
                     {mod.modul}
                   </td>
                 </tr>
-                {/* Action rows */}
                 {(mod.actions || []).map((act, j) => (
-                  <tr key={act.id} style={{ background: j % 2 === 0 ? "#FFFFFF" : "#FAFAFA" }}>
-                    <td style={{ paddingLeft: "24px", color: "#334155", fontSize: "12px", position: "sticky", left: 0, background: j % 2 === 0 ? "#FFFFFF" : "#FAFAFA", zIndex: 1 }}>
+                  <tr key={act.id} className={j % 2 === 0 ? "bg-white dark:bg-slate-900" : "bg-slate-50 dark:bg-slate-800/50 dark:bg-slate-800/50"}>
+                    <td className="sticky left-0 z-10 px-6 py-2 text-xs text-slate-700 dark:text-slate-300 dark:text-slate-500 bg-inherit">
                       <ActionBadge action={act.action} />
                     </td>
                     {roles.map(r => (
-                      <td key={r.id} style={{ textAlign: "center" }}>
+                      <td key={r.id} className="px-3 py-2 text-center">
                         <button
                           onClick={() => toggle(r.id, act.id)}
-                          style={{
-                            background: "none", border: "none", cursor: "pointer",
-                            padding: "4px", borderRadius: "4px",
-                            display: "inline-flex", alignItems: "center", justifyContent: "center",
-                            transition: "background 0.15s",
-                          }}
+                          className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-muted transition-colors"
                           title={`${r.nama_role} — ${mod.modul} / ${act.action}`}
                         >
                           {hasPrivilege(r.id, act.id) ? (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-                              <polyline points="20 6 9 17 4 12"/>
-                            </svg>
+                            <Check size={16} className="text-green-600 dark:text-green-400" strokeWidth={2.5} />
                           ) : (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-slate-300 dark:text-slate-500 dark:text-slate-600 dark:text-slate-300 dark:text-slate-500" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
                               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                             </svg>
                           )}
@@ -226,23 +223,21 @@ export default function Privileges() {
             ))}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* Legend */}
-      <div style={{ display: "flex", gap: "20px", marginTop: "16px", fontSize: "12px", color: "#94A3B8" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
+      <div className="flex items-center gap-6 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5">
+          <Check size={14} className="text-green-600 dark:text-green-400" strokeWidth={2.5} />
           <span>Dijinkan</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+        <div className="flex items-center gap-1.5">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-slate-300 dark:text-slate-500 dark:text-slate-600 dark:text-slate-300 dark:text-slate-500" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
           <span>Tidak diizinkan</span>
         </div>
-        <div style={{ color: "#94A3B8" }}>· Klik sel untuk toggle. Default role tidak bisa dihapus.</div>
+        <span>· Klik sel untuk toggle.</span>
       </div>
     </div>
   );

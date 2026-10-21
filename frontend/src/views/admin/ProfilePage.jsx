@@ -1,6 +1,12 @@
 import React, { useState } from "react";
 import { useHistory } from "react-router-dom";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 function FieldRow({ label, value }) {
   return (
@@ -22,66 +28,52 @@ function FieldRow({ label, value }) {
   );
 }
 
+const pwSchema = z.object({
+  current_password: z.string().min(1, "Password lama wajib diisi"),
+  new_password: z.string().min(8, "Password baru minimal 8 karakter"),
+  new_password_confirmation: z.string(),
+}).refine(data => data.new_password === data.new_password_confirmation, {
+  message: "Konfirmasi password baru tidak cocok",
+  path: ["new_password_confirmation"],
+});
+
 export default function ProfilePage() {
   const history = useHistory();
   const { data, isLoading } = useApi("profile", "/auth/me");
   const user = data?.user;
-
-  // Password form state
-  const [pwForm, setPwForm] = useState({
-    current_password: "",
-    new_password: "",
-    new_password_confirmation: "",
-  });
-  const [pwSaving, setPwSaving] = useState(false);
-  const [pwError, setPwError] = useState("");
   const [pwSuccess, setPwSuccess] = useState("");
-  const [pwErrors, setPwErrors] = useState({});
 
   const invalidate = useMutateKeys(["profile"]);
 
-  function setPw(key, value) {
-    setPwForm(f => ({ ...f, [key]: value }));
-    setPwErrors(e => ({ ...e, [key]: undefined }));
-    setPwError("");
-    setPwSuccess("");
-  }
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+    resolver: zodResolver(pwSchema),
+    defaultValues: {
+      current_password: "",
+      new_password: "",
+      new_password_confirmation: "",
+    },
+  });
 
-  async function handlePasswordSubmit(e) {
-    e.preventDefault();
-    setPwError("");
-    setPwSuccess("");
-    setPwErrors({});
-    setPwSaving(true);
-
-    try {
-      const data = await invalidate.mutateAsync({
-        path: "/auth/password",
-        method: "PUT",
-        body: JSON.stringify(pwForm),
-      });
-
-      setPwSuccess(data.message || "Password berhasil diubah.");
-      setPwForm({ current_password: "", new_password: "", new_password_confirmation: "" });
-
-      // Auto-logout after 2s so user re-logs with new password
-      setTimeout(() => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        window.location.href = "/auth/login";
-      }, 2000);
-    } catch (err) {
-      const body = err?.data || {};
-      if (body.errors) {
-        setPwErrors(body.errors);
-        setPwError(body.message || "Validasi gagal.");
-      } else {
-        setPwError(body.message || err.message || "Gagal mengubah password.");
-      }
-    } finally {
-      setPwSaving(false);
-    }
-  }
+  const onSubmit = (formData) => {
+    invalidate.mutate({
+      path: "/auth/password",
+      method: "PUT",
+      body: JSON.stringify({
+        current_password: formData.current_password,
+        new_password: formData.new_password,
+        new_password_confirmation: formData.new_password_confirmation,
+      }),
+      onSuccess: (d) => {
+        setPwSuccess(d.message || "Password berhasil diubah.");
+        reset();
+        setTimeout(() => {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          window.location.href = "/auth/login";
+        }, 2000);
+      },
+    });
+  };
 
   if (isLoading) {
     return (
@@ -101,7 +93,6 @@ export default function ProfilePage() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", alignItems: "start" }} className="profile-grid">
-        {/* Info Profil */}
         <div className="card" style={{ padding: 0 }}>
           <div style={{ padding: "16px 20px", borderBottom: "1px solid #F1F5F9" }}>
             <h3 style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
@@ -118,7 +109,6 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Ubah Password */}
         <div className="card" style={{ padding: 0 }}>
           <div style={{ padding: "16px 20px", borderBottom: "1px solid #F1F5F9" }}>
             <h3 style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>
@@ -135,10 +125,10 @@ export default function ProfilePage() {
             </div>
           )}
 
-          <form onSubmit={handlePasswordSubmit} style={{ padding: "20px" }}>
-            {pwError && !Object.keys(pwErrors).length && (
+          <form onSubmit={handleSubmit(onSubmit)} style={{ padding: "20px" }}>
+            {invalidate.error?.data?.message && (
               <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: "6px", color: "#991B1B", fontSize: "13px" }}>
-                {pwError}
+                {invalidate.error.data.message}
               </div>
             )}
 
@@ -149,14 +139,12 @@ export default function ProfilePage() {
               <input
                 className="form-input"
                 type="password"
-                value={pwForm.current_password}
-                onChange={e => setPw("current_password", e.target.value)}
+                {...register("current_password")}
                 placeholder="Masukkan password lama"
-                required
                 autoComplete="current-password"
               />
-              {pwErrors.current_password && (
-                <div style={{ fontSize: "12px", color: "#DC2626", marginTop: "4px" }}>{pwErrors.current_password[0]}</div>
+              {errors.current_password && (
+                <div style={{ fontSize: "12px", color: "#DC2626", marginTop: "4px" }}>{errors.current_password.message}</div>
               )}
             </div>
 
@@ -167,15 +155,12 @@ export default function ProfilePage() {
               <input
                 className="form-input"
                 type="password"
-                value={pwForm.new_password}
-                onChange={e => setPw("new_password", e.target.value)}
+                {...register("new_password")}
                 placeholder="Minimal 8 karakter"
-                required
-                minLength={8}
                 autoComplete="new-password"
               />
-              {pwErrors.new_password && (
-                <div style={{ fontSize: "12px", color: "#DC2626", marginTop: "4px" }}>{pwErrors.new_password[0]}</div>
+              {errors.new_password && (
+                <div style={{ fontSize: "12px", color: "#DC2626", marginTop: "4px" }}>{errors.new_password.message}</div>
               )}
             </div>
 
@@ -186,25 +171,22 @@ export default function ProfilePage() {
               <input
                 className="form-input"
                 type="password"
-                value={pwForm.new_password_confirmation}
-                onChange={e => setPw("new_password_confirmation", e.target.value)}
+                {...register("new_password_confirmation")}
                 placeholder="Ulangi password baru"
-                required
                 autoComplete="new-password"
               />
-              {pwErrors.new_password_confirmation && (
-                <div style={{ fontSize: "12px", color: "#DC2626", marginTop: "4px" }}>{pwErrors.new_password_confirmation[0]}</div>
+              {errors.new_password_confirmation && (
+                <div style={{ fontSize: "12px", color: "#DC2626", marginTop: "4px" }}>{errors.new_password_confirmation.message}</div>
               )}
             </div>
 
-            <button
+            <Button
               type="submit"
-              className="btn btn-primary"
-              disabled={pwSaving || !!pwSuccess}
+              disabled={invalidate.isLoading || !!pwSuccess}
               style={{ width: "100%" }}
             >
-              {pwSaving ? "Menyimpan..." : pwSuccess ? "Berhasil!" : "Simpan Password Baru"}
-            </button>
+              {invalidate.isLoading ? "Menyimpan..." : pwSuccess ? "Berhasil!" : "Simpan Password Baru"}
+            </Button>
           </form>
         </div>
       </div>

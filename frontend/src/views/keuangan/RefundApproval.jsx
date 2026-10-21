@@ -1,6 +1,13 @@
 import React, { useState } from "react";
-import { formatDate } from "../../utils/dateFormat";
+import { formatDate } from "@/utils/dateFormat";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 function formatRp(n) {
   return `Rp ${Number(n).toLocaleString("id-ID")}`;
@@ -13,26 +20,35 @@ const STATUS_MAP = {
   rejected: { label: "Ditolak", color: "#FEE2E2", text: "#991B1B" },
 };
 
+const schema = z.object({
+  catatan: z.string().default(""),
+});
+
 export default function RefundApproval() {
   const [selected, setSelected] = useState(null);
-  const [catatan, setCatatan] = useState("");
 
   const { data, isLoading } = useApi("refund-pending", "/refund/pending");
-
   const refunds = data?.data || [];
+
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: { catatan: "" },
+  });
 
   const actionMutation = useMutateKeys(["refund-pending"], {
     onSuccess: () => {
       setSelected(null);
-      setCatatan("");
-    },
-    onError: (err) => {
-      alert(err.message || "Gagal.");
+      reset({ catatan: "" });
     },
   });
 
-  function handleAction(refundId, action) {
-    if (action === "reject" && !catatan.trim()) {
+  function openDetail(r) {
+    setSelected(r);
+    reset({ catatan: "" });
+  }
+
+  const onSubmit = (data, refundId, action) => {
+    if (action === "reject" && !data.catatan.trim()) {
       alert("Alasan penolakan wajib diisi.");
       return;
     }
@@ -45,70 +61,66 @@ export default function RefundApproval() {
     let path, body;
     if (action === "approve") {
       path = `/refund/${refundId}/approve`;
-      body = { catatan };
+      body = { catatan: data.catatan };
     } else if (action === "reject") {
       path = `/refund/${refundId}/reject`;
-      body = { alasan: catatan };
+      body = { alasan: data.catatan };
     } else if (action === "execute") {
       path = `/refund/${refundId}/execute`;
       body = undefined;
     }
 
     actionMutation.mutate({ path, method: "POST", body });
-  }
-
-  if (isLoading) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>;
-  }
+  };
 
   return (
     <div>
-      <div style={{ marginBottom: "24px" }}>
-        <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Approval Refund</h1>
-        <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>Approval berjenjang untuk permintaan refund pembayaran Faskes (FR-2.8).</p>
+      <div className="mb-6">
+        <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Approval Refund</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5">Approval berjenjang untuk permintaan refund pembayaran Faskes (FR-2.8).</p>
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
-        <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Tanggal</th>
-                <th>Faskes</th>
-                <th>Invoice</th>
-                <th style={{ textAlign: "right" }}>Nominal</th>
-                <th>Alasan</th>
-                <th>Status</th>
-                <th style={{ width: "140px" }}>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {refunds.length === 0 ? (
-                <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>Tidak ada refund yang perlu diproses.</td></tr>
-              ) : refunds.map(r => {
-                const s = STATUS_MAP[r.status] || STATUS_MAP.requested;
-                return (
-                  <tr key={r.id}>
-                    <td style={{ fontSize: "12px", color: "#475569" }}>{formatDate(r.created_at)}</td>
-                    <td style={{ fontSize: "13px", color: "#334155", fontWeight: "500" }}>{r.invoice?.siklus?.faskes?.nama || "—"}</td>
-                    <td style={{ fontSize: "12px", color: "#64748B" }}>{r.invoice?.nomor_invoice || "—"}</td>
-                    <td style={{ textAlign: "right", fontWeight: "500" }}>{formatRp(r.nominal)}</td>
-                    <td style={{ fontSize: "12px", color: "#475569", maxWidth: "240px" }}>{r.alasan}</td>
-                    <td>
-                      <span style={{ padding: "2px 8px", borderRadius: "9999px", fontSize: "11px", fontWeight: "600", background: s.color, color: s.text }}>
-                        {s.label}
-                      </span>
-                    </td>
-                    <td>
-                      <button className="btn btn-secondary btn-sm" onClick={() => setSelected(r)}>Detail</button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <Card className="overflow-hidden">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Tanggal</th>
+              <th>Faskes</th>
+              <th>Invoice</th>
+              <th style={{ textAlign: "right" }}>Nominal</th>
+              <th>Alasan</th>
+              <th>Status</th>
+              <th style={{ width: "140px" }}>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>Memuat...</td></tr>
+            ) : refunds.length === 0 ? (
+              <tr><td colSpan="7" style={{ textAlign: "center", color: "#94A3B8", padding: "48px 16px" }}>Tidak ada refund yang perlu diproses.</td></tr>
+            ) : refunds.map(r => {
+              const s = STATUS_MAP[r.status] || STATUS_MAP.requested;
+              return (
+                <tr key={r.id}>
+                  <td style={{ fontSize: "12px", color: "#475569" }}>{formatDate(r.created_at)}</td>
+                  <td style={{ fontSize: "13px", color: "#334155", fontWeight: "500" }}>{r.invoice?.siklus?.faskes?.nama || "—"}</td>
+                  <td style={{ fontSize: "12px", color: "#64748B" }}>{r.invoice?.nomor_invoice || "—"}</td>
+                  <td style={{ textAlign: "right", fontWeight: "500" }}>{formatRp(r.nominal)}</td>
+                  <td style={{ fontSize: "12px", color: "#475569", maxWidth: "240px" }}>{r.alasan}</td>
+                  <td>
+                    <span style={{ padding: "2px 8px", borderRadius: "9999px", fontSize: "11px", fontWeight: "600", background: s.color, color: s.text }}>
+                      {s.label}
+                    </span>
+                  </td>
+                  <td>
+                    <Button variant="secondary" size="sm" onClick={() => openDetail(r)}>Detail</Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
 
       {selected && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }} onClick={() => setSelected(null)}>
@@ -120,29 +132,50 @@ export default function RefundApproval() {
               <div>Alasan: {selected.alasan}</div>
             </div>
 
-            <div style={{ marginTop: "16px" }}>
-              <label className="form-label">Catatan approval</label>
-              <textarea
-                className="form-input"
-                rows="3"
-                value={catatan}
-                onChange={e => setCatatan(e.target.value)}
-                placeholder="Catatan untuk approval / alasan penolakan..."
-              />
-            </div>
+            <form onSubmit={handleSubmit((data) => onSubmit(data, selected.id, selected.status === "requested" ? "approve" : "execute"))}>
+              <div className="mt-4 space-y-1.5">
+                <Label htmlFor="refund-catatan">Catatan approval</Label>
+                <Textarea
+                  id="refund-catatan"
+                  rows={3}
+                  {...register("catatan")}
+                  placeholder="Catatan untuk approval / alasan penolakan..."
+                />
+              </div>
 
-            <div style={{ display: "flex", gap: "8px", marginTop: "20px" }}>
-              <button className="btn btn-secondary" onClick={() => setSelected(null)} style={{ flex: 1 }}>Batal</button>
-              {selected.status === "requested" && (
-                <>
-                  <button className="btn btn-danger" onClick={() => handleAction(selected.id, "reject")} disabled={actionMutation.isPending}>Tolak</button>
-                  <button className="btn btn-primary" onClick={() => handleAction(selected.id, "approve")} disabled={actionMutation.isPending}>Setujui</button>
-                </>
-              )}
-              {selected.status === "approved" && (
-                <button className="btn btn-primary" onClick={() => handleAction(selected.id, "execute")} disabled={actionMutation.isPending}>Eksekusi Sekarang</button>
-              )}
-            </div>
+              <div style={{ display: "flex", gap: "8px", marginTop: "20px" }}>
+                <Button type="button" variant="secondary" onClick={() => setSelected(null)} style={{ flex: 1 }}>
+                  Batal
+                </Button>
+                {selected.status === "requested" && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={handleSubmit((data) => onSubmit(data, selected.id, "reject"))}
+                      disabled={actionMutation.isPending}
+                    >
+                      Tolak
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={actionMutation.isPending}
+                    >
+                      Setujui
+                    </Button>
+                  </>
+                )}
+                {selected.status === "approved" && (
+                  <Button
+                    type="button"
+                    onClick={handleSubmit((data) => onSubmit(data, selected.id, "execute"))}
+                    disabled={actionMutation.isPending}
+                  >
+                    Eksekusi Sekarang
+                  </Button>
+                )}
+              </div>
+            </form>
           </div>
         </div>
       )}

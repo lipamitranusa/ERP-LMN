@@ -1,43 +1,53 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import ImportModal from "@/components/ImportModal";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { PageHeader } from "@/components/PageHeader";
+import { StatusBadge } from "@/components/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Search, Plus, Upload, Pencil, Trash2, KeyRound, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
-const EMPTY = { nama: "", username: "", email: "", role_id: "", faskes_id: "", tenaga_ahli_id: "", lembaga_ids: [], password: "", status_akun: "Aktif" };
+const EMPTY_FORM = {
+  nama: "", username: "", email: "", role_id: "", faskes_id: "", tenaga_ahli_id: "", lembaga_ids: [], password: "", status_akun: "Aktif",
+};
+const EXCLUDED_ROLES = ["Admin"];
 
-function Modal({ title, onClose, children }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }} onClick={onClose}>
-      <div style={{ background: "#fff", borderRadius: "12px", width: "100%", maxWidth: "600px", boxShadow: "0 20px 60px rgba(0,0,0,0.15)", overflow: "hidden", maxHeight: "90vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
-        <div style={{ padding: "20px 24px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
-          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600", color: "#1E293B" }}>{title}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", color: "#94A3B8" }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function StatusBadge({ status }) {
+function StatusBadgeAkun({ status }) {
   const map = {
     Aktif: { bg: "#DCFCE7", color: "#166534" },
     Nonaktif: { bg: "#FEE2E2", color: "#991B1B" },
     Terkunci: { bg: "#FEF3C7", color: "#92400E" },
   };
-  const s = map[status] || { bg: "#F1F5F9", color: "#64748B" };
-  return <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: "600", background: s.bg, color: s.color }}>{status}</span>;
+  const c = map[status] || { bg: "#F1F5F9", color: "#64748B" };
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: c.bg, color: c.color }}>{status}</span>
+  );
 }
 
 export default function UserManagement() {
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
-  const [form, setForm] = useState(EMPTY);
-  const [error, setError] = useState("");
-  const [generatedPw, setGeneratedPw] = useState("");
   const [filterRole, setFilterRole] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [search, setSearch] = useState("");
@@ -58,49 +68,73 @@ export default function UserManagement() {
   );
   const { data: rolesData } = useApi("roles", "/admin/roles");
   const { data: faskesData } = useApi("faskes-dropdown", "/master/faskes/dropdown");
-  // Fetch daftar lembaga untuk dropdown multi-select di form
   const { data: lembagaData } = useApi("lembaga-list-all", "/master/lembaga?per_page=100");
-  const lembagaList = lembagaData?.data ?? [];
-  // Fetch daftar tenaga ahli untuk dropdown di form (untuk role Surveior/Verifikator)
-  const { data: taListData } = useApi(
-    "tenaga-ahli-dropdown",
-    "/master/tenaga-ahli?per_page=200"
-  );
-  const tenagaAhliList = taListData?.data ?? [];
+  const { data: taListData } = useApi("tenaga-ahli-dropdown", "/master/tenaga-ahli?per_page=200");
 
   const items = akunData?.data ?? [];
-  const roles = rolesData?.data ?? [];
+  const roles = (rolesData?.data ?? []).filter(r => !EXCLUDED_ROLES.includes(r.nama_role));
   const faskesList = faskesData?.data ?? [];
-  const pagination = {
-    current_page: akunData?.current_page ?? 1,
-    per_page: akunData?.per_page ?? 15,
-    total: akunData?.total ?? 0,
-    last_page: akunData?.last_page ?? 1,
-  };
+  const lembagaList = lembagaData?.data ?? [];
+  const tenagaAhliList = taListData?.data ?? [];
+  const pagination = { current_page: akunData?.current_page ?? 1, per_page: akunData?.per_page ?? 15, total: akunData?.total ?? 0, last_page: akunData?.last_page ?? 1 };
+
+  const isEditMode = !!editTarget;
+
+  const schema = z.object({
+    nama: z.string().min(1, "Nama lengkap wajib diisi"),
+    username: z.string().default(""),
+    email: z.string().min(1, "Email wajib diisi").email("Format email tidak valid"),
+    role_id: z.string().min(1, "Role wajib dipilih"),
+    faskes_id: z.string().default(""),
+    tenaga_ahli_id: z.string().default(""),
+    lembaga_ids: z.array(z.string()).min(1, "Minimal pilih satu lembaga"),
+    password: z.string(),
+    status_akun: z.string().default("Aktif"),
+  }).refine(
+    data => !isEditMode ? data.password.length >= 8 : true,
+    { message: "Password minimal 8 karakter", path: ["password"] }
+  );
+
+  const { register, handleSubmit, control, reset, watch, setValue, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: EMPTY_FORM,
+  });
+
+  const formRoleId = watch("role_id");
+  const formLembagaIds = watch("lembaga_ids") || [];
+  const selectedRole = roles.find(r => r.id === formRoleId);
+  const needsFaskes = selectedRole?.nama_role === "Faskes";
+  const needsTenagaAhli = selectedRole && ["Surveior", "Verifikator"].includes(selectedRole.nama_role);
+
+  // Sync schema edit mode after mount
+  useEffect(() => {
+    // schema reads isEditMode from closure — just re-set default
+  }, [isEditMode]);
+
+  function goTo(page) { setCurrentPage(page); }
 
   const mutateAkun = useMutateKeys(["user-management"], {
-    onSuccess: (data) => {
-      if (data.generated_password) setGeneratedPw(data.generated_password);
-      if (!data.generated_password) setShowModal(false);
+    onSuccess: data => {
+      if (data.generated_password) {
+        alert(`Akun berhasil dibuat!\nPassword sementara: ${data.generated_password}\nSegera informasikan ke pengguna dan minta diganti.`);
+      }
+      setShowModal(false);
+      reset(EMPTY_FORM);
     },
-    onError: (err) => setError(err.message),
+    onError: err => alert(err.message),
   });
-  const mutateResetPw = useMutateKeys(["user-management"], {
-    onError: (err) => alert("Gagal reset password: " + err.message),
-  });
+  const mutateResetPw = useMutateKeys(["user-management"], { onError: err => alert("Gagal reset password: " + err.message) });
   const mutateDelete = useMutateKeys(["user-management"]);
 
   function openAdd() {
     setEditTarget(null);
-    setForm(EMPTY);
-    setError("");
-    setGeneratedPw("");
+    reset(EMPTY_FORM);
     setShowModal(true);
   }
 
   function openEdit(item) {
     setEditTarget(item);
-    setForm({
+    reset({
       nama: item.nama || "",
       username: item.username || "",
       email: item.email || "",
@@ -111,461 +145,295 @@ export default function UserManagement() {
       password: "",
       status_akun: item.status_akun || "Aktif",
     });
-    setError("");
-    setGeneratedPw("");
     setShowModal(true);
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    const payload = { ...form };
+  const onSubmit = (data) => {
+    const payload = { ...data };
     if (!payload.role_id) payload.role_id = null;
     if (!payload.faskes_id) payload.faskes_id = null;
     if (!payload.tenaga_ahli_id) payload.tenaga_ahli_id = null;
-    if (!payload.lembaga_ids || payload.lembaga_ids.length === 0) {
-      setError("Pilih minimal satu lembaga.");
-      return;
-    }
+    if (!payload.lembaga_ids || payload.lembaga_ids.length === 0) return;
+    if (isEditMode && !payload.password) delete payload.password;
     mutateAkun.mutate({
       path: editTarget ? `/master/akun/${editTarget.id}` : "/master/akun",
       method: editTarget ? "PUT" : "POST",
       body: payload,
     });
-  }
+  };
 
   function handleResetPw(item) {
-    if (!confirm(`Reset password untuk "${item.nama}"? Password baru akan di-generate otomatis.`)) return;
-    mutateResetPw.mutate({
-      path: `/master/akun/${item.id}/reset-password`,
-      method: "POST",
-    }).then(data => {
-      alert(`Password berhasil direset.\nPassword baru: ${data.new_password}\nSegera informasikan ke pengguna.`);
-    }).catch(() => {});
+    if (!confirm(`Reset password untuk "${item.nama}"?`)) return;
+    mutateResetPw.mutate({ path: `/master/akun/${item.id}/reset-password`, method: "POST" })
+      .then(data => alert(`Password berhasil direset.\nPassword baru: ${data.new_password}\nSegera informasikan ke pengguna.`))
+      .catch(() => {});
   }
 
-  function handleDelete(item) {
+  async function handleDelete(item) {
     if (!confirm(`Hapus akun "${item.nama}" (${item.email})?`)) return;
-    mutateDelete.mutate({
-      path: `/master/akun/${item.id}`,
-      method: "DELETE",
-    }).catch(err => alert(err.message));
+    mutateDelete.mutate({ path: `/master/akun/${item.id}`, method: "DELETE" }).catch(err => alert(err.message));
   }
 
-  function set(key, value) {
-    setForm(f => ({ ...f, [key]: value }));
+  function toggleLembaga(id) {
+    const next = formLembagaIds.includes(id)
+      ? formLembagaIds.filter(x => x !== id)
+      : [...formLembagaIds, id];
+    setValue("lembaga_ids", next, { shouldValidate: true });
   }
-
-  const selectedRole = roles.find(r => r.id === form.role_id);
-  const needsFaskes = selectedRole?.nama_role === "Faskes";
-  const needsTenagaAhli = selectedRole && ["Surveior", "Verifikator"].includes(selectedRole.nama_role);
-
-  function goTo(pageNum) {
-    if (pageNum < 1 || pageNum > pagination.last_page) return;
-    setCurrentPage(pageNum);
-  }
+  function selectAllLembaga() { setValue("lembaga_ids", lembagaList.map(l => l.id), { shouldValidate: true }); }
+  function clearLembaga() { setValue("lembaga_ids", [], { shouldValidate: true }); }
 
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Manajemen Akun Pengguna</h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
-            {pagination.total} akun terdaftar
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            Import CSV
-          </button>
-          <button className="btn btn-primary" onClick={openAdd}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Tambah Akun
-          </button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Manajemen Akun Pengguna"
+        subtitle={`${pagination.total} akun terdaftar`}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowImport(true)}><Upload size={16} /> Import CSV</Button>
+            <Button onClick={openAdd}><Plus size={16} /> Tambah Akun</Button>
+          </div>
+        }
+      />
 
-      {/* Filter & Search */}
-      <div style={{ marginBottom: "16px", display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-        {/* Search */}
-        <div style={{ position: "relative", minWidth: "260px", flex: "1", maxWidth: "360px" }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16"
-            style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}>
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input
-            type="text"
-            className="form-input"
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="relative min-w-[240px] flex-1 max-w-xs">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          <Input
             placeholder="Cari nama atau email..."
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && setSearch(searchInput)}
-            style={{ paddingLeft: "38px" }}
+            className="pl-9"
           />
         </div>
-
-        {/* Filter Role */}
-        <select className="form-input" style={{ maxWidth: "180px" }} value={filterRole} onChange={e => { setFilterRole(e.target.value); setCurrentPage(1); }}>
+        <select className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" style={{ maxWidth: 180 }} value={filterRole} onChange={e => { setFilterRole(e.target.value); setCurrentPage(1); }}>
           <option value="">Semua Role</option>
           {roles.map(r => <option key={r.id} value={r.id}>{r.nama_role}</option>)}
         </select>
-
-        {/* Filter Status */}
-        <select className="form-input" style={{ maxWidth: "160px" }} value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}>
+        <select className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" style={{ maxWidth: 160 }} value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}>
           <option value="">Semua Status</option>
           <option value="Aktif">Aktif</option>
           <option value="Nonaktif">Nonaktif</option>
           <option value="Terkunci">Terkunci</option>
         </select>
-
         {(search || filterRole || filterStatus) && (
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => { setSearch(""); setSearchInput(""); setFilterRole(""); setFilterStatus(""); setCurrentPage(1); }}
-            style={{ color: "#94A3B8", fontSize: "12px", padding: "6px 8px" }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-            Reset
-          </button>
+          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setSearchInput(""); setFilterRole(""); setFilterStatus(""); setCurrentPage(1); }}>
+            <X size={14} className="mr-1" /> Reset
+          </Button>
         )}
-
-        <span style={{ marginLeft: "auto", fontSize: "12px", color: "#94A3B8" }}>
-          {pagination.total > 0
-            ? `Menampilkan ${items.length} dari ${pagination.total} akun`
-            : `${pagination.total} akun`}
+        <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">
+          {pagination.total > 0 ? `Menampilkan ${items.length} dari ${pagination.total} akun` : `${pagination.total} akun`}
         </span>
       </div>
 
-      {/* Table */}
-      <div className="card" style={{ padding: 0 }}>
-        <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Nama</th>
-                <th>Username</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Lembaga</th>
-                <th>Faskes / TA</th>
-                <th>Status</th>
-                <th style={{ width: "160px" }}>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr><td colSpan="8" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Memuat...</td></tr>
-              ) : items.length === 0 ? (
-                <tr><td colSpan="8" style={{ textAlign: "center", color: "#94A3B8", padding: "48px" }}>Belum ada akun. Klik "Tambah Akun" untuk membuat.</td></tr>
-              ) : items.map(item => (
-                <tr key={item.id}>
-                  <td style={{ fontWeight: "500", color: "#1E293B" }}>{item.nama}</td>
-                  <td style={{ color: "#64748B", fontSize: "13px" }}>{item.username || "—"}</td>
-                  <td style={{ color: "#64748B", fontSize: "13px" }}>{item.email}</td>
-                  <td>
-                    <span style={{ fontSize: "12px", fontWeight: "500", color: "#4F46E5" }}>{item.role?.nama_role || "—"}</span>
-                  </td>
-                  <td style={{ fontSize: "12px" }}>
-                    {item.lembagas && item.lembagas.length > 0 ? (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "3px" }}>
-                        {item.lembagas.map(l => (
-                          <span key={l.id} style={{
-                            display: "inline-block", padding: "2px 8px",
-                            borderRadius: "10px", background: "#F0FDF4",
-                            color: "#166534", fontSize: "11px", fontWeight: "500",
-                            border: "1px solid #BBF7D0",
-                          }}>{l.nama}</span>
-                        ))}
-                      </div>
-                    ) : (item.lembaga_id ? (
-                      <span style={{ fontSize: "11px", color: "#64748B" }}>{item.lembaga_id}</span>
-                    ) : <span style={{ color: "#94A3B8" }}>—</span>)}
-                  </td>
-                  <td style={{ color: "#64748B", fontSize: "13px" }}>
-                    {item.faskes ? item.faskes.nama : (item.tenaga_ahli ? `TA: ${item.tenaga_ahli.nama}` : "—")}
-                  </td>
-                  <td><StatusBadge status={item.status_akun} /></td>
-                  <td>
-                    <div style={{ display: "flex", gap: "4px" }}>
-                      <button className="btn btn-ghost btn-sm" style={{ color: "#4CAF50", padding: "4px 8px", fontSize: "12px" }} onClick={() => openEdit(item)}>Ubah</button>
-                      <button className="btn btn-ghost btn-sm" style={{ color: "#F59E0B", padding: "4px 8px", fontSize: "12px" }} onClick={() => handleResetPw(item)}>Reset PW</button>
-                      <button className="btn btn-ghost btn-sm" style={{ color: "#EF4444", padding: "4px 8px", fontSize: "12px" }} onClick={() => handleDelete(item)}>Hapus</button>
+      <Card className="overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-50 dark:bg-slate-800/50">
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Nama</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Username</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Email</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Role</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Lembaga</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Faskes / TA</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Status</TableHead>
+              <TableHead className="w-[160px] text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Aksi</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow><TableCell colSpan={8} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">Memuat...</TableCell></TableRow>
+            ) : items.length === 0 ? (
+              <TableRow><TableCell colSpan={8} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">Belum ada akun.</TableCell></TableRow>
+            ) : items.map(item => (
+              <TableRow key={item.id} className="hover:bg-slate-50/50">
+                <TableCell className="font-medium text-slate-900 dark:text-slate-100 text-sm">{item.nama}</TableCell>
+                <TableCell className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">{item.username || "—"}</TableCell>
+                <TableCell className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">{item.email}</TableCell>
+                <TableCell><span className="text-sm font-medium text-indigo-600">{item.role?.nama_role || "—"}</span></TableCell>
+                <TableCell>
+                  {item.lembagas && item.lembagas.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {item.lembagas.map(l => (
+                        <Badge key={l.id} variant="secondary" className="text-[11px] h-5 bg-green-50 text-green-700 border-green-100">{l.nama}</Badge>
+                      ))}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  ) : item.lembaga_id ? (
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {item.lembaga?.nama || item.lembaga_id}
+                    </span>
+                  ) : <span className="text-slate-300 dark:text-slate-500">—</span>}
+                </TableCell>
+                <TableCell className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">{item.faskes ? item.faskes.nama : (item.tenaga_ahli ? `TA: ${item.tenaga_ahli.nama}` : "—")}</TableCell>
+                <TableCell><StatusBadgeAkun status={item.status_akun} /></TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-primary" onClick={() => openEdit(item)}><Pencil size={13} /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-amber-600" onClick={() => handleResetPw(item)} title="Reset Password"><KeyRound size={13} /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-red-500" onClick={() => handleDelete(item)}><Trash2 size={13} /></Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
 
       {/* Pagination */}
       {pagination.last_page > 1 && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "16px", flexWrap: "wrap", gap: "8px" }}>
-          <div style={{ fontSize: "12px", color: "#94A3B8" }}>
-            Halaman {currentPage} dari {pagination.last_page} — {pagination.total} total
-          </div>
-          <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => goTo(1)}
-              disabled={currentPage <= 1}
-              style={{ padding: "4px 8px", fontSize: "12px", opacity: currentPage <= 1 ? 0.4 : 1 }}
-            >
-              «
-            </button>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => goTo(currentPage - 1)}
-              disabled={currentPage <= 1}
-              style={{ padding: "4px 8px", fontSize: "12px", opacity: currentPage <= 1 ? 0.4 : 1 }}
-            >
-              ‹
-            </button>
-
-            {/* Page numbers */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <span className="text-xs text-slate-400 dark:text-slate-500">Halaman {currentPage} dari {pagination.last_page} — {pagination.total} total</span>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => goTo(1)} disabled={currentPage <= 1}>«</Button>
+            <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => goTo(currentPage - 1)} disabled={currentPage <= 1}>‹</Button>
             {Array.from({ length: Math.min(5, pagination.last_page) }, (_, i) => {
               let pageNum;
-              if (pagination.last_page <= 5) {
-                pageNum = i + 1;
-              } else if (currentPage <= 3) {
-                pageNum = i + 1;
-              } else if (currentPage >= pagination.last_page - 2) {
-                pageNum = pagination.last_page - 4 + i;
-              } else {
-                pageNum = currentPage - 2 + i;
-              }
+              if (pagination.last_page <= 5) pageNum = i + 1;
+              else if (currentPage <= 3) pageNum = i + 1;
+              else if (currentPage >= pagination.last_page - 2) pageNum = pagination.last_page - 4 + i;
+              else pageNum = currentPage - 2 + i;
               return (
-                <button
-                  key={pageNum}
-                  onClick={() => goTo(pageNum)}
-                  style={{
-                    padding: "4px 10px", fontSize: "12px", border: "none", borderRadius: "6px", cursor: "pointer",
-                    background: pageNum === currentPage ? "#4CAF50" : "transparent",
-                    color: pageNum === currentPage ? "#fff" : "#64748B",
-                    fontWeight: pageNum === currentPage ? "600" : "400",
-                  }}
-                >
+                <Button key={pageNum} variant={pageNum === currentPage ? "default" : "outline"} size="sm" className="h-8 w-8 p-0" onClick={() => goTo(pageNum)}>
                   {pageNum}
-                </button>
+                </Button>
               );
             })}
-
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => goTo(currentPage + 1)}
-              disabled={currentPage >= pagination.last_page}
-              style={{ padding: "4px 8px", fontSize: "12px", opacity: currentPage >= pagination.last_page ? 0.4 : 1 }}
-            >
-              ›
-            </button>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => goTo(pagination.last_page)}
-              disabled={currentPage >= pagination.last_page}
-              style={{ padding: "4px 8px", fontSize: "12px", opacity: currentPage >= pagination.last_page ? 0.4 : 1 }}
-            >
-              »
-            </button>
+            <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => goTo(currentPage + 1)} disabled={currentPage >= pagination.last_page}>›</Button>
+            <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => goTo(pagination.last_page)} disabled={currentPage >= pagination.last_page}>»</Button>
           </div>
         </div>
       )}
 
       {/* Modal */}
-      {showModal && (
-        <Modal title={editTarget ? `Ubah Akun — ${editTarget.nama}` : "Tambah Akun Baru"} onClose={() => setShowModal(false)}>
-          <form onSubmit={handleSubmit} style={{ padding: "24px" }}>
-            {error && (
-              <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: "6px", color: "#991B1B", fontSize: "13px" }}>{error}</div>
-            )}
-            {generatedPw && (
-              <div style={{ marginBottom: "16px", padding: "12px 14px", background: "#DCFCE7", border: "1px solid #86EFAC", borderRadius: "6px", color: "#166534", fontSize: "13px" }}>
-                <strong>Akun berhasil dibuat!</strong><br/>
-                Password sementara: <code style={{ background: "#bbf7d0", padding: "2px 6px", borderRadius: "4px", fontFamily: "monospace" }}>{generatedPw}</code>
-                <br/><span style={{ fontSize: "11px", color: "#166534" }}>Segera informasikan ke pengguna dan minta diganti.</span>
+      <Dialog open={showModal} onOpenChange={v => { setShowModal(v); if (!v) reset(EMPTY_FORM); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editTarget ? `Ubah Akun — ${editTarget.nama}` : "Tambah Akun Baru"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 space-y-1">
+                <Label htmlFor="um-nama">Nama Lengkap <span className="text-red-500">*</span></Label>
+                <Input id="um-nama" {...register("nama")} placeholder="Nama lengkap pengguna" />
+                {errors.nama && <p className="text-xs text-red-500 mt-1">{errors.nama.message}</p>}
               </div>
-            )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-              <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Nama Lengkap <span style={{ color: "#DC2626" }}>*</span></label>
-                <input className="form-input" value={form.nama} onChange={e => set("nama", e.target.value)} required placeholder="Nama lengkap pengguna" />
+              <div className="space-y-1">
+                <Label htmlFor="um-username">Username</Label>
+                <Input id="um-username" {...register("username")} placeholder="Kosongkan jika login pakai email/NIK" />
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Username</label>
-                <input className="form-input" value={form.username} onChange={e => set("username", e.target.value)} placeholder="Kosongkan jika login pakai email/NIK" />
+              <div className="space-y-1">
+                <Label htmlFor="um-email">Email <span className="text-red-500">*</span></Label>
+                <Input id="um-email" type="email" {...register("email")} placeholder="email@contoh.com" />
+                {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>}
               </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Email <span style={{ color: "#DC2626" }}>*</span></label>
-                <input className="form-input" type="email" value={form.email} onChange={e => set("email", e.target.value)} required placeholder="email@contoh.com" />
-              </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Role <span style={{ color: "#DC2626" }}>*</span></label>
-                <select className="form-input" value={form.role_id} onChange={e => set("role_id", e.target.value)} required>
+              <div className="space-y-1">
+                <Label htmlFor="um-role">Role <span className="text-red-500">*</span></Label>
+                <select id="um-role" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register("role_id")}>
                   <option value="">— Pilih Role —</option>
                   {roles.map(r => <option key={r.id} value={r.id}>{r.nama_role}</option>)}
                 </select>
+                {errors.role_id && <p className="text-xs text-red-500 mt-1">{errors.role_id.message}</p>}
               </div>
-
               {needsFaskes && (
-                <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Faskes <span style={{ color: "#DC2626" }}>*</span></label>
-                  <select className="form-input" value={form.faskes_id} onChange={e => set("faskes_id", e.target.value)} required>
+                <div className="col-span-2 space-y-1">
+                  <Label htmlFor="um-faskes">Faskes <span className="text-red-500">*</span></Label>
+                  <select id="um-faskes" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register("faskes_id")}>
                     <option value="">— Pilih Faskes —</option>
-                    {faskesList.map(f => <option key={f.id} value={f.id}>{f.nama} {f.kota ? `(${f.kota})` : ""}</option>)}
+                    {faskesList.map(f => <option key={f.id} value={f.id}>{f.nama}{f.kota ? ` (${f.kota})` : ""}</option>)}
                   </select>
-                  <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "4px" }}>Akun Faskes wajib terkait ke institusi kesehatan.</div>
+                  {errors.faskes_id && <p className="text-xs text-red-500 mt-1">{errors.faskes_id.message}</p>}
                 </div>
               )}
-
-              <div style={{ gridColumn: "1 / -1", marginBottom: "16px" }}>
-                <div style={{
-                  background: "#F8FAFC", border: "1px solid #E2E8F0",
-                  borderRadius: "8px", padding: "12px 14px",
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
-                    <div>
-                      <div style={{ fontSize: "13px", fontWeight: "600", color: "#1E293B", display: "flex", alignItems: "center", gap: "6px" }}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="#4CAF50" strokeWidth="2" width="14" height="14">
-                          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-                        </svg>
-                        Lembaga Akses
-                        <span style={{ color: "#DC2626" }}>*</span>
-                        <span style={{ fontWeight: "400", color: "#64748B", fontSize: "11px" }}>(bisa lebih dari satu)</span>
-                      </div>
-                      <div style={{ fontSize: "11px", color: "#64748B", marginTop: "2px" }}>
-                        User akan punya akses ke data di semua lembaga yang dipilih. Lembaga pertama = default.
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: "6px" }}>
-                      <button type="button" onClick={() => set("lembaga_ids", lembagaList.map(l => l.id))}
-                        style={{ padding: "4px 10px", fontSize: "11px", border: "1px solid #CBD5E1", background: "#fff", color: "#475569", borderRadius: "4px", cursor: "pointer" }}>
-                        Pilih Semua
-                      </button>
-                      <button type="button" onClick={() => set("lembaga_ids", [])}
-                        style={{ padding: "4px 10px", fontSize: "11px", border: "1px solid #CBD5E1", background: "#fff", color: "#475569", borderRadius: "4px", cursor: "pointer" }}>
-                        Bersihkan
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Badge lembaga yang sudah dipilih */}
-                  {(form.lembaga_ids || []).length > 0 && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px", padding: "8px 10px", background: "#fff", borderRadius: "6px", border: "1px dashed #BBF7D0" }}>
-                      {(form.lembaga_ids || []).map((id, idx) => {
-                        const l = lembagaList.find(x => x.id === id);
-                        if (!l) return null;
-                        return (
-                          <span key={id} style={{
-                            display: "inline-flex", alignItems: "center", gap: "6px",
-                            padding: "4px 10px", borderRadius: "12px",
-                            background: idx === 0 ? "#16A34A" : "#DCFCE7",
-                            color: idx === 0 ? "#fff" : "#166534",
-                            fontSize: "12px", fontWeight: "500",
-                            border: idx === 0 ? "none" : "1px solid #BBF7D0",
-                          }}>
-                            {idx === 0 && <span style={{ fontSize: "10px", padding: "0 4px", background: "rgba(255,255,255,0.2)", borderRadius: "3px" }}>DEFAULT</span>}
-                            {l.nama}
-                            <button type="button" onClick={() => set("lembaga_ids", (form.lembaga_ids || []).filter(x => x !== id))}
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", padding: 0, fontSize: "14px", lineHeight: 1, fontWeight: "700" }}
-                              title="Hapus">
-                              ×
-                            </button>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Checkbox grid */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", padding: "8px", background: "#fff", border: "1px solid #E2E8F0", borderRadius: "6px", maxHeight: "180px", overflowY: "auto" }}>
-                    {lembagaList.length === 0 ? (
-                      <div style={{ gridColumn: "1 / -1", padding: "12px", textAlign: "center", color: "#94A3B8", fontSize: "12px" }}>
-                        Memuat daftar lembaga...
-                      </div>
-                    ) : lembagaList.map(l => {
-                      const checked = (form.lembaga_ids || []).includes(l.id);
-                      return (
-                        <label key={l.id} style={{
-                          display: "flex", alignItems: "center", gap: "8px",
-                          padding: "8px 10px", cursor: "pointer",
-                          borderRadius: "4px",
-                          background: checked ? "#F0FDF4" : "transparent",
-                          border: checked ? "1px solid #BBF7D0" : "1px solid transparent",
-                          transition: "all 0.15s",
-                        }}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={e => {
-                              const current = form.lembaga_ids || [];
-                              const next = e.target.checked
-                                ? [...current, l.id]
-                                : current.filter(id => id !== l.id);
-                              set("lembaga_ids", next);
-                            }}
-                            style={{ cursor: "pointer", width: "16px", height: "16px" }}
-                          />
-                          <span style={{ fontSize: "13px", color: checked ? "#166534" : "#1E293B", fontWeight: checked ? "600" : "400" }}>{l.nama}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
               {needsTenagaAhli && (
-                <div style={{ gridColumn: "1 / -1", marginBottom: "14px" }}>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Tenaga Ahli <span style={{ color: "#DC2626" }}>*</span></label>
-                  <select className="form-input" value={form.tenaga_ahli_id} onChange={e => set("tenaga_ahli_id", e.target.value)} required>
-                    <option value="">— Pilih Tenaga Ahli —</option>
+                <div className="col-span-2 space-y-1">
+                  <Label htmlFor="um-ta">Tenaga Ahli <span className="text-red-500">*</span></Label>
+                  <select id="um-ta" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register("tenaga_ahli_id")}>
+                    <option value="">— Pilih —</option>
                     {tenagaAhliList.map(ta => (
-                      <option key={ta.id} value={ta.id}>
-                        {ta.nama} ({ta.nomor_induk_surveior || "—"})
-                        {ta.has_akun ? " ✓ sudah punya akun" : ""}
-                        {ta.status_aktif === "Nonaktif" ? " [nonaktif]" : ""}
-                      </option>
+                      <option key={ta.id} value={ta.id}>{ta.nama} ({ta.nomor_induk_surveior || "—"}){ta.has_akun ? " ✓" : ""}{ta.status_aktif === "Nonaktif" ? " [nonaktif]" : ""}</option>
                     ))}
                   </select>
-                  <div style={{ fontSize: "11px", color: "#F59E0B", marginTop: "4px" }}>Role {selectedRole?.nama_role} wajib terkait ke record Tenaga Ahli.</div>
+                  {errors.tenaga_ahli_id && <p className="text-xs text-red-500 mt-1">{errors.tenaga_ahli_id.message}</p>}
                 </div>
               )}
 
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>
-                  {editTarget ? "Password Baru (kosongkan jika tidak diubah)" : "Password"}
-                  {!editTarget && <span style={{ color: "#DC2626" }}> *</span>}
-                </label>
-                <input className="form-input" type="password" value={form.password} onChange={e => set("password", e.target.value)}
-                  placeholder={editTarget ? "Kosongkan = tidak diubah" : "Min. 8 karakter"}
-                  {...(!editTarget ? { required: true, minLength: 8 } : {})} />
+              {/* Lembaga multi-select */}
+              <div className="col-span-2">
+                <Controller
+                  name="lembaga_ids"
+                  control={control}
+                  render={({ field }) => (
+                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4CAF50" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                            Lembaga Akses <span className="text-red-500">*</span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Bisa lebih dari satu. Lembaga pertama = default.</div>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-[11px]" onClick={selectAllLembaga}>Pilih Semua</Button>
+                          <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-[11px]" onClick={clearLembaga}>Bersihkan</Button>
+                        </div>
+                      </div>
+
+                      {field.value && field.value.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2 p-2 bg-white rounded-md border border-dashed border-green-200">
+                          {field.value.map((id, idx) => {
+                            const l = lembagaList.find(x => x.id === id);
+                            if (!l) return null;
+                            return (
+                              <span key={id} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium" style={{ background: idx === 0 ? "#16A34A" : "#DCFCE7", color: idx === 0 ? "#fff" : "#166534" }}>
+                                {idx === 0 && <span className="text-[9px] px-1 rounded bg-white/20">DEFAULT</span>}
+                                {l.nama}
+                                <button type="button" onClick={() => toggleLembaga(id)} className="ml-0.5 font-bold opacity-70 hover:opacity-100">×</button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-1 p-2 bg-white rounded-md border border-slate-200 dark:border-slate-700 max-h-44 overflow-y-auto">
+                        {lembagaList.length === 0 ? (
+                          <div className="col-span-2 text-center py-3 text-xs text-slate-400 dark:text-slate-500">Memuat...</div>
+                        ) : lembagaList.map(l => {
+                          const checked = (field.value || []).includes(l.id);
+                          return (
+                            <label key={l.id} className="flex items-center gap-2 p-2 rounded cursor-pointer transition-colors" style={{ background: checked ? "#F0FDF4" : "transparent", border: checked ? "1px solid #BBF7D0" : "1px solid transparent" }}>
+                              <input type="checkbox" checked={checked} onChange={() => toggleLembaga(l.id)} className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary" />
+                              <span className="text-xs" style={{ color: checked ? "#166534" : "#1E293B", fontWeight: checked ? 600 : 400 }}>{l.nama}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      {errors.lembaga_ids && <p className="text-xs text-red-500 mt-1">{errors.lembaga_ids.message}</p>}
+                    </div>
+                  )}
+                />
               </div>
 
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#374151", marginBottom: "4px" }}>Status Akun</label>
-                <select className="form-input" value={form.status_akun} onChange={e => set("status_akun", e.target.value)}>
-                  <option value="Aktif">Aktif</option>
-                  <option value="Nonaktif">Nonaktif</option>
-                  <option value="Terkunci">Terkunci</option>
+              <div className="space-y-1">
+                <Label htmlFor="um-password">{isEditMode ? "Password Baru" : "Password"}{!isEditMode && <span className="text-red-500"> *</span>}</Label>
+                <Input id="um-password" type="password" {...register("password")} placeholder={isEditMode ? "Kosongkan = tidak diubah" : "Min. 8 karakter"} />
+                {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password.message}</p>}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="um-status-akun">Status Akun</Label>
+                <select id="um-status-akun" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register("status_akun")}>
+                  <option value="Aktif">Aktif</option><option value="Nonaktif">Nonaktif</option><option value="Terkunci">Terkunci</option>
                 </select>
               </div>
             </div>
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "8px", borderTop: "1px solid #F1F5F9", paddingTop: "20px" }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Tutup</button>
-              <button type="submit" className="btn btn-primary" disabled={mutateAkun.isPending}>{mutateAkun.isPending ? "Menyimpan..." : editTarget ? "Simpan" : "Buat Akun"}</button>
-            </div>
+            <DialogFooter className="gap-2 sm:gap-0 border-t pt-4">
+              <Button type="button" variant="outline" onClick={() => { setShowModal(false); reset(EMPTY_FORM); }}>Tutup</Button>
+              <Button type="submit" disabled={mutateAkun.isPending}>{mutateAkun.isPending ? "Menyimpan..." : isEditMode ? "Simpan" : "Buat Akun"}</Button>
+            </DialogFooter>
           </form>
-        </Modal>
-      )}
+        </DialogContent>
+      </Dialog>
 
       <ImportModal
         open={showImport}
@@ -575,13 +443,9 @@ export default function UserManagement() {
         downloadUrl="/master/akun/template"
         downloadName="template_akun.csv"
         uploadUrl="/master/akun/import"
-        description="Upload file CSV berisi data akun pengguna. Akun untuk Surveior/Verifikator harus memiliki tenaga_ahli_nik."
+        description="Upload file CSV berisi data akun pengguna."
         successNote="Daftar akun telah diperbarui."
-        resultColumns={[
-          { key: "nama", label: "Nama" },
-          { key: "email", label: "Email" },
-          { key: "username", label: "Username" },
-        ]}
+        resultColumns={[{ key: "nama", label: "Nama" }, { key: "email", label: "Email" }, { key: "username", label: "Username" }]}
       />
     </div>
   );

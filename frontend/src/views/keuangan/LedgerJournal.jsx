@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
 import { formatDateTime } from "../../utils/dateFormat";
+import { Button } from "@/components/ui/button";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -339,13 +340,13 @@ export default function LedgerJournal() {
           <label style={{ fontSize: "11px", fontWeight: "600", color: "#64748B", display: "block", marginBottom: "4px" }}>Cari</label>
           <input type="text" className="form-input" value={q} onChange={e => setQ(e.target.value)} placeholder="Nama TA, ID..." style={{ width: "160px" }} />
         </div>
-        <button onClick={handleFilterClick} className="btn btn-primary" style={{ height: "38px" }}>
+        <Button onClick={handleFilterClick}>
           Filter
-        </button>
+        </Button>
         {(tipeFilter || dari || sampai || statusFilter || q) && (
-          <button onClick={handleReset} className="btn btn-ghost" style={{ height: "38px" }}>
+          <Button variant="ghost" onClick={handleReset}>
             Reset
-          </button>
+          </Button>
         )}
       </div>
 
@@ -429,25 +430,23 @@ export default function LedgerJournal() {
         {/* Pagination */}
         {pagination && pagination.last_page > 1 && (
           <div style={{ padding: "12px 20px", borderTop: "1px solid #F1F5F9", display: "flex", gap: "8px", justifyContent: "center", alignItems: "center" }}>
-            <button
-              className="btn btn-ghost"
+            <Button
+              variant="ghost"
               disabled={pagination.current_page <= 1}
               onClick={() => setPage(p => p - 1)}
-              style={{ height: "32px", fontSize: "12px" }}
             >
               ← Prev
-            </button>
+            </Button>
             <span style={{ fontSize: "12px", color: "#64748B" }}>
               Halaman {pagination.current_page} / {pagination.last_page} ({pagination.total} entry)
             </span>
-            <button
-              className="btn btn-ghost"
+            <Button
+              variant="ghost"
               disabled={pagination.current_page >= pagination.last_page}
               onClick={() => setPage(p => p + 1)}
-              style={{ height: "32px", fontSize: "12px" }}
             >
               Next →
-            </button>
+            </Button>
           </div>
         )}
       </div>

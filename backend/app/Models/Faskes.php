@@ -43,6 +43,10 @@ class Faskes extends Model
 
     protected $appends = ['jenis', 'penanggung_jawab', 'tipe_faskes'];
 
+    // getJenisAttribute() reads this relation on every serialization, which
+    // trips preventLazyLoading() outside production.
+    protected $with = ['jenisFaskes'];
+
     public function getJenisAttribute(): ?string
     {
         return $this->jenisFaskes?->nama;

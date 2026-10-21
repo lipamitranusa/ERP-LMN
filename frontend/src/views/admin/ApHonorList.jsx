@@ -1,7 +1,14 @@
 import React, { useState, useMemo } from "react";
 import { useHistory } from "react-router-dom";
-import { formatDate } from "../../utils/dateFormat";
+import { formatDate } from "@/utils/dateFormat";
 import { useApi } from "@/hooks/useApi";
+import { PageHeader } from "@/components/PageHeader";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, Search } from "lucide-react";
+import { Skeleton } from "@/components/Skeleton";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -13,14 +20,21 @@ const PERAN_LABEL = {
   ap_honor_rekomendator: "Rekomendator",
 };
 
+function OutstandingBadge({ days }) {
+  const color = days > 90 ? { bg: "#FEE2E2", text: "#991B1B" } : days > 30 ? { bg: "#FEF9C3", text: "#854D0E" } : { bg: "#DCFCE7", text: "#166534" };
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: color.bg, color: color.text }}>
+      {days} hari
+    </span>
+  );
+}
+
 export default function ApHonorList() {
   const history = useHistory();
   const [filterPeran, setFilterPeran] = useState("");
   const [filterPenerima, setFilterPenerima] = useState("");
   const [filterBulan, setFilterBulan] = useState("");
   const [search, setSearch] = useState("");
-
-  // Selected entries (by ledger entry id)
   const [selectedIds, setSelectedIds] = useState(new Set());
 
   const params = new URLSearchParams();
@@ -33,7 +47,7 @@ export default function ApHonorList() {
   }
   const qs = params.toString();
 
-  const { data, isLoading, error } = useApi(
+  const { data, isLoading } = useApi(
     ["ap-honor-outstanding", filterPeran, filterPenerima, filterBulan],
     `/keuangan/ap-honor/outstanding${qs ? "?" + qs : ""}`
   );
@@ -52,230 +66,152 @@ export default function ApHonorList() {
     return list;
   }, [data, search]);
 
-  const selectedEntries = useMemo(() => {
-    return filteredEntries.filter(e => selectedIds.has(e.id));
-  }, [filteredEntries, selectedIds]);
-
-  const toggleSelect = (id) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedIds.size === filteredEntries.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredEntries.map(e => e.id)));
-    }
-  };
-
-  const handleBayar = () => {
-    if (selectedIds.size === 0) return;
-    const ids = Array.from(selectedIds).join(",");
-    history.push(`/admin/ap-honor/bayar?ids=${ids}`);
-  };
-
-  if (isLoading && !data) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat data honor outstanding...</div>;
-  }
-  if (error) {
-    return <div style={{ padding: "40px", textAlign: "center", color: "#DC2626", fontSize: "13px" }}>{error.message}</div>;
-  }
-  if (!data) return null;
-
-  const { ringkasan, per_penerima } = data.data;
+  const selectedEntries = useMemo(() => filteredEntries.filter(e => selectedIds.has(e.id)), [filteredEntries, selectedIds]);
   const allChecked = filteredEntries.length > 0 && selectedIds.size === filteredEntries.length;
   const selectedTotal = selectedEntries.reduce((s, e) => s + (e.nominal_neto || 0), 0);
 
+  const toggleSelect = (id) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleSelectAll = () => setSelectedIds(allChecked ? new Set() : new Set(filteredEntries.map(e => e.id)));
+  const handleBayar = () => { if (selectedIds.size === 0) return; history.push(`/admin/ap-honor/bayar?ids=${Array.from(selectedIds).join(",")}`); };
+
+  const { ringkasan, per_penerima } = data?.data || {};
+  const items = data?.data || {};
+
   return (
-    <div>
-      {/* Header */}
-      <div style={{ marginBottom: "24px" }}>
-        <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Pembayaran Honor TA</h1>
-        <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
-          Pilih honor yang akan dibayar, lalu klik "Bayar Honor" untuk membuat pembayaran.
-        </p>
+    <div className="space-y-5">
+      <PageHeader
+        title="Pembayaran Honor TA"
+        subtitle="Pilih honor yang akan dibayar, lalu klik 'Bayar Honor' untuk membuat pembayaran."
+        actions={
+          <Button onClick={() => history.push("/admin/ap-honor")} variant="outline">
+            <ArrowLeft size={16} /> Dasbor AP Honor
+          </Button>
+        }
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {[
+          { label: "Total honor", value: ringkasan?.jumlah_honor },
+          { label: "Penerima", value: ringkasan?.jumlah_penerima },
+          { label: "Total neto outstanding", value: formatRp(ringkasan?.total_neto), tone: "red" },
+        ].map((s, i) => (
+          <Card key={i} className="p-3 border">
+            <div className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 dark:text-slate-500">{s.label}</div>
+            <div className={`text-lg font-bold mt-1 ${s.tone === "red" ? "text-red-600" : "text-slate-800 dark:text-slate-200"}`}>{s.value ?? "—"}</div>
+          </Card>
+        ))}
       </div>
 
-      {/* Summary bar */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "16px" }}>
-        <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "12px 16px" }}>
-          <div style={{ fontSize: "10px", fontWeight: "600", color: "#64748B", textTransform: "uppercase" }}>Total honor</div>
-          <div style={{ fontSize: "18px", fontWeight: "700", color: "#1E293B" }}>{ringkasan.jumlah_honor}</div>
-        </div>
-        <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "12px 16px" }}>
-          <div style={{ fontSize: "10px", fontWeight: "600", color: "#64748B", textTransform: "uppercase" }}>Penerima</div>
-          <div style={{ fontSize: "18px", fontWeight: "700", color: "#1E293B" }}>{ringkasan.jumlah_penerima}</div>
-        </div>
-        <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "12px 16px" }}>
-          <div style={{ fontSize: "10px", fontWeight: "600", color: "#64748B", textTransform: "uppercase" }}>Total neto outstanding</div>
-          <div style={{ fontSize: "18px", fontWeight: "700", color: "#991B1B" }}>{formatRp(ringkasan.total_neto)}</div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="card" style={{ padding: "16px 20px", marginBottom: "16px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr auto", gap: "12px", alignItems: "end" }}>
-          <div>
-            <label className="form-label">Cari nama / NS / Faskes</label>
-            <input
-              className="form-input"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Ketik untuk mencari..."
-            />
+      <Card className="p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3 items-end">
+          <div className="col-span-2 space-y-1.5">
+            <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Cari nama / NS / Faskes</Label>
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ketik untuk mencari..." className="pl-9" />
+            </div>
           </div>
-          <div>
-            <label className="form-label">Peran</label>
-            <select className="form-input" value={filterPeran} onChange={e => setFilterPeran(e.target.value)}>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Peran</Label>
+            <select className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={filterPeran} onChange={e => setFilterPeran(e.target.value)}>
               <option value="">Semua</option>
-              <option value="surveior">Surveior</option>
-              <option value="verifikator">Verifikator</option>
-              <option value="rekomendator">Rekomendator</option>
+              <option value="surveior">Surveior</option><option value="verifikator">Verifikator</option><option value="rekomendator">Rekomendator</option>
             </select>
           </div>
-          <div>
-            <label className="form-label">Periode</label>
-            <input
-              className="form-input"
-              type="month"
-              value={filterBulan}
-              onChange={e => setFilterBulan(e.target.value)}
-            />
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Periode</Label>
+            <Input type="month" value={filterBulan} onChange={e => setFilterBulan(e.target.value)} />
           </div>
-          <div>
-            <label className="form-label">Penerima</label>
-            <select
-              className="form-input"
-              value={filterPenerima}
-              onChange={e => setFilterPenerima(e.target.value)}
-            >
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Penerima</Label>
+            <select className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={filterPenerima} onChange={e => setFilterPenerima(e.target.value)}>
               <option value="">Semua</option>
-              {per_penerima.map(p => (
-                <option key={p.tenaga_ahli_id} value={p.tenaga_ahli_id}>
-                  {p.nama}
-                </option>
-              ))}
+              {(per_penerima || []).map(p => <option key={p.tenaga_ahli_id} value={p.tenaga_ahli_id}>{p.nama}</option>)}
             </select>
           </div>
-          {(filterPeran || filterBulan || filterPenerima || search) && (
-            <button
-              className="btn btn-secondary"
-              style={{ fontSize: "12px", padding: "8px 12px" }}
-              onClick={() => { setFilterPeran(""); setFilterBulan(""); setFilterPenerima(""); setSearch(""); }}
-            >
-              Reset
-            </button>
-          )}
         </div>
-      </div>
+        {(filterPeran || filterBulan || filterPenerima || search) && (
+          <Button variant="ghost" size="sm" className="mt-3 text-xs" onClick={() => { setFilterPeran(""); setFilterBulan(""); setFilterPenerima(""); setSearch(""); }}>
+            Reset filter
+          </Button>
+        )}
+      </Card>
 
-      {/* Selection bar */}
-      <div style={{
-        background: "#F0F9FF", border: "1px solid #BAE6FD", borderRadius: "8px",
-        padding: "10px 16px", marginBottom: "12px", display: "flex",
-        alignItems: "center", justifyContent: "space-between",
-      }}>
-        <span style={{ fontSize: "13px", color: "#0C4A6E" }}>
+      <div className="flex items-center justify-between rounded-lg px-4 py-2.5" style={{ background: "#F0F9FF", border: "1px solid #BAE6FD" }}>
+        <span className="text-sm" style={{ color: "#0C4A6E" }}>
           <strong>{selectedIds.size}</strong> honor dipilih · Total: <strong>{formatRp(selectedTotal)}</strong>
         </span>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button
-            className="btn btn-secondary"
-            style={{ fontSize: "12px", padding: "6px 12px" }}
-            onClick={() => setSelectedIds(new Set())}
-            disabled={selectedIds.size === 0}
-          >
-            Batal Pilih
-          </button>
-          <button
-            className="btn btn-primary"
-            style={{ fontSize: "12px", padding: "6px 16px" }}
-            onClick={handleBayar}
-            disabled={selectedIds.size === 0}
-          >
-            Bayar Honor ({selectedIds.size})
-          </button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setSelectedIds(new Set())} disabled={selectedIds.size === 0}>Batal Pilih</Button>
+          <Button size="sm" className="h-8 text-xs" onClick={handleBayar} disabled={selectedIds.size === 0}>Bayar Honor ({selectedIds.size})</Button>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="card" style={{ padding: 0 }}>
-        <div className="table-container" style={{ border: "none", borderRadius: 0, maxHeight: "600px", overflowY: "auto" }}>
-          <table className="data-table">
-            <thead>
+      <Card className="overflow-hidden">
+        <div className="overflow-y-auto" style={{ maxHeight: "600px" }}>
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-800/50 sticky top-0 z-10">
               <tr>
-                <th style={{ width: "40px" }}>
-                  <input
-                    type="checkbox"
-                    checked={allChecked}
-                    onChange={toggleSelectAll}
-                    style={{ cursor: "pointer" }}
-                  />
+                <th className="w-10 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500 text-center">
+                  <input type="checkbox" checked={allChecked} onChange={toggleSelectAll} className="rounded border-slate-300" />
                 </th>
-                <th>Penerima</th>
-                <th>Peran</th>
-                <th>Faskes</th>
-                <th>Tanggal Honor</th>
-                <th style={{ textAlign: "right" }}>Gross</th>
-                <th style={{ textAlign: "right" }}>DPP (50%)</th>
-                <th style={{ textAlign: "right" }}>PPh 21</th>
-                <th style={{ textAlign: "right" }}>Net</th>
-                <th style={{ textAlign: "center" }}>Outstanding</th>
+                <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Penerima</th>
+                <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Peran</th>
+                <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Faskes</th>
+                <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Tanggal Honor</th>
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Gross</th>
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">DPP (50%)</th>
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">PPh 21</th>
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Net</th>
+                <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Outstanding</th>
               </tr>
             </thead>
             <tbody>
-              {filteredEntries.length === 0 ? (
-                <tr>
-                  <td colSpan="10" style={{ textAlign: "center", color: "#94A3B8", padding: "32px 16px" }}>
-                    Tidak ada honor outstanding yang cocok dengan filter.
-                  </td>
-                </tr>
+              {isLoading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-3 py-2 text-center"><Skeleton className="h-4 w-4 mx-auto" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-32" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-16" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-24" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-20" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-16" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-16" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-16" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-20" /></td>
+                    <td className="px-3 py-2"><Skeleton className="h-4 w-14 mx-auto" /></td>
+                  </tr>
+                ))
+              ) : filteredEntries.length === 0 ? (
+                <tr><td colSpan={10} className="text-center py-8 text-sm" style={{ color: "#94A3B8" }}>Tidak ada honor outstanding yang cocok dengan filter.</td></tr>
               ) : filteredEntries.map(e => (
                 <tr
                   key={e.id}
-                  style={{ background: selectedIds.has(e.id) ? "#F0F9FF" : "", cursor: "pointer" }}
+                  className="hover:bg-slate-50/50 cursor-pointer"
+                  style={{ background: selectedIds.has(e.id) ? "#F0F9FF" : undefined }}
                   onClick={() => toggleSelect(e.id)}
                 >
-                  <td onClick={ev => ev.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(e.id)}
-                      onChange={() => toggleSelect(e.id)}
-                      style={{ cursor: "pointer" }}
-                    />
+                  <td className="px-3 py-2 text-center" onClick={ev => ev.stopPropagation()}>
+                    <input type="checkbox" checked={selectedIds.has(e.id)} onChange={() => toggleSelect(e.id)} className="rounded border-slate-300" />
                   </td>
-                  <td>
-                    <div style={{ fontSize: "13px", fontWeight: "500", color: "#334155" }}>{e.penerima?.nama || "—"}</div>
-                    <div style={{ fontSize: "11px", color: "#94A3B8" }}>{e.penerima?.nomor_induk_surveior}</div>
+                  <td className="px-3 py-2">
+                    <div className="text-[13px] font-medium text-slate-700 dark:text-slate-300 dark:text-slate-500">{e.penerima?.nama || "—"}</div>
+                    <div className="text-[11px]" style={{ color: "#94A3B8" }}>{e.penerima?.nomor_induk_surveior}</div>
                   </td>
-                  <td style={{ fontSize: "12px", color: "#475569" }}>{PERAN_LABEL[e.tipe] || e.tipe}</td>
-                  <td style={{ fontSize: "12px", color: "#475569" }}>{e.siklus?.faskes_nama || "—"}</td>
-                  <td style={{ fontSize: "12px", color: "#475569" }}>{formatDate(e.tanggal_honor)}</td>
-                  <td style={{ textAlign: "right", fontSize: "12px" }}>{formatRp(e.nominal_bruto)}</td>
-                  <td style={{ textAlign: "right", fontSize: "12px", color: "#64748B" }}>{formatRp(e.dpp)}</td>
-                  <td style={{ textAlign: "right", fontSize: "12px", color: "#64748B" }}>{formatRp(e.potongan_pph)}</td>
-                  <td style={{ textAlign: "right", fontSize: "12px", fontWeight: "600", color: "#991B1B" }}>{formatRp(e.nominal_neto)}</td>
-                  <td style={{ textAlign: "center" }}>
-                    <span style={{
-                      padding: "2px 8px", borderRadius: "9999px",
-                      fontSize: "11px", fontWeight: "600",
-                      background: e.hari_outstanding > 90 ? "#FEE2E2" : e.hari_outstanding > 30 ? "#FEF9C3" : "#DCFCE7",
-                      color: e.hari_outstanding > 90 ? "#991B1B" : e.hari_outstanding > 30 ? "#854D0E" : "#166534",
-                    }}>
-                      {e.hari_outstanding} hari
-                    </span>
-                  </td>
+                  <td className="px-3 py-2 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{PERAN_LABEL[e.tipe] || e.tipe}</td>
+                  <td className="px-3 py-2 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{e.siklus?.faskes_nama || "—"}</td>
+                  <td className="px-3 py-2 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{formatDate(e.tanggal_honor)}</td>
+                  <td className="px-3 py-2 text-right text-[12px]">{formatRp(e.nominal_bruto)}</td>
+                  <td className="px-3 py-2 text-right text-[12px]" style={{ color: "#64748B" }}>{formatRp(e.dpp)}</td>
+                  <td className="px-3 py-2 text-right text-[12px]" style={{ color: "#64748B" }}>{formatRp(e.potongan_pph)}</td>
+                  <td className="px-3 py-2 text-right text-[12px] font-semibold text-red-600">{formatRp(e.nominal_neto)}</td>
+                  <td className="px-3 py-2 text-center"><OutstandingBadge days={e.hari_outstanding} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

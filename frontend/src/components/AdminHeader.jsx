@@ -1,315 +1,275 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import {
+  Bell,
+  ChevronDown,
+  Home,
+  LogOut,
+  Moon,
+  Settings,
+  Sun,
+  User,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useLembaga } from "@/contexts/LembagaContext";
 import { useAuth } from "@/hooks/useAuth";
 
-const LMNIcon = () => (
-  <svg viewBox="0 0 36 36" width="28" height="28" fill="none">
-    <circle cx="18" cy="18" r="15" stroke="#4CAF50" strokeWidth="3" strokeDasharray="22 73" strokeDashoffset="0" strokeLinecap="round"/>
-    <path d="M18 11v14M12 18h12" stroke="#4CAF50" strokeWidth="3" strokeLinecap="round"/>
-    <circle cx="18" cy="3.5" r="2" fill="#7E57C2"/>
-    <circle cx="29.5" cy="9.5" r="2" fill="#EF5350"/>
-    <circle cx="32" cy="20" r="2" fill="#FF9800"/>
-    <circle cx="26" cy="30" r="2" fill="#FFEB3B"/>
-    <circle cx="10" cy="30" r="2" fill="#42A5F5"/>
-  </svg>
-);
-
-function AdminHeader() {
+export function AdminHeader({ onMenuToggle }) {
   const location = useLocation();
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [lembagaMenuOpen, setLembagaMenuOpen] = useState(false);
-  const menuRef = useRef(null);
-  const lembagaMenuRef = useRef(null);
-  // Subscribe ke useAuth agar re-render saat user data di-refresh oleh
-  // fetchMe (penting untuk lembaga_ids yang mungkin baru ditambahkan admin)
   const { user: authUser } = useAuth();
   const user = authUser || JSON.parse(localStorage.getItem("user") || "{}");
   const { lembagaId, lembagaName, switchLembaga } = useLembaga();
+  const [isDark, setIsDark] = useState(() => {
+    return localStorage.getItem("theme") === "dark" ||
+      (!localStorage.getItem("theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  });
 
-  // Fetch daftar lembaga untuk selector. Filter di-frontend berdasarkan
-  // akses lembaga user (user.lembaga_ids) — jika user hanya punya
-  // akses 1 lembaga, dropdown cuma tampilkan 1 itu.
-  // Fallback: jika user.lembaga_ids tidak ada (mis. legacy data), tampilkan
-  // semua lembaga.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDark) {
+      root.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      root.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [isDark]);
+
   const { data: lembagaList } = useQuery({
     queryKey: ["lembaga-list"],
     queryFn: () => api("/master/lembaga?per_page=100").then(r => r.data ?? []),
-    enabled: lembagaMenuOpen,
+    enabled: true,
   });
+
   const userLembagaIds = user.lembaga_ids;
   const allLembagas = lembagaList || [];
   const accessibleLembagas = Array.isArray(userLembagaIds) && userLembagaIds.length > 0
     ? allLembagas.filter(l => userLembagaIds.includes(l.id))
-    : allLembagas;  // fallback untuk legacy user tanpa lembaga_ids
-  // Jika lembaga aktif tidak ada di accessible (mis. user baru di-add
-  // lembaga lain setelah login), tetap tampilkan dropdown dengan lembaga
-  // aktif disorot + lembaga accessible lainnya.
-  const displayLembagas = accessibleLembagas.length > 0
-    ? accessibleLembagas
     : allLembagas;
-
+  const displayLembagas = accessibleLembagas.length > 0 ? accessibleLembagas : allLembagas;
   const selectedLembaga = allLembagas.find(l => l.id === lembagaId);
-  // Fallback: gunakan nama dari context (jika list belum di-fetch)
   const displayName = selectedLembaga?.nama || lembagaName || "Lembaga";
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClick(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setUserMenuOpen(false);
-      }
-      if (lembagaMenuRef.current && !lembagaMenuRef.current.contains(e.target)) {
-        setLembagaMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
   const handleSwitchLembaga = async (newId) => {
-    setLembagaMenuOpen(false);
     const lembaga = displayLembagas.find(l => l.id === newId);
     try {
       await switchLembaga(newId, lembaga?.nama);
       window.location.reload();
-    } catch {
-      // error handled by context
-    }
+    } catch {}
   };
-
-  // Update sidebar user info
-  useEffect(() => {
-    const nameEl = document.getElementById("sidebar-user-name");
-    const roleEl = document.getElementById("sidebar-user-role");
-    if (nameEl) nameEl.textContent = user.nama || user.name || user.email || "—";
-    if (roleEl) roleEl.textContent = user.role || "—";
-  }, [user]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.removeItem("menu_actions");
-    // JANGAN hapus lembaga_id — simpan untuk auto-restore saat login ulang
+    localStorage.removeItem("lembaga_name");
+    localStorage.removeItem("lembaga_logo");
     window.location.href = "/auth/login";
   };
 
+  const initials = (user.nama || user.email || "U")
+    .split(" ")
+    .map(n => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const ROUTE_LABELS = {
+    dashboard: "Dashboard",
+    pendaftaran: "Pendaftaran",
+    "kontrak-invoicing": "Kontrak & Invoicing",
+    "verifikasi-pembayaran": "Verifikasi Pembayaran",
+    penugasan: "Penugasan",
+    piutang: "Dasbor Piutang",
+    "refund-approval": "Approval Refund",
+    "ap-honor": "Dasbor AP Honor",
+    "hutang-pajak": "Hutang Pajak",
+    rekonsiliasi: "Rekonsiliasi",
+    "bukti-potong": "Bukti Potong PPh",
+    "ledger-journal": "Ledger Journal",
+    "slip-honor": "Slip Honorarium",
+    "konfigurasi-pajak": "Konfigurasi Pajak",
+    rekomendasi: "Rekomendasi",
+    "accounting": "Akuntansi",
+    "master-lembaga": "Master Lembaga",
+    "master-jenis-faskes": "Master Jenis Faskes",
+    "master-faskes": "Master Faskes",
+    "master-tenaga-ahli": "Master Tenaga Ahli",
+    "master-biaya": "Master Biaya",
+    "user-management": "Manajemen Akun",
+    roles: "Role & Hak Akses",
+    privileges: "Matriks Privilege",
+    "audit-trail": "Audit Trail",
+    profile: "Profil",
+    settings: "Pengaturan",
+  };
+
+  const isUUID = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(s) || /^[0-9a-f-]{32,}$/i.test(s);
+  const isNumericId = (s) => /^\d+$/.test(s);
+
+  const crumbs = location.pathname.split("/").filter(Boolean).map(c => {
+    if (isUUID(c) || isNumericId(c)) return null;
+    const key = c.toLowerCase();
+    return ROUTE_LABELS[key] || c.charAt(0).toUpperCase() + c.slice(1).replace(/-/g, " ");
+  }).filter(Boolean);
+
+  const breadcrumb = crumbs.join(" / ");
+
   return (
-    <header style={{
-      position: "sticky",
-      top: 0,
-      zIndex: 50,
-      background: "#FFFFFF",
-      borderBottom: "1px solid #E2E8F0",
-      height: "64px",
-      display: "flex",
-      alignItems: "center",
-      paddingLeft: "32px",
-      paddingRight: "32px",
-    }}>
-      {/* Breadcrumb / brand */}
-      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px" }}>
-        {/* Mobile logo */}
-        <Link to="/admin/dashboard" style={{ display: "none", alignItems: "center", gap: "6px", textDecoration: "none" }} className="mobile-logo">
-          <LMNIcon />
-          <span style={{ color: "#1E293B", fontSize: "14px", fontWeight: "700" }}>LMN</span>
-        </Link>
+    <header className="sticky top-0 z-30 flex h-14 sm:h-16 items-center gap-2 sm:gap-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 sm:px-6">
+      {/* Mobile menu toggle */}
+      <button
+        onClick={onMenuToggle}
+        className="lg:hidden flex items-center justify-center w-9 h-9 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        aria-label="Toggle menu"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+          <line x1="4" x2="20" y1="12" y2="12"/>
+          <line x1="4" x2="20" y1="6" y2="6"/>
+          <line x1="4" x2="20" y1="18" y2="18"/>
+        </svg>
+      </button>
+
+      {/* Breadcrumb */}
+      <div className="hidden sm:flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+        <Home size={14} className="shrink-0" />
+        <span>/</span>
+        <span className="font-medium text-slate-700 dark:text-slate-200 capitalize">
+          {breadcrumb || "Dashboard"}
+        </span>
       </div>
 
-      {/* Right: notifications + user menu */}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      {/* Search bar */}
+      <div className="hidden md:flex flex-1 max-w-xs ml-4">
+        <div className="relative w-full">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            type="text"
+            placeholder="Cari menu atau data..."
+            className="w-full h-8 pl-9 pr-3 text-sm rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+          />
+        </div>
+      </div>
 
+      {/* Right side actions */}
+      <div className="flex items-center gap-1.5 ml-auto">
         {/* Lembaga selector */}
         {lembagaId && (
-          <div ref={lembagaMenuRef} style={{ position: "relative" }}>
-            <button
-              className="btn btn-ghost"
-              style={{
-                display: "flex", alignItems: "center", gap: "6px",
-                padding: "6px 10px", borderRadius: "8px",
-                color: "#334155", background: "#F0FDF4",
-                border: "1px solid #BBF7D0",
-                fontSize: "13px", maxWidth: "200px",
-              }}
-              onClick={() => setLembagaMenuOpen(v => !v)}
-              title="Ganti Lembaga"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-              </svg>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {displayName}
-              </span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12" style={{ color: "#94A3B8", flexShrink: 0 }}>
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-
-            {lembagaMenuOpen && (
-              <div style={{
-                position: "absolute",
-                top: "calc(100% + 4px)",
-                right: 0,
-                width: "220px",
-                background: "#FFFFFF",
-                border: "1px solid #E2E8F0",
-                borderRadius: "8px",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-                overflow: "hidden",
-                zIndex: 100,
-              }}>
-                <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid #F1F5F9" }}>
-                  <div style={{ fontSize: "11px", fontWeight: "600", color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    Pilih Lembaga
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-2 border-green-200 bg-green-50 text-green-800 hover:bg-green-100 hover:text-green-900 font-medium text-xs">
+                <Home size={12} />
+                <span className="max-w-[120px] sm:max-w-[160px] truncate">
+                  {displayName}
+                </span>
+                <ChevronDown size={12} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 dark:bg-slate-900 dark:border-slate-700">
+              <DropdownMenuLabel className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                Pilih Lembaga
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="dark:bg-slate-700" />
+              {displayLembagas.map(l => (
+                <DropdownMenuItem
+                  key={l.id}
+                  onClick={() => handleSwitchLembaga(l.id)}
+                  className={l.id === lembagaId ? "bg-green-50 dark:bg-green-950 text-green-800 dark:text-green-200 font-medium" : "dark:text-slate-200"}
+                >
+                  <Home size={14} className="mr-2 shrink-0" />
+                  <div className="flex flex-col">
+                    <span className="text-sm">{l.nama}</span>
+                    {l.nama_pt && <span className="text-xs text-slate-500 dark:text-slate-400">{l.nama_pt}</span>}
                   </div>
-                </div>
-                <div style={{ padding: "4px", maxHeight: "200px", overflowY: "auto" }}>
-                  {displayLembagas.length === 0 ? (
-                    <div style={{ padding: "12px", textAlign: "center", color: "#94A3B8", fontSize: "12px" }}>
-                      Anda belum punya akses ke lembaga manapun.
-                    </div>
-                  ) : displayLembagas.map(l => (
-                    <button
-                      key={l.id}
-                      onClick={() => handleSwitchLembaga(l.id)}
-                      style={{
-                        display: "flex", alignItems: "flex-start", gap: "8px",
-                        padding: "8px 10px", borderRadius: "6px",
-                        fontSize: "13px", color: l.id === lembagaId ? "#16A34A" : "#334155",
-                        background: l.id === lembagaId ? "#F0FDF4" : "transparent",
-                        border: "none", cursor: "pointer", width: "100%", textAlign: "left",
-                      }}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ marginTop: "2px", flexShrink: 0, color: l.id === lembagaId ? "#16A34A" : "#CBD5E1" }}>
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                      </svg>
-                      <div>
-                        <div style={{ fontWeight: l.id === lembagaId ? "600" : "400" }}>{l.nama}</div>
-                        {l.nama_pt && <div style={{ fontSize: "11px", color: "#94A3B8" }}>{l.nama_pt}</div>}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
 
-        {/* Notification bell */}
-        <button
-          className="btn btn-ghost"
-          style={{ width: "36px", height: "36px", padding: 0, borderRadius: "8px", color: "#64748B" }}
-          title="Notifikasi"
+        {/* Dark mode toggle */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+          onClick={() => setIsDark(v => !v)}
+          title={isDark ? "Switch to light mode" : "Switch to dark mode"}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-          </svg>
-        </button>
+          {isDark ? <Sun size={15} className="text-amber-400" /> : <Moon size={15} className="text-slate-500" />}
+        </Button>
+
+        {/* Notifications */}
+        <Button variant="outline" size="icon" className="relative h-8 w-8 p-0 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <Bell size={15} className="text-slate-600 dark:text-slate-300" />
+          <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white ring-2 ring-white dark:ring-slate-900">
+            3
+          </span>
+        </Button>
 
         {/* User menu */}
-        <div ref={menuRef} style={{ position: "relative" }}>
-          <button
-            className="btn btn-ghost"
-            style={{
-              display: "flex", alignItems: "center", gap: "8px",
-              padding: "6px 8px", borderRadius: "8px",
-              color: "#334155",
-            }}
-            onClick={() => setUserMenuOpen(v => !v)}
-          >
-            <div style={{
-              width: "32px", height: "32px",
-              borderRadius: "50%",
-              background: "#E8F5E9",
-              border: "1px solid #C8E6C9",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="#4CAF50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-              </svg>
-            </div>
-            <div style={{ textAlign: "left" }}>
-              <div style={{ fontSize: "13px", fontWeight: "500", color: "#1E293B", lineHeight: "1.2" }}>
-                {user.nama || user.email?.split("@")[0] || "—"}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 gap-2 pl-2 pr-3 hover:bg-slate-100 dark:hover:bg-slate-800">
+              <Avatar className="h-7 w-7">
+                <AvatarFallback className="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 text-xs font-semibold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="hidden md:flex flex-col items-start">
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-200 leading-tight">
+                  {user.nama || user.email?.split("@")[0] || "—"}
+                </span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                  {user.role || "—"}
+                </span>
               </div>
-              <div style={{ fontSize: "11px", color: "#64748B", lineHeight: "1.2" }}>
-                {user.role || "—"}
+              <ChevronDown size={12} className="text-slate-400" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 dark:bg-slate-900 dark:border-slate-700">
+            <DropdownMenuLabel className="font-normal dark:text-slate-200">
+              <div className="flex flex-col space-y-1">
+                <p className="text-sm font-medium leading-none">{user.nama || "—"}</p>
+                <p className="text-xs leading-none text-slate-500 dark:text-slate-400">{user.email || "—"}</p>
               </div>
-            </div>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ color: "#94A3B8", marginLeft: "2px" }}>
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-
-          {/* Dropdown */}
-          {userMenuOpen && (
-            <div style={{
-              position: "absolute",
-              top: "calc(100% + 8px)",
-              right: 0,
-              width: "220px",
-              background: "#FFFFFF",
-              border: "1px solid #E2E8F0",
-              borderRadius: "8px",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-              overflow: "hidden",
-              zIndex: 100,
-            }}>
-              <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9" }}>
-                <div style={{ fontSize: "13px", fontWeight: "600", color: "#1E293B" }}>
-                  {user.nama || "—"}
-                </div>
-                <div style={{ fontSize: "12px", color: "#64748B", marginTop: "2px" }}>
-                  {user.email || "—"}
-                </div>
-              </div>
-              <div style={{ padding: "6px" }}>
-                <Link
-                  to="/admin/profile"
-                  style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 10px", borderRadius: "6px", fontSize: "13px", color: "#334155", textDecoration: "none" }}
-                  onClick={() => setUserMenuOpen(false)}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                  </svg>
-                  Profil Saya
-                </Link>
-                <Link
-                  to="/admin/settings"
-                  style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 10px", borderRadius: "6px", fontSize: "13px", color: "#334155", textDecoration: "none" }}
-                  onClick={() => setUserMenuOpen(false)}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
-                    <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                  </svg>
-                  Pengaturan
-                </Link>
-              </div>
-              <div style={{ padding: "6px", borderTop: "1px solid #F1F5F9" }}>
-                <button
-                  onClick={handleLogout}
-                  style={{
-                    display: "flex", alignItems: "center", gap: "8px",
-                    padding: "8px 10px", borderRadius: "6px",
-                    fontSize: "13px", color: "#DC2626",
-                    background: "transparent", border: "none",
-                    cursor: "pointer", width: "100%", textAlign: "left",
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-                  </svg>
-                  Keluar
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator className="dark:bg-slate-700" />
+            <DropdownMenuItem asChild className="dark:text-slate-200 dark:focus:bg-slate-800">
+              <Link to="/admin/profile" className="flex items-center cursor-pointer">
+                <User size={14} className="mr-2" />
+                Profil Saya
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild className="dark:text-slate-200 dark:focus:bg-slate-800">
+              <Link to="/admin/settings" className="flex items-center cursor-pointer">
+                <Settings size={14} className="mr-2" />
+                Pengaturan
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="dark:bg-slate-700" />
+            <DropdownMenuItem
+              onClick={handleLogout}
+              className="text-red-600 dark:text-red-400 cursor-pointer focus:text-red-600 dark:focus:text-red-400 focus:bg-red-50 dark:focus:bg-red-950"
+            >
+              <LogOut size={14} className="mr-2" />
+              Keluar
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
 }
-
-export default AdminHeader;

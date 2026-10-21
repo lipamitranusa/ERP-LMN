@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { formatDate } from "@/utils/dateFormat";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { Button } from "@/components/ui/button";
 
 /**
  * MasterBiayaTA — Master Biaya Honor Tenaga Ahli per tipe faskes.
@@ -93,7 +94,7 @@ export default function MasterBiayaTA() {
             Tarif bruto honor per peran dan tipe faskes. PPN mengikuti Konfigurasi Pajak aktif.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={startCreate}>+ Tambah Tarif</button>
+        <Button onClick={startCreate}>+ Tambah Tarif</Button>
       </div>
 
       <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
@@ -164,11 +165,11 @@ export default function MasterBiayaTA() {
                   <td style={{ color: "#64748B", fontSize: "12px" }}>{row.keterangan || "—"}</td>
                   <td>
                     <div style={{ display: "flex", gap: "4px" }}>
-                      <button className="btn btn-ghost btn-sm" onClick={() => startEdit(row)}>Edit</button>
+                      <Button variant="ghost" size="sm" onClick={() => startEdit(row)}>Edit</Button>
                       {row.aktif ? (
-                        <button className="btn btn-ghost btn-sm" style={{ color: "#DC2626" }} onClick={() => deactivate(row)}>Nonaktifkan</button>
+                        <Button variant="ghost" size="sm" style={{ color: "#DC2626" }} onClick={() => deactivate(row)}>Nonaktifkan</Button>
                       ) : (
-                        <button className="btn btn-ghost btn-sm" style={{ color: "#16A34A" }} onClick={() => activate(row)}>Aktifkan</button>
+                        <Button variant="ghost" size="sm" style={{ color: "#16A34A" }} onClick={() => activate(row)}>Aktifkan</Button>
                       )}
                     </div>
                   </td>
@@ -234,8 +235,8 @@ function FormTarif({ form, setForm, jenisFaskes, editing, saving, onSubmit, onCa
         </div>
       </div>
       <div style={{ display: "flex", gap: "8px", marginTop: "16px", justifyContent: "flex-end" }}>
-        <button type="button" className="btn btn-secondary" onClick={onCancel}>Batal</button>
-        <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Menyimpan..." : "Simpan"}</button>
+        <Button type="button" variant="outline" onClick={onCancel}>Batal</Button>
+        <Button type="submit" disabled={saving}>{saving ? "Menyimpan..." : "Simpan"}</Button>
       </div>
     </form>
   );

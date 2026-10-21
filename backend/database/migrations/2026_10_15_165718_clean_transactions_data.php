@@ -80,7 +80,7 @@ return new class extends Migration
 
         // 19. Audit trail — hapus yang merujuk ke tabel transaksi (keep master-only)
         DB::table('audit_trail')
-            ->whereIn('table_name', [
+            ->whereIn('target_type', [
                 'siklus_akreditasi', 'pks', 'invoice', 'bukti_pembayaran',
                 'penugasan', 'laporan', 'laporan_verifikasi', 'ledger_entries',
                 'dokumen_permohonan', 'checklist_validasi', 'catatan_revisi',

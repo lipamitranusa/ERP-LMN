@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { useHistory } from "react-router-dom";
 import { useApi } from "@/hooks/useApi";
 import { formatDate } from "../../utils/dateFormat";
+import { Button } from "@/components/ui/button";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -285,13 +286,11 @@ export default function PiutangDashboard() {
               <span style={{ fontSize: "12px", color: "#475569" }}>Hanya yang sudah jatuh tempo</span>
             </label>
             {(filterStatus || filterJatuhTempo) && (
-              <button
-                className="btn btn-secondary"
-                style={{ fontSize: "12px", padding: "6px 12px" }}
+              <Button
+                variant="outline"
+                style={{ fontSize: "12px" }}
                 onClick={() => { setFilterStatus(""); setFilterJatuhTempo(false); }}
-              >
-                Reset filter
-              </button>
+              >Reset filter</Button>
             )}
           </div>
         </div>

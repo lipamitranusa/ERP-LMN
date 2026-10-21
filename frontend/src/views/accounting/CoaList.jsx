@@ -1,5 +1,19 @@
 import React, { useState, useMemo } from "react";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const JENIS_GROUP = {
   'NERACA - AKTIVA': 'aktiva_lancar,aktiva_tetap',
@@ -16,35 +30,33 @@ const JENIS_LABEL = {
 };
 const KELOMPOK_LABEL = { debit: "Debit", kredit: "Kredit", debit_kredit: "Debit / Kredit" };
 
-function Modal({ title, children, onClose }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
-      <div style={{ background: "#fff", borderRadius: "8px", width: "500px", maxHeight: "90vh", overflowY: "auto" }}>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "600" }}>{title}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "#64748B" }}>×</button>
-        </div>
-        <div style={{ padding: "20px" }}>{children}</div>
-      </div>
-    </div>
-  );
-}
+const EMPTY_FORM = { kode: "", nama: "", jenis: "", kelompok: "debit_kredit", is_aktif: true };
+
+const schema = z.object({
+  kode: z.string().min(1, "Kode akun wajib diisi"),
+  nama: z.string().min(1, "Nama akun wajib diisi"),
+  jenis: z.string().min(1, "Jenis wajib dipilih"),
+  kelompok: z.string().default("debit_kredit"),
+  is_aktif: z.boolean().default(true),
+});
 
 export default function AccountingCoa() {
   const [filter, setFilter] = useState({ jenis: "", q: "" });
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
-  const [form, setForm] = useState({ kode: "", nama: "", jenis: "", kelompok: "debit_kredit", is_aktif: true });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
 
   const { data: apiData, isLoading: loading } = useApi("coa", "/keuangan/accounting/coa");
   const data = apiData?.data || [];
 
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: EMPTY_FORM,
+  });
+
   const saveMutation = useMutateKeys(["coa"], {
     onSuccess: () => setShowForm(false),
-    onError: (err) => { setError(err.message); setSaving(false); },
   });
+
   const deleteMutation = useMutateKeys(["coa"], {
     onError: (err) => alert(err.message),
   });
@@ -63,57 +75,75 @@ export default function AccountingCoa() {
     return Object.values(groups);
   }, [data, filter]);
 
-  const openNew = () => { setEditItem(null); setForm({ kode: "", nama: "", jenis: "", kelompok: "debit_kredit", is_aktif: true }); setError(""); setShowForm(true); };
-  const openEdit = (a) => { setEditItem(a); setForm({ kode: a.kode, nama: a.nama, jenis: a.jenis, kelompok: a.kelompok, is_aktif: a.is_aktif }); setError(""); setShowForm(true); };
+  function openNew() {
+    setEditItem(null);
+    reset({ ...EMPTY_FORM, kode: "" });
+    setShowForm(true);
+  }
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    if (!form.kode || !form.nama || !form.jenis) { setError("Kode, Nama, dan Jenis wajib diisi."); return; }
-    setSaving(true);
+  function openEdit(a) {
+    setEditItem(a);
+    reset({ kode: a.kode, nama: a.nama, jenis: a.jenis, kelompok: a.kelompok, is_aktif: a.is_aktif });
+    setShowForm(true);
+  }
+
+  const onSubmit = (formData) => {
     saveMutation.mutate({
       path: editItem ? `/keuangan/accounting/coa/${editItem.id}` : "/keuangan/accounting/coa",
       method: editItem ? "PUT" : "POST",
-      body: form,
+      body: formData,
     });
   };
 
-  const handleDelete = async (a) => {
+  function handleDelete(a) {
     if (!window.confirm(`Hapus akun ${a.kode} - ${a.nama}?`)) return;
     deleteMutation.mutate({ path: `/keuangan/accounting/coa/${a.id}`, method: "DELETE" });
-  };
+  }
 
   return (
     <div>
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div className="mb-6 flex justify-between items-start">
         <div>
-          <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#1E293B" }}>Chart of Accounts</h1>
-          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>Master akun perkiraan — struktur standar akuntansi.</p>
+          <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Chart of Accounts</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5">Master akun perkiraan — struktur standar akuntansi.</p>
         </div>
-        <button className="btn btn-primary" onClick={openNew} style={{ background: "#2563EB" }}>+ Tambah Akun</button>
+        <Button onClick={openNew} style={{ background: "#2563EB" }}>+ Tambah Akun</Button>
       </div>
 
-      <div className="card" style={{ padding: "16px 20px", marginBottom: "16px" }}>
-        <div style={{ display: "flex", gap: "12px", alignItems: "end" }}>
-          <div style={{ flex: 1 }}>
-            <label className="form-label">Cari</label>
-            <input className="form-input" placeholder="Kode atau nama..." value={filter.q} onChange={e => setFilter(f => ({ ...f, q: e.target.value }))} />
+      <Card className="p-4 mb-4">
+        <div className="flex gap-3 items-end">
+          <div className="flex-1 space-y-1">
+            <Label htmlFor="coa-cari">Cari</Label>
+            <Input
+              id="coa-cari"
+              placeholder="Kode atau nama..."
+              value={filter.q}
+              onChange={e => setFilter(f => ({ ...f, q: e.target.value }))}
+            />
           </div>
-          <div>
-            <label className="form-label">Jenis</label>
-            <select className="form-input" value={filter.jenis} onChange={e => setFilter(f => ({ ...f, jenis: e.target.value }))}>
+          <div className="space-y-1">
+            <Label htmlFor="coa-jenis-filter">Jenis</Label>
+            <select
+              id="coa-jenis-filter"
+              className="flex h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+              value={filter.jenis}
+              onChange={e => setFilter(f => ({ ...f, jenis: e.target.value }))}
+            >
               <option value="">Semua</option>
               {Object.entries(JENIS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
-          <button className="btn btn-secondary" onClick={() => setFilter({ jenis: "", q: "" })}>Reset</button>
+          <Button variant="outline" size="sm" onClick={() => setFilter({ jenis: "", q: "" })}>Reset</Button>
         </div>
-      </div>
+      </Card>
 
-      {loading ? <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat...</div>
-        : grouped.map(g => (
-          <div key={g.label} style={{ marginBottom: "24px" }}>
-            <div style={{ fontSize: "11px", fontWeight: "700", color: "#64748B", textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 0 8px" }}>{g.label}</div>
-            <div className="card" style={{ padding: 0 }}>
+      {loading ? (
+        <div className="text-center py-10 text-slate-400 dark:text-slate-500 text-sm">Memuat...</div>
+      ) : (
+        grouped.map(g => (
+          <div key={g.label} className="mb-6">
+            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wide pb-2">{g.label}</div>
+            <Card className="overflow-hidden">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -129,64 +159,80 @@ export default function AccountingCoa() {
                   {g.items.map(a => (
                     <tr key={a.id} style={{ opacity: a.is_aktif ? 1 : 0.5 }}>
                       <td style={{ fontFamily: "ui-monospace, monospace", fontSize: "13px", fontWeight: "600" }}>{a.kode}</td>
-                      <td style={{ fontSize: "13px" }}>{a.nama}</td>
-                      <td style={{ fontSize: "12px", color: "#64748B" }}>{JENIS_LABEL[a.jenis] || a.jenis}</td>
-                      <td style={{ fontSize: "12px", color: "#64748B" }}>{KELOMPOK_LABEL[a.kelompok] || a.kelompok}</td>
+                      <td className="text-sm">{a.nama}</td>
+                      <td className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">{JENIS_LABEL[a.jenis] || a.jenis}</td>
+                      <td className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">{KELOMPOK_LABEL[a.kelompok] || a.kelompok}</td>
                       <td style={{ textAlign: "center" }}>
                         <span style={{ padding: "2px 8px", borderRadius: "9999px", fontSize: "11px", fontWeight: "600", background: a.is_aktif ? "#DCFCE7" : "#F1F5F9", color: a.is_aktif ? "#166534" : "#94A3B8" }}>
                           {a.is_aktif ? "Aktif" : "Nonaktif"}
                         </span>
                       </td>
                       <td style={{ textAlign: "center" }}>
-                        <button className="btn btn-ghost" style={{ fontSize: "11px", padding: "2px 8px", color: "#2563EB" }} onClick={() => openEdit(a)}>Edit</button>
-                        <button className="btn btn-ghost" style={{ fontSize: "11px", padding: "2px 8px", color: "#DC2626" }} onClick={() => handleDelete(a)}>Hapus</button>
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(a)} className="text-xs h-7 px-2" style={{ color: "oklch(0.65 0.20 255)" }}>Edit</Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(a)} className="text-xs h-7 px-2" style={{ color: "#DC2626" }}>Hapus</Button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+            </Card>
           </div>
-        ))}
+        ))
+      )}
 
-      {showForm && (
-        <Modal title={editItem ? "Edit Akun" : "Tambah Akun"} onClose={() => setShowForm(false)}>
-          <form onSubmit={handleSave}>
-            {error && <div style={{ background: "#FEE2E2", color: "#991B1B", padding: "8px 12px", borderRadius: "4px", marginBottom: "12px", fontSize: "13px" }}>{error}</div>}
-            <div style={{ marginBottom: "12px" }}>
-              <label className="form-label">Kode Akun *</label>
-              <input className="form-input" value={form.kode} onChange={e => setForm(f => ({ ...f, kode: e.target.value }))} placeholder="mis. 1101" disabled={!!editItem} required />
+      <Dialog open={showForm} onOpenChange={v => { if (!saveMutation.isPending) { setShowForm(v); if (!v) reset(EMPTY_FORM); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editItem ? "Edit Akun" : "Tambah Akun"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="coa-kode">Kode Akun *</Label>
+              <Input id="coa-kode" {...register("kode")} placeholder="mis. 1101" disabled={!!editItem} />
+              {errors.kode && <p className="text-xs text-red-500 mt-1">{errors.kode.message}</p>}
             </div>
-            <div style={{ marginBottom: "12px" }}>
-              <label className="form-label">Nama Akun *</label>
-              <input className="form-input" value={form.nama} onChange={e => setForm(f => ({ ...f, nama: e.target.value }))} placeholder="mis. Bank BCA" required />
+            <div className="space-y-1.5">
+              <Label htmlFor="coa-nama">Nama Akun *</Label>
+              <Input id="coa-nama" {...register("nama")} placeholder="mis. Bank BCA" />
+              {errors.nama && <p className="text-xs text-red-500 mt-1">{errors.nama.message}</p>}
             </div>
-            <div style={{ marginBottom: "12px" }}>
-              <label className="form-label">Jenis *</label>
-              <select className="form-input" value={form.jenis} onChange={e => setForm(f => ({ ...f, jenis: e.target.value }))} required>
+            <div className="space-y-1.5">
+              <Label htmlFor="coa-jenis">Jenis *</Label>
+              <select
+                id="coa-jenis"
+                className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+                {...register("jenis")}
+              >
                 <option value="">— Pilih Jenis —</option>
                 {Object.entries(JENIS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
+              {errors.jenis && <p className="text-xs text-red-500 mt-1">{errors.jenis.message}</p>}
             </div>
-            <div style={{ marginBottom: "12px" }}>
-              <label className="form-label">Kelompok / Saldo Normal *</label>
-              <select className="form-input" value={form.kelompok} onChange={e => setForm(f => ({ ...f, kelompok: e.target.value }))}>
+            <div className="space-y-1.5">
+              <Label htmlFor="coa-kelompok">Kelompok / Saldo Normal</Label>
+              <select
+                id="coa-kelompok"
+                className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+                {...register("kelompok")}
+              >
                 <option value="debit_kredit">Debit / Kredit</option>
                 <option value="debit">Debit</option>
                 <option value="kredit">Kredit</option>
               </select>
             </div>
-            <div style={{ marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
-              <input type="checkbox" checked={form.is_aktif} onChange={e => setForm(f => ({ ...f, is_aktif: e.target.checked }))} />
-              <label style={{ fontSize: "13px" }}>Akun aktif</label>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" {...register("is_aktif")} id="coa-aktif" className="h-4 w-4 rounded border-slate-300" />
+              <Label htmlFor="coa-aktif" className="text-sm font-normal cursor-pointer">Akun aktif</Label>
             </div>
-            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Batal</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Menyimpan..." : "Simpan"}</button>
-            </div>
+            <DialogFooter className="gap-2 sm:gap-0 border-t pt-4">
+              <Button type="button" variant="outline" onClick={() => setShowForm(false)} disabled={saveMutation.isPending}>Batal</Button>
+              <Button type="submit" disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? "Menyimpan..." : "Simpan"}
+              </Button>
+            </DialogFooter>
           </form>
-        </Modal>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

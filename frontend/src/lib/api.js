@@ -7,6 +7,9 @@ const API_BASE = '/api';
 async function api(path, options = {}) {
   const token = localStorage.getItem('token');
   const headers = { ...options.headers };
+  if (path == null) {
+    throw new Error('api(path): path is required');
+  }
   // Jangan set Content-Type kalau body FormData — biar browser isi boundary-nya
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = headers['Content-Type'] || 'application/json';
@@ -17,7 +20,8 @@ async function api(path, options = {}) {
   const lembagaId = localStorage.getItem('lembaga_id');
   let url = `${API_BASE}${path}`;
   if (lembagaId) {
-    const separator = path.includes('?') ? '&' : '?';
+    const safePath = typeof path === 'string' ? path : '';
+    const separator = safePath.includes('?') ? '&' : '?';
     url = `${url}${separator}lembaga_id=${encodeURIComponent(lembagaId)}`;
   }
 

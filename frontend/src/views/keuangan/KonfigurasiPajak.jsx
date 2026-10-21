@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { formatDate } from "@/utils/dateFormat";
 import { useApi, useMutate } from "@/hooks/useApi";
+import { Button } from "@/components/ui/button";
 
 function formatRp(n) {
   return `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
@@ -8,13 +9,13 @@ function formatRp(n) {
 
 function LabelBadge({ children, tone }) {
   const tones = {
-    ppn: { bg: "#DCFCE7", color: "#166534" },
-    pph21: { bg: "#EDE9F6", color: "#5E35B1" },
-    default: { bg: "#F1F5F9", color: "#475569" },
+    ppn: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+    pph21: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+    default: "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:text-slate-500",
   };
-  const t = tones[children] || tones.default;
+  const cls = tones[children] || tones.default;
   return (
-    <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: "9999px", fontSize: "11px", fontWeight: "700", background: t.bg, color: t.color, textTransform: "uppercase" }}>
+    <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${cls}`}>
       {children}
     </span>
   );
@@ -126,7 +127,7 @@ export default function KonfigurasiPajak() {
       {/* Tambah Tarif */}
       <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ fontSize: "14px", fontWeight: "600", color: "#1E293B" }}>Riwayat Tarif</div>
-        <button onClick={() => { resetForm(); setShowForm(!showForm); }} className="btn btn-primary" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        <Button onClick={() => { resetForm(); setShowForm(!showForm); }}>
           {showForm ? "Batal" : (
             <>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14">
@@ -135,7 +136,7 @@ export default function KonfigurasiPajak() {
               Tambah Tarif Baru
             </>
           )}
-        </button>
+        </Button>
       </div>
 
       {showForm && (
@@ -186,12 +187,12 @@ export default function KonfigurasiPajak() {
             )}
 
             <div style={{ display: "flex", gap: "10px" }}>
-              <button type="submit" className="btn btn-primary" disabled={submitMutate.isPending}>
+              <Button type="submit" disabled={submitMutate.isPending}>
                 {submitMutate.isPending ? "Menyimpan..." : "Simpan Tarif"}
-              </button>
-              <button type="button" onClick={() => setShowForm(false)} className="btn btn-ghost">
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>
                 Batal
-              </button>
+              </Button>
             </div>
           </form>
         </div>

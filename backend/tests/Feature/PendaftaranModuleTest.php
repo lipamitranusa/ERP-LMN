@@ -393,10 +393,13 @@ class PendaftaranModuleTest extends TestCase
         $resp->assertOk()
             ->assertJsonPath('status_kelengkapan', 'belum_lengkap');
 
-        // Status lengkap jika semua item lengkap
+        // Status lengkap HANYA jika ketiga dokumen wajib (dfo, surat_permohonan,
+        // self_assessment) lengkap. Dokumen pendukung boleh menyusul.
         $this->actingAsAdmin()->putJson("/api/pendaftaran/siklus/{$siklus->id}/checklist", [
             'items' => [
                 ['jenis_dokumen' => 'dfo', 'status_validasi' => 'lengkap'],
+                ['jenis_dokumen' => 'surat_permohonan', 'status_validasi' => 'lengkap'],
+                ['jenis_dokumen' => 'self_assessment', 'status_validasi' => 'lengkap'],
                 ['jenis_dokumen' => 'sisdmk', 'status_validasi' => 'lengkap'],
                 ['jenis_dokumen' => 'aspak', 'status_validasi' => 'lengkap'],
                 ['jenis_dokumen' => 'inm', 'status_validasi' => 'lengkap'],
@@ -428,6 +431,48 @@ class PendaftaranModuleTest extends TestCase
 
         $siklus->refresh();
         $this->assertEquals('belum_lengkap', $siklus->status_kelengkapan);
+    }
+
+    public function test_supporting_docs_complete_without_wajib_keeps_status_belum_lengkap(): void
+    {
+        // Dokumen pendukung (SISDMK/ASPAK/INM/IKP) lengkap tapi 2 dokumen
+        // wajib masih belum → status TIDAK boleh naik ke 'lengkap'.
+        $lembaga = Lembaga::first();
+        $faskesId = AkunPengguna::where('email', 'klinik-sejahtera@faskes.local')->first()->faskes_id;
+
+        $siklus = SiklusAkreditasi::create([
+            'id' => (string) Str::uuid(),
+            'faskes_id' => $faskesId,
+            'lembaga_id' => $lembaga->id,
+            'tanggal_pengajuan' => now()->toDateString(),
+            'status' => 'menunggu_dokumen',
+            'status_kelengkapan' => 'menunggu',
+            'created_at' => now(),
+        ]);
+
+        $this->actingAsAdmin()->putJson("/api/pendaftaran/siklus/{$siklus->id}/checklist", [
+            'items' => [
+                ['jenis_dokumen' => 'sisdmk', 'status_validasi' => 'lengkap'],
+                ['jenis_dokumen' => 'aspak', 'status_validasi' => 'lengkap'],
+                ['jenis_dokumen' => 'inm', 'status_validasi' => 'lengkap'],
+                ['jenis_dokumen' => 'ikp', 'status_validasi' => 'lengkap'],
+            ],
+        ])->assertJsonPath('status_kelengkapan', 'belum_lengkap');
+
+        // Baru lengkapi ketiga wajib → status menjadi lengkap.
+        $resp = $this->actingAsAdmin()->putJson("/api/pendaftaran/siklus/{$siklus->id}/checklist", [
+            'items' => [
+                ['jenis_dokumen' => 'dfo', 'status_validasi' => 'lengkap'],
+                ['jenis_dokumen' => 'surat_permohonan', 'status_validasi' => 'lengkap'],
+                ['jenis_dokumen' => 'self_assessment', 'status_validasi' => 'lengkap'],
+            ],
+        ]);
+        $resp->assertJsonPath('status_kelengkapan', 'lengkap');
+
+        $siklus->refresh();
+        $this->assertEquals('lengkap', $siklus->status_kelengkapan);
+        // Cek listing wajib belum-lengkap kini kosong.
+        $resp->assertJsonPath('dokumen_wajib_belum_lengkap', []);
     }
 
     // ─── FR-1.4: Catatan revisi ─────────────────────────────────────────────
