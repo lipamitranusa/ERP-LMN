@@ -10,12 +10,18 @@ import { useLembaga } from "@/contexts/LembagaContext";
  */
 export function useApi(key, path, options = {}) {
   const { lembagaId } = useLembaga();
-  return useQuery({
+  const query = useQuery({
     queryKey: [...(Array.isArray(key) ? key : [key]), lembagaId || "global"],
     queryFn: () => api(path),
     enabled: options.enabled !== false && Boolean(path),
     ...options,
   });
+
+  // React Query v4: `isLoading` = status "loading", yang juga true untuk query
+  // yang disabled dan belum pernah fetch — sehingga halaman menampilkan
+  // spinner permanen. `isInitialLoading` (= isLoading && isFetching) hanya
+  // true saat data benar-benar sedang dimuat.
+  return { ...query, isLoading: query.isInitialLoading };
 }
 
 /**
@@ -43,6 +49,13 @@ export function useMutate(options = {}) {
  *   - string[][] ([["foo"],["bar"]]) → invalidate BOTH prefixes separately (first elem being
  *                                      an array signals "multiple separate keys" instead of
  *                                      one compound prefix)
+ *
+ * PENTING: bentuk datar ["foo","bar"] BUKAN berarti dua key terpisah — itu satu
+ * key gabungan "foo" lalu "bar". Karena useApi menambah scope lembaga di akhir
+ * key, prefix gabungan seperti itu tidak akan cocok dengan query yang
+ * terdaftar (["foo", filter, lemmaId]) sehingga invalidate diam-diam tidak
+ * berlaku dan UI tetap menampilkan data lama. Untuk membatalkan beberapa
+ * key terpisah, WAJIB pakai bentuk array-of-array: [["foo"], ["bar"]].
  */
 export function useMutateKeys(invalidateKeys, options = {}) {
   const queryClient = useQueryClient();

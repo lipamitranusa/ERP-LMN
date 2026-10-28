@@ -105,6 +105,9 @@ export default function UserManagement() {
   const selectedRole = roles.find(r => r.id === formRoleId);
   const needsFaskes = selectedRole?.nama_role === "Faskes";
   const needsTenagaAhli = selectedRole && ["Surveior", "Verifikator"].includes(selectedRole.nama_role);
+  // Reksa boleh ditautkan ke tenaga ahli (opsional) supaya honor reksa
+  // membawa data rekening saat pembayaran AP.
+  const bolehPilihTenagaAhli = selectedRole && ["Surveior", "Verifikator", "Rekomendator"].includes(selectedRole.nama_role);
 
   // Sync schema edit mode after mount
   useEffect(() => {
@@ -346,15 +349,22 @@ export default function UserManagement() {
                   {errors.faskes_id && <p className="text-xs text-red-500 mt-1">{errors.faskes_id.message}</p>}
                 </div>
               )}
-              {needsTenagaAhli && (
+              {bolehPilihTenagaAhli && (
                 <div className="col-span-2 space-y-1">
-                  <Label htmlFor="um-ta">Tenaga Ahli <span className="text-red-500">*</span></Label>
+                  <Label htmlFor="um-ta">
+                    Tenaga Ahli {needsTenagaAhli && <span className="text-red-500">*</span>}
+                  </Label>
                   <select id="um-ta" className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register("tenaga_ahli_id")}>
                     <option value="">— Pilih —</option>
                     {tenagaAhliList.map(ta => (
-                      <option key={ta.id} value={ta.id}>{ta.nama} ({ta.nomor_induk_surveior || "—"}){ta.has_akun ? " ✓" : ""}{ta.status_aktif === "Nonaktif" ? " [nonaktif]" : ""}</option>
+                      <option key={ta.id} value={ta.id}>{ta.nama} ({ta.nomor_induk_surveior || "—"}){ta.has_akun ? " ✓" : ""}{ta.status_aktif === "Nonaktif" ? " [nonaktif]" : ""}{ta.no_rekening ? "" : " · tanpa rekening"}</option>
                     ))}
                   </select>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                    {needsTenagaAhli
+                      ? "Tenaga ahli menjadi sumber data honor & pajak akun ini."
+                      : "Opsional. Bila diisi, data rekening tenaga ahli dipakai saat pembayaran honor AP reksa."}
+                  </p>
                   {errors.tenaga_ahli_id && <p className="text-xs text-red-500 mt-1">{errors.tenaga_ahli_id.message}</p>}
                 </div>
               )}

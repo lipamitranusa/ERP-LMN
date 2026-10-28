@@ -2,13 +2,15 @@ import React, { useState } from "react";
 import { useHistory, useParams } from "react-router-dom";
 import { formatDate } from "@/utils/dateFormat";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Banknote } from "lucide-react";
 import SettlementJournalPanel from "@/components/SettlementJournalPanel";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,12 +35,50 @@ function StatusBadge({ status }) {
 export default function HutangPajakDetail() {
   const history = useHistory();
   const { id } = useParams();
+  const { can } = useAuth();
+  const queryClient = useQueryClient();
   const [buktiFile, setBuktiFile] = useState(null);
+  const [creatingJurnal, setCreatingJurnal] = useState(false);
+  const [jurnalError, setJurnalError] = useState("");
 
   const { data: dataObj, isLoading } = useApi(["hutang-pajak-detail", id], "/keuangan/hutang-pajak/" + id);
   const data = dataObj?.data ?? null;
 
-  const mutate = useMutateKeys(["hutang-pajak-detail", id]);
+  const canPostJournal = can("Ledger/Keuangan", "Tambah");
+
+  // Tandai lunas → setelah sukses, invalidasi daftar + dashboard, lalu
+  // navigasi ke halaman daftar.
+  //
+  // refetchType: "all" penting — query daftar sedang TIDAK aktif (kita masih
+  // di halaman detail), jadi invalidate default ("active") hanya menandai
+  // cache basi tanpa menarik data baru. Dengan "all" + await, cache daftar
+  // ter-refresh dulu, sehingga halaman daftar langsung menampilkan status
+  // "dibayar" tanpa perlu refresh manual.
+  const mutate = useMutateKeys(
+    [["hutang-pajak-detail", id], ["hutang-pajak-list"], ["hutang-pajak-dashboard"]],
+    {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: ["hutang-pajak-list"], refetchType: "all" });
+        await queryClient.invalidateQueries({ queryKey: ["hutang-pajak-dashboard"], refetchType: "all" });
+        // React Query v4 menjadwalkan notifikasi perubahan state mutasi lewat
+        // microtask. Navigasi sinkron di dalam onSuccess bisa membuat
+        // komponen unmount sebelum notifikasi itu tiba → warning React 17
+        // "state update on an unmounted component". Menunda satu macrotask
+        // membuat notifikasi sampai selagi komponen masih mounted.
+        setTimeout(() => history.push("/admin/hutang-pajak"), 0);
+      },
+      onError: () => {},
+    }
+  );
+
+  // Buat jurnal Bank Keluar (Dr Utang PPh 21 / Cr Bank) untuk hutang ini.
+  const jurnalMutate = useMutateKeys(
+    [["hutang-pajak-detail", id], ["hutang-pajak-list"], ["hutang-pajak-dashboard"], ["settlement-source"]],
+    {
+      onSuccess: () => setCreatingJurnal(false),
+      onError: (err) => { setJurnalError(err.message); setCreatingJurnal(false); },
+    }
+  );
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
@@ -60,6 +100,16 @@ export default function HutangPajakDetail() {
     });
   };
 
+  function buatBankKeluar() {
+    setJurnalError("");
+    setCreatingJurnal(true);
+    jurnalMutate.mutate({
+      path: "/keuangan/settlement/bank-keluar-pajak",
+      method: "POST",
+      body: { hutang_pajak_id: id },
+    });
+  }
+
   if (isLoading && !data) return <div className="p-10 text-center text-sm" style={{ color: "#94A3B8" }}>Memuat detail hutang pajak...</div>;
   if (mutate.error && !data) return (
     <div className="p-10 text-center">
@@ -70,17 +120,46 @@ export default function HutangPajakDetail() {
   if (!data) return null;
 
   const isBelum = data.status === "belum_dibayar";
+  const sudahDijurnal = Boolean(data.sudah_dijurnal);
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={<div className="flex items-center gap-3"><span>Hutang PPh 21</span><StatusBadge status={data.status} /></div>}
         subtitle={data.nama_wajib_pajak ? `${data.nama_wajib_pajak} · NPWP: ${data.nomor_pokok_wajib_pajak || "—"}` : "—"}
-        actions={<Button variant="outline" onClick={() => history.push("/admin/hutang-pajak")}><ArrowLeft size={16} /> Kembali</Button>}
+        actions={
+          <div className="flex gap-2">
+            {!isBelum && canPostJournal && (sudahDijurnal ? (
+              <span
+                className="inline-flex items-center px-3 py-2 rounded-md text-[12px] font-semibold"
+                style={{ background: "#DCFCE7", color: "#166534" }}
+                title="Jurnal Bank Keluar sudah dibuat untuk hutang pajak ini."
+              >
+                Sudah dijurnal {data.jurnal_nomor ? `(${data.jurnal_nomor})` : ""}
+              </span>
+            ) : (
+              <Button
+                onClick={buatBankKeluar}
+                disabled={creatingJurnal || jurnalMutate.isLoading}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                <Banknote size={16} className="mr-1" />
+                {creatingJurnal ? "Membuat jurnal..." : "Buat Bank Keluar"}
+              </Button>
+            ))}
+            <Button variant="outline" onClick={() => history.push("/admin/hutang-pajak")}><ArrowLeft size={16} /> Kembali</Button>
+          </div>
+        }
       />
 
       {mutate.error && (
         <div className="p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">{mutate.error.message}</div>
+      )}
+
+      {jurnalError && (
+        <div className="p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+          Gagal membuat jurnal bank keluar: {jurnalError}
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-5">
@@ -202,7 +281,15 @@ export default function HutangPajakDetail() {
       )}
 
       {!isBelum && (
-        <SettlementJournalPanel refType="settlement_ap_pajak" refId={id} title="Jurnal Setor PPh 21" />
+        <SettlementJournalPanel
+          refType="settlement_ap_pajak"
+          refId={id}
+          title="Jurnal Setor PPh 21"
+          onCreate={canPostJournal && !sudahDijurnal ? buatBankKeluar : undefined}
+          creating={creatingJurnal || jurnalMutate.isLoading}
+          createLabel="Buat Jurnal Bank Keluar"
+          emptyMessage="Setor PPh 21 ke Ditjen Pajak ini belum diposting ke buku besar. Klik tombol di bawah untuk membuat jurnal Bank Keluar (Debit Utang PPh 21 / Kredit Kas-Bank)."
+        />
       )}
     </div>
   );

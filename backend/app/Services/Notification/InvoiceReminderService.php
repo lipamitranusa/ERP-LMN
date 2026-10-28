@@ -5,6 +5,8 @@ namespace App\Services\Notification;
 use App\Models\Invoice;
 use App\Models\NotifikasiTagihan;
 use App\Models\Penugasan;
+use App\Services\Invoice\InvoicePdfGenerator;
+use App\Services\Invoice\TagihanService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -31,7 +33,11 @@ class InvoiceReminderService
     public const JENIS_H1 = 'tagihan_h1';
     public const JENIS_OVERDUE = 'tagihan_overdue';
 
-    public function __construct(private Notifier $notifier) {}
+    public function __construct(
+        private Notifier $notifier,
+        private InvoicePdfGenerator $invoicePdf,
+        private TagihanService $tagihanService,
+    ) {}
 
     /**
      * Cari invoice yang perlu dikirimi reminder hari ini, lalu kirim.
@@ -104,7 +110,7 @@ class InvoiceReminderService
             $target = $today->copy()->addDays($offset)->toDateString();
             $jenis = $offset === 3 ? self::JENIS_H3 : self::JENIS_H1;
 
-            $invoices = Invoice::with('siklus.faskes')
+            $invoices = Invoice::with('siklus.faskes', 'siklus.lembaga')
                 ->whereIn('status', [Invoice::STATUS_BELUM_BAYAR, Invoice::STATUS_SEBAGIAN])
                 ->whereDate('due_date', $target)
                 ->get();
@@ -125,7 +131,7 @@ class InvoiceReminderService
     public function candidatesForOverdue(): \Generator
     {
         $today = now()->startOfDay()->toDateString();
-        $invoices = Invoice::with('siklus.faskes')
+        $invoices = Invoice::with('siklus.faskes', 'siklus.lembaga')
             ->whereIn('status', [Invoice::STATUS_BELUM_BAYAR, Invoice::STATUS_SEBAGIAN])
             ->whereDate('due_date', '<', $today)
             ->get();
@@ -182,7 +188,31 @@ class InvoiceReminderService
             siklusId: $invoice->siklus_id,
             jenis: $jenis,
             penugasanId: $penugasanId,
+            attachments: $this->buildAttachments($invoice),
+            invoiceId: $invoice->id,
         );
+    }
+
+    /**
+     * Lampiran PDF invoice untuk kanal email.
+     */
+    private function buildAttachments(Invoice $invoice): array
+    {
+        try {
+            $pdf = $this->invoicePdf->generate($this->tagihanService->build($invoice));
+
+            return [[
+                'name' => $pdf['filename'],
+                'content' => $pdf['content'],
+                'mime' => 'application/pdf',
+            ]];
+        } catch (\Throwable $e) {
+            Log::error('invoice.reminder.pdf_failed', [
+                'invoice_id' => $invoice->id,
+                'error' => $e->getMessage(),
+            ]);
+            return [];
+        }
     }
 
     private function buildMessage(Invoice $invoice, string $jenis, int $daysToDue): string
@@ -190,23 +220,24 @@ class InvoiceReminderService
         $nomor = $invoice->nomor_invoice;
         $total = number_format((float) $invoice->total_tagihan, 0, ',', '.');
         $due = Carbon::parse($invoice->due_date)->translatedFormat('d F Y');
+        $lembaga = $invoice->siklus?->lembaga?->nama ?? 'Lembaga Akreditasi';
 
         return match ($jenis) {
             self::JENIS_H3 => "Yth. {$invoice->siklus->faskes->nama},\n\n"
                 . "Invoice {$nomor} sebesar Rp {$total} akan jatuh tempo dalam 3 hari ({$due}). "
                 . "Mohon lakukan pembayaran tepat waktu agar proses survei tetap berjalan.\n\n"
-                . "Terima kasih,\nLIPA MITRA NUSA",
+                . "Terima kasih,\n{$lembaga}",
 
             self::JENIS_H1 => "Yth. {$invoice->siklus->faskes->nama},\n\n"
                 . "Invoice {$nomor} sebesar Rp {$total} akan jatuh tempo BESOK ({$due}). "
                 . "Mohon segera lakukan pembayaran.\n\n"
-                . "Terima kasih,\nLIPA MITRA NUSA",
+                . "Terima kasih,\n{$lembaga}",
 
             self::JENIS_OVERDUE => "Yth. {$invoice->siklus->faskes->nama},\n\n"
                 . "Invoice {$nomor} sebesar Rp {$total} sudah jatuh tempo sejak {$due}. "
                 . "Proses survei Anda saat ini sedang berjalan — mohon segera melunasi pembayaran.\n\n"
                 . "Tidak ada sanksi atau pembatalan proses atas keterlambatan ini; pembayaran tetap dipantau secara terpisah.\n\n"
-                . "Terima kasih,\nLIPA MITRA NUSA",
+                . "Terima kasih,\n{$lembaga}",
 
             default => "Invoice {$nomor} belum dibayar.",
         };

@@ -43,6 +43,7 @@ export default function RekomendasiSettings() {
 
   const current = defaultData?.data || null;
   const candidates = Array.isArray(candidatesData?.data) ? candidatesData.data : [];
+  const lemmaAktif = candidatesData?.lembaga || null;
 
   const setDefaultMutate = useMutate({
     onSuccess: (d) => {
@@ -64,7 +65,7 @@ export default function RekomendasiSettings() {
   });
 
   function openEdit() {
-    setEditSelected(current?.user_id || user.id || "");
+    setEditSelected(current?.user_id || "");
     setEditOpen(true);
   }
 
@@ -130,10 +131,22 @@ export default function RekomendasiSettings() {
                   <div style={{ fontSize: "11px", color: "#64748B", marginTop: "2px" }}>
                     Role: {current.role} {current.tenaga_ahli && `· TA: ${current.tenaga_ahli.nomor_induk_surveior}`}
                   </div>
+                  {current.tenaga_ahli?.no_rekening && (
+                    <div style={{ fontSize: "11px", color: "#64748B", marginTop: "2px" }}>
+                      Rekening: {current.tenaga_ahli.no_rekening} ({current.tenaga_ahli.nama_bank}) — {current.tenaga_ahli.atas_nama_rekening}
+                    </div>
+                  )}
+                  {current && !current.tenaga_ahli?.no_rekening && (
+                    <div style={{ fontSize: "11px", color: "#B45309", marginTop: "4px" }}>
+                      Belum ada data rekening. Tautkan akun ini ke tenaga ahli di{" "}
+                      <strong>Manajemen Akun</strong> agar honor reksa membawa rekening saat pembayaran AP.
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div style={{ padding: "14px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: "8px", color: "#92400E", fontSize: "13px" }}>
-                  Belum ada default rekomendator. Klik tombol "Edit" untuk memilih.
+                  Belum ada default rekomendator
+                  {lembagaAktif ? ` untuk ${lembagaAktif.nama}` : ""}. Klik tombol "Edit" untuk memilih.
                 </div>
               )}
             </div>
@@ -176,6 +189,7 @@ export default function RekomendasiSettings() {
                         <th style={{ fontSize: "11px" }}>Nama</th>
                         <th style={{ fontSize: "11px" }}>Email</th>
                         <th style={{ fontSize: "11px" }}>No. Induk</th>
+                        <th style={{ fontSize: "11px" }}>Rekening (AP)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -189,6 +203,11 @@ export default function RekomendasiSettings() {
                           </td>
                           <td style={{ fontSize: "12px", color: "#475569" }}>{c.email}</td>
                           <td style={{ fontSize: "12px", color: "#64748B", fontFamily: "monospace" }}>{c.tenaga_ahli?.nomor_induk_surveior || "—"}</td>
+                          <td style={{ fontSize: "12px", color: "#64748B" }}>
+                            {c.tenaga_ahli?.no_rekening
+                              ? `${c.tenaga_ahli.no_rekening} (${c.tenaga_ahli.nama_bank || "—"})`
+                              : <span style={{ color: "#B45309" }}>belum ada — tautkan ke tenaga ahli</span>}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -206,6 +225,9 @@ export default function RekomendasiSettings() {
             <p style={{ margin: "0 0 12px", fontSize: "13px", color: "#475569" }}>
               Pilih pengguna dengan role Rekomendator yang akan menerima hasil verifikasi.
               Hanya satu rekomendator yang aktif pada satu waktu.
+              {lembagaAktif && (
+                <> Kandidat diambil dari lembaga aktif <strong>{lembagaAktif.nama}</strong>.</>
+              )}
             </p>
             <label className="form-label">Rekomendator *</label>
             <select
@@ -222,7 +244,24 @@ export default function RekomendasiSettings() {
               ))}
             </select>
             <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>
-              {candidates.length} kandidat tersedia. Hanya menampilkan user dengan role Rekomendator dan status aktif.
+              {candidates.length > 0 ? (
+                <>
+                  {candidates.length} kandidat tersedia. Hanya menampilkan user dengan role Rekomendator dan status aktif.
+                </>
+              ) : (
+                <div style={{
+                  marginTop: "10px", padding: "12px 14px", background: "#FEF3C7",
+                  border: "1px solid #FDE68A", borderRadius: "8px", color: "#92400E",
+                  fontSize: "12px", lineHeight: "1.5",
+                }}>
+                  Belum ada akun dengan role <strong>Rekomendator</strong> di lembaga
+                  {lembagaAktif ? ` ${lembagaAktif.nama}` : " aktif"}.
+                  <br />
+                  Buat di <strong>Master Data — Tenaga Ahli</strong> (peran <strong>Reksa</strong>,
+                  lengkapi rekening, lalu buat akun login), atau di <strong>Manajemen Akun</strong>
+                  (pilih role Rekomendator dan centang lembaga ini).
+                </div>
+              )}
             </div>
           </div>
           <div style={{ padding: "12px 24px", borderTop: "1px solid #F1F5F9", display: "flex", justifyContent: "flex-end", gap: "8px" }}>

@@ -176,7 +176,7 @@ class DokumenPermohonanController extends Controller
     /**
      * GET /api/pendaftaran/dokumen/{dokumen}/download
      */
-    public function download(DokumenPermohonan $dokumen, AttachmentService $attachment): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function download(DokumenPermohonan $dokumen, AttachmentService $attachment): \Illuminate\Http\Response
     {
         return $attachment->response($dokumen->path_file, $dokumen->nama_file_asli);
     }

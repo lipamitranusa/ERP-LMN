@@ -2,83 +2,50 @@
 
 namespace Database\Seeders;
 
-use App\Models\BiayaPerJenisFaskes;
-use App\Models\JenisFaskes;
-use App\Models\Lembaga;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 
 class BiayaPerJenisFaskesSeeder extends Seeder
 {
     public function run(): void
     {
-        $lembagaId = $this->defaultLembagaId();
+        $data = [
+[
+            'id' => 'f40e4636-13a8-4231-ab11-68b854bdae3f',
+            'jenis_faskes_id' => 'jf-0002',
+            'nama_biaya' => 'biaya survey klinik',
+            'deskripsi' => null,
+            'jumlah' => '5000000.00',
+            'satuan' => 'per_siklus',
+            'tipe' => 'per_siklus',
+            'wajib' => true,
+            'status' => 'aktif',
+            'created_at' => '2026-10-20 20:47:50',
+            'updated_at' => '2026-10-20 20:47:50',
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
 
-        $jfKlinik  = JenisFaskes::withoutGlobalScope('lembaga')->where('kode', 'KLINIK')->first();
-        $jfKlinikU = JenisFaskes::withoutGlobalScope('lembaga')->where('kode', 'KLU')->first();
-        $jfPus     = JenisFaskes::withoutGlobalScope('lembaga')->where('kode', 'PUSKESMAS')->first();
-        $jfLab     = JenisFaskes::withoutGlobalScope('lembaga')->where('kode', 'LAB')->first();
+[
+            'id' => 'f8b48098-0aa3-48f7-8590-e105a8cc38b6',
+            'jenis_faskes_id' => 'jf-0003',
+            'nama_biaya' => 'biaya survei puskesmas',
+            'deskripsi' => null,
+            'jumlah' => '7000000.00',
+            'satuan' => 'per_siklus',
+            'tipe' => 'per_siklus',
+            'wajib' => true,
+            'status' => 'aktif',
+            'created_at' => '2026-10-20 20:48:50',
+            'updated_at' => '2026-10-20 20:48:50',
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ]
+        ];
 
-        if ($jfKlinik) {
-            $this->seedForJenis($jfKlinik->id, $lembagaId, [
-                ['nama_biaya' => 'Tarif Survei Akreditasi Klinik Pratama', 'deskripsi' => 'Biaya survei akreditasi klinik pratama', 'jumlah' => 5000000, 'satuan' => 'per survei', 'tipe' => 'per_siklus', 'wajib' => true],
-                ['nama_biaya' => 'Akomodasi Surveior', 'deskripsi' => 'Penginapan dan meals surveior', 'jumlah' => 2000000, 'satuan' => 'per orang per survei', 'tipe' => 'per_siklus', 'wajib' => true],
-                ['nama_biaya' => 'Transportasi Surveior', 'deskripsi' => 'Tiket pesawat & transportasi lokal', 'jumlah' => 3000000, 'satuan' => 'per orang per survei', 'tipe' => 'per_siklus', 'wajib' => true],
-                ['nama_biaya' => 'Biaya Administrasi', 'deskripsi' => 'Biaya administrasi pengajuan', 'jumlah' => 500000, 'satuan' => 'per pengajuan', 'tipe' => 'per_siklus', 'wajib' => true],
-            ]);
+        foreach ($data as $item) {
+            DB::table('biaya_per_jenis_faskes')->updateOrInsert(
+                ['id' => $item['id']],
+                $item
+            );
         }
-
-        if ($jfKlinikU) {
-            $this->seedForJenis($jfKlinikU->id, $lembagaId, [
-                ['nama_biaya' => 'Tarif Survei Akreditasi Klinik Utama', 'deskripsi' => 'Biaya survei akreditasi klinik utama', 'jumlah' => 8000000, 'satuan' => 'per survei', 'tipe' => 'per_siklus', 'wajib' => true],
-                ['nama_biaya' => 'Akomodasi Surveior', 'deskripsi' => 'Penginapan dan meals surveior', 'jumlah' => 2500000, 'satuan' => 'per orang per survei', 'tipe' => 'per_siklus', 'wajib' => true],
-                ['nama_biaya' => 'Transportasi Surveior', 'deskripsi' => 'Tiket pesawat & transportasi lokal', 'jumlah' => 4000000, 'satuan' => 'per orang per survei', 'tipe' => 'per_siklus', 'wajib' => true],
-                ['nama_biaya' => 'Biaya Administrasi', 'deskripsi' => 'Biaya administrasi pengajuan', 'jumlah' => 750000, 'satuan' => 'per pengajuan', 'tipe' => 'per_siklus', 'wajib' => true],
-            ]);
-        }
-
-        if ($jfPus) {
-            $this->seedForJenis($jfPus->id, $lembagaId, [
-                ['nama_biaya' => 'Tarif Survei Akreditasi Puskesmas', 'deskripsi' => 'Biaya survei akreditasi puskesmas', 'jumlah' => 3500000, 'satuan' => 'per survei', 'tipe' => 'per_siklus', 'wajib' => true],
-                ['nama_biaya' => 'Akomodasi Surveior', 'deskripsi' => 'Penginapan dan meals surveior', 'jumlah' => 1500000, 'satuan' => 'per orang per survei', 'tipe' => 'per_siklus', 'wajib' => true],
-                ['nama_biaya' => 'Transportasi Surveior', 'deskripsi' => 'Tiket pesawat & transportasi lokal', 'jumlah' => 2500000, 'satuan' => 'per orang per survei', 'tipe' => 'per_siklus', 'wajib' => true],
-                ['nama_biaya' => 'Biaya Administrasi', 'deskripsi' => 'Biaya administrasi pengajuan', 'jumlah' => 500000, 'satuan' => 'per pengajuan', 'tipe' => 'per_siklus', 'wajib' => true],
-            ]);
-        }
-
-        if ($jfLab) {
-            $this->seedForJenis($jfLab->id, $lembagaId, [
-                ['nama_biaya' => 'Tarif Survei Akreditasi Laboratorium', 'deskripsi' => 'Biaya survei akreditasi laboratorium', 'jumlah' => 6000000, 'satuan' => 'per survei', 'tipe' => 'per_siklus', 'wajib' => true],
-                ['nama_biaya' => 'Akomodasi Surveior', 'deskripsi' => 'Penginapan dan meals surveior', 'jumlah' => 2000000, 'satuan' => 'per orang per survei', 'tipe' => 'per_siklus', 'wajib' => true],
-                ['nama_biaya' => 'Transportasi Surveior', 'deskripsi' => 'Tiket pesawat & transportasi lokal', 'jumlah' => 3500000, 'satuan' => 'per orang per survei', 'tipe' => 'per_siklus', 'wajib' => true],
-                ['nama_biaya' => 'Biaya Administrasi', 'deskripsi' => 'Biaya administrasi pengajuan', 'jumlah' => 500000, 'satuan' => 'per pengajuan', 'tipe' => 'per_siklus', 'wajib' => true],
-            ]);
-        }
-    }
-
-    private function seedForJenis(string $jenisFaskesId, ?string $lembagaId, array $biayas): void
-    {
-        foreach ($biayas as $biaya) {
-            $existing = BiayaPerJenisFaskes::withoutGlobalScope('lembaga')
-                ->where('jenis_faskes_id', $jenisFaskesId)
-                ->where('nama_biaya', $biaya['nama_biaya'])
-                ->first();
-
-            if ($existing) {
-                continue;
-            }
-
-            BiayaPerJenisFaskes::withoutGlobalScope('lembaga')->create(array_merge($biaya, [
-                'id' => (string) Str::uuid(),
-                'jenis_faskes_id' => $jenisFaskesId,
-                'status' => 'aktif',
-                'lembaga_id' => $lembagaId,
-            ]));
-        }
-    }
-
-    private function defaultLembagaId(): ?string
-    {
-        return Lembaga::query()->value('id');
     }
 }

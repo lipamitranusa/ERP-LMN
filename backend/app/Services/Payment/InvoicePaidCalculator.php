@@ -52,25 +52,73 @@ class InvoicePaidCalculator
                 ]);
                 Log::info('invoice.lunas', ['invoice_id' => $invoice->id]);
 
-                // Promote siklus ke tahap 5 (Survei) — invoice lunas artinya siap untuk
-                // diterbitkan surat tugas survei.
-                $siklus = $invoice->siklus;
-                if ($siklus && (int) $siklus->tahapan < 5) {
-                    $siklus->forceFill([
-                        'tahapan' => 5,
-                        'status' => 'aktif',
-                    ])->save();
-                    Log::info('siklus.promoted', [
-                        'siklus_id' => $siklus->id,
-                        'from_tahapan' => 4,
-                        'to_tahapan' => 5,
-                        'reason' => 'invoice_lunas',
-                    ]);
-                }
+                $this->syncSiklusStatus($invoice, Invoice::STATUS_LUNAS);
+            } elseif ($invoice->status !== $previousStatus) {
+                // Pembayaran mundur (bukti ditolak/dibatalkan) → status siklus
+                // kembali ke tahap menunggu pembayaran.
+                $this->revertSiklusStatus($invoice);
             }
 
             return $invoice->status;
         });
+    }
+
+    /**
+     * Sinkronkan status siklus dengan status pembayaran invoice.
+     *
+     * - Siklus masih di tahap pembayaran (tahapan < 5) → naik ke tahap 5
+     *   (siap survei) dengan status 'aktif'.
+     * - Siklus sudah lanjut ke tahap berikutnya tapi status-nya masih
+     *   'menunggu_pembayaran' → samakan dengan status invoice ('lunas'),
+     *   supaya daftar pendaftaran tidak menampilkan status pembayaran basi.
+     */
+    private function syncSiklusStatus(Invoice $invoice, string $statusInvoice): void
+    {
+        $siklus = $invoice->relationLoaded('siklus')
+            ? $invoice->siklus
+            : $invoice->siklus()->withoutGlobalScope('lembaga')->first();
+
+        if (! $siklus) {
+            return;
+        }
+
+        $update = [];
+        if ((int) $siklus->tahapan < 5) {
+            $update = ['tahapan' => 5, 'status' => 'aktif'];
+        } elseif ($siklus->status === 'menunggu_pembayaran') {
+            $update = ['status' => $statusInvoice];
+        }
+
+        if (! $update) {
+            return;
+        }
+
+        $siklus->forceFill($update)->save();
+        Log::info('siklus.promoted', [
+            'siklus_id' => $siklus->id,
+            'from_tahapan' => $siklus->getOriginal('tahapan'),
+            'to_tahapan' => $siklus->tahapan,
+            'status' => $siklus->status,
+            'reason' => 'invoice_' . $statusInvoice,
+        ]);
+    }
+
+    private function revertSiklusStatus(Invoice $invoice): void
+    {
+        $siklus = $invoice->relationLoaded('siklus')
+            ? $invoice->siklus
+            : $invoice->siklus()->withoutGlobalScope('lembaga')->first();
+
+        if (! $siklus || $siklus->status !== 'lunas') {
+            return;
+        }
+
+        $siklus->forceFill(['status' => 'menunggu_pembayaran'])->save();
+        Log::info('siklus.status_reverted', [
+            'siklus_id' => $siklus->id,
+            'invoice_id' => $invoice->id,
+            'reason' => 'invoice_not_lunas',
+        ]);
     }
 
     private function createPiutangLunasEntry(Invoice $invoice, float $amount): LedgerEntry

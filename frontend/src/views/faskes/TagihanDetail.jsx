@@ -187,7 +187,7 @@ export default function TagihanDetail() {
   const { data: buktiData } = useApi(["invoice-bukti", id], `/invoice/${id}/bukti`, { enabled: !!id });
   const bukti = buktiData?.data || [];
 
-  const gatewayMutation = useMutateKeys(["invoice", id, "invoices"], {
+  const gatewayMutation = useMutateKeys([["invoice", id], ["invoices"]], {
     onSuccess: (data) => {
       setVaData({
         reference: method === "qris" ? data.data.reference : data.data.nomor_va,
@@ -200,7 +200,7 @@ export default function TagihanDetail() {
     onError: (err) => { setFileError(err.message); },
   });
 
-  const buktiMutation = useMutateKeys(["invoice", id, "invoices", "invoice-bukti", id], {
+  const buktiMutation = useMutateKeys([["invoice", id], ["invoices"], ["invoice-bukti", id]], {
     onSuccess: () => {
       setShowMethodPicker(false);
       setMethod("transfer_manual");
@@ -444,6 +444,14 @@ export default function TagihanDetail() {
 
       {!isLunas && !isRefunded && !vaData && !activeBukti && (
         <Card className="p-6 mt-5">
+          {bukti.some(b => b.status_verifikasi === "ditolak") && (
+            <div className="mb-4 p-3 rounded-md bg-red-50 border border-red-200">
+              <div className="text-[12px] font-semibold text-red-700">Bukti sebelumnya ditolak</div>
+              <div className="text-[12px] text-red-600 mt-1">
+                Silakan perbaiki dan unggah ulang bukti transfer di bawah ini.
+              </div>
+            </div>
+          )}
           <h2 className="text-[15px] font-semibold text-slate-800 dark:text-slate-200 mb-4">
             Pilih Metode Pembayaran
           </h2>

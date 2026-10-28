@@ -12,9 +12,17 @@ use Illuminate\Support\Facades\DB;
  *      coa(lembaga_id, kode)
  *      kategori_jurnal(lembaga_id, nama)
  * 3. FK constraints (nullable, tanpa ON DELETE CASCADE untuk keamanan)
+ *
+ * MySQL (test DB) tidak mendukung "ALTER COLUMN ... SET NOT NULL" maupun
+ * query introspeksi pg_constraint — dipakai sintaks & katalog MySQL.
  */
 return new class extends Migration
 {
+    private function isMysql(): bool
+    {
+        return DB::getDriverName() === 'mysql';
+    }
+
     public function up(): void
     {
         // ============================================================
@@ -36,7 +44,11 @@ return new class extends Migration
             $col = 'lembaga_id';
             // Supabase Transaction Pooler: DDL may silently succeed
             // without actually executing. Verify with a query.
-            DB::statement("ALTER TABLE {$table} ALTER COLUMN {$col} SET NOT NULL");
+            if ($this->isMysql()) {
+                DB::statement("ALTER TABLE {$table} MODIFY {$col} CHAR(36) NOT NULL");
+            } else {
+                DB::statement("ALTER TABLE {$table} ALTER COLUMN {$col} SET NOT NULL");
+            }
             $this->verify("SELECT 1 FROM {$table} LIMIT 1", "NOT NULL on {$table}.{$col}");
         }
 
@@ -136,7 +148,11 @@ return new class extends Migration
         ];
 
         foreach ($tables as $table) {
-            DB::statement("ALTER TABLE {$table} ALTER COLUMN lembaga_id DROP NOT NULL");
+            if ($this->isMysql()) {
+                DB::statement("ALTER TABLE {$table} MODIFY lembaga_id CHAR(36) NULL");
+            } else {
+                DB::statement("ALTER TABLE {$table} ALTER COLUMN lembaga_id DROP NOT NULL");
+            }
         }
     }
 
@@ -149,12 +165,7 @@ return new class extends Migration
         $name = "{$table}_" . implode('_', $columns) . "_unique";
         $cols = implode(', ', $columns);
 
-        $exists = DB::selectOne("
-            SELECT 1 FROM pg_constraint
-            WHERE conname = ? AND conrelid = ?::regclass
-        ", [$name, $table]);
-
-        if (! $exists) {
+        if (! $this->constraintExists($table, $name)) {
             DB::statement("ALTER TABLE {$table} ADD CONSTRAINT {$name} UNIQUE ({$cols})");
             $this->verify(
                 "SELECT 1 FROM {$table} LIMIT 1",
@@ -165,12 +176,8 @@ return new class extends Migration
 
     private function dropUnique(string $table, string $name): void
     {
-        $exists = DB::selectOne("
-            SELECT 1 FROM pg_constraint WHERE conname = ? AND conrelid = ?::regclass
-        ", [$name, $table]);
-
-        if ($exists) {
-            DB::statement("ALTER TABLE {$table} DROP CONSTRAINT {$name}");
+        if ($this->constraintExists($table, $name)) {
+            $this->dropConstraint($table, $name);
         }
     }
 
@@ -178,12 +185,7 @@ return new class extends Migration
     {
         $name = "{$table}_{$column}_{$refTable}_fk";
 
-        $exists = DB::selectOne("
-            SELECT 1 FROM pg_constraint
-            WHERE conname = ? AND conrelid = ?::regclass
-        ", [$name, $table]);
-
-        if (! $exists) {
+        if (! $this->constraintExists($table, $name)) {
             DB::statement("ALTER TABLE {$table} ADD CONSTRAINT {$name} FOREIGN KEY ({$column}) REFERENCES {$refTable}({$refColumn})");
             $this->verify(
                 "SELECT 1 FROM {$table} LIMIT 1",
@@ -194,13 +196,58 @@ return new class extends Migration
 
     private function dropFk(string $table, string $name): void
     {
-        $exists = DB::selectOne("
-            SELECT 1 FROM pg_constraint WHERE conname = ? AND conrelid = ?::regclass
-        ", [$name, $table]);
-
-        if ($exists) {
-            DB::statement("ALTER TABLE {$table} DROP CONSTRAINT {$name}");
+        if ($this->constraintExists($table, $name)) {
+            $this->dropConstraint($table, $name);
         }
+    }
+
+    /**
+     * Cek apakah constraint/index dengan nama tertentu sudah ada.
+     * PostgreSQL: pg_constraint. MySQL: information_schema.
+     */
+    private function constraintExists(string $table, string $name): bool
+    {
+        if ($this->isMysql()) {
+            $exists = DB::selectOne(
+                'SELECT 1 FROM information_schema.TABLE_CONSTRAINTS
+                 WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ?
+                 LIMIT 1',
+                [$table, $name]
+            );
+
+            if ($exists) {
+                return true;
+            }
+
+            // MySQL: unique index (bukan FK) juga punya nama di TABLE_CONSTRAINTS
+            // dengan type UNIQUE — sudah tertangkap query di atas.
+            return false;
+        }
+
+        return (bool) DB::selectOne(
+            'SELECT 1 FROM pg_constraint WHERE conname = ? AND conrelid = ?::regclass',
+            [$name, $table]
+        );
+    }
+
+    private function dropConstraint(string $table, string $name): void
+    {
+        if ($this->isMysql()) {
+            try {
+                DB::statement("ALTER TABLE {$table} DROP FOREIGN KEY {$name}");
+            } catch (\Throwable) {
+                // Bukan FK — coba drop index (khusus UNIQUE constraint MySQL).
+                try {
+                    DB::statement("ALTER TABLE {$table} DROP INDEX {$name}");
+                } catch (\Throwable) {
+                    // Sudah tidak ada — abaikan.
+                }
+            }
+
+            return;
+        }
+
+        DB::statement("ALTER TABLE {$table} DROP CONSTRAINT {$name}");
     }
 
     private function verify(string $sql, string $label): void

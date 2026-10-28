@@ -156,6 +156,7 @@ class MasterTenagaAhliController extends Controller
         $roleName = match ($ta->peran) {
             'surveior' => 'Surveior',
             'verifikator' => 'Verifikator',
+            'rekomendator' => 'Rekomendator',
             'kedua' => $data['role_id']
                 ? null // akan pakai role_id yang dipilih user
                 : 'Surveior',
@@ -168,7 +169,7 @@ class MasterTenagaAhliController extends Controller
             $role = Role::where('nama_role', $roleName)->first();
             if (! $role) {
                 return response()->json([
-                    'message' => "Role '{$roleName}' tidak ditemukan. Pastikan role Surveior/Verifikator sudah ada di sistem.",
+                    'message' => "Role '{$roleName}' tidak ditemukan. Pastikan role Surveior/Verifikator/Rekomendator sudah ada di sistem.",
                 ], 422)->throwResponse();
             }
             $roleId = $role->id;
@@ -202,8 +203,15 @@ class MasterTenagaAhliController extends Controller
             'status_akun' => 'Aktif',
             'failed_login_attempts' => 0,
             'locked_until' => null,
+            'lembaga_id' => $ta->lembaga_id,
             'created_at' => now(),
         ]);
+
+        // Akun harus punya akses lemma agar muncul di daftar kandidat
+        // reksa / pemilihan default reksa (filter by lemma_id + pivot).
+        if ($ta->lembaga_id) {
+            $akun->lembagas()->sync([$ta->lembaga_id]);
+        }
 
         $this->audit->log('akun.create', 'AkunPengguna', $akun->id);
 
@@ -366,7 +374,7 @@ class MasterTenagaAhliController extends Controller
 
             if (empty($nik)) $errors[] = 'nomor_induk_surveior wajib diisi.';
             if (empty($nama)) $errors[] = 'nama wajib diisi.';
-            if (! in_array($peran, ['surveior', 'verifikator', 'kedua'], true)) $errors[] = "peran harus surveior, verifikator, atau keduanya. Nilai '$peran' tidak valid.";
+            if (! in_array($peran, ['surveior', 'verifikator', 'rekomendator', 'kedua'], true)) $errors[] = "peran harus surveior, verifikator, rekomendator, atau keduanya. Nilai '$peran' tidak valid.";
             if (! in_array($status, ['Aktif', 'Nonaktif', 'Cuti', 'Resign'], true)) $errors[] = "status_aktif harus Aktif, Nonaktif, Cuti, atau Resign.";
 
             // Validate NPWP if provided
@@ -435,7 +443,7 @@ class MasterTenagaAhliController extends Controller
                     'nama' => $nama,
                     'no_wa' => trim($data['no_wa'] ?? '') ?: null,
                     'peran' => $peran,
-                    'jenis' => $jenis ?: null,
+                    'jenis' => $peran === 'rekomendator' ? null : ($jenis ?: null),
                     'status_aktif' => $status,
                     'status_penugasan_saat_ini' => TenagaAhli::STATUS_TIDAK_BERTUGAS,
                     'batas_penugasan_per_periode' => is_numeric($batas) ? (int) $batas : null,
@@ -476,6 +484,7 @@ class MasterTenagaAhliController extends Controller
                             $roleNameByPeran = match ($peran) {
                                 'surveior' => 'Surveior',
                                 'verifikator' => 'Verifikator',
+                                'rekomendator' => 'Rekomendator',
                                 default => null,
                             };
                             if ($roleNameByPeran) {
@@ -498,8 +507,12 @@ class MasterTenagaAhliController extends Controller
                                 'status_akun' => 'Aktif',
                                 'failed_login_attempts' => 0,
                                 'locked_until' => null,
+                                'lembaga_id' => $ta->lembaga_id,
                                 'created_at' => now(),
                             ]);
+                            if ($ta->lembaga_id) {
+                                $akun->lembagas()->sync([$ta->lembaga_id]);
+                            }
                             $this->audit->log('akun.create', 'AkunPengguna', $akun->id);
                             $akunCreated = $email;
                         }

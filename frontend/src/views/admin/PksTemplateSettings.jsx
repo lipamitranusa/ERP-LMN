@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { withLembaga } from "@/lib/api";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -693,7 +694,7 @@ function EditorToolbar({ editorRef, kontenText, setKontenText, onInsertPasal, al
 
   function handlePreviewPdf(item) {
     const token = localStorage.getItem("token");
-    fetch(`/api/master/pks-templates/${item.id}/preview-pdf`, {
+    fetch(withLembaga(`/api/master/pks-templates/${item.id}/preview-pdf`), {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => {

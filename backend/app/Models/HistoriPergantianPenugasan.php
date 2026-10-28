@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\ScopedToLembaga;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -9,7 +10,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class HistoriPergantianPenugasan extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasUuids, ScopedToLembaga;
+
+    protected static $lembagaScopeRelation = 'siklus';
 
     public $incrementing = false;
     protected $keyType = 'string';

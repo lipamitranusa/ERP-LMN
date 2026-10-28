@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { useParams, useHistory } from "react-router-dom";
 import { formatDate } from "@/utils/dateFormat";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { withLembaga } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,15 +59,23 @@ export default function FaskesKontrak() {
   const [downloading, setDownloading] = useState("");
 
   const { data: siklusListData } = useApi(
-    "siklus-list-kontrak",
-    "/pendaftaran/siklus?per_page=1"
+    "siklus-kontrak",
+    "/pendaftaran/siklus?per_page=50"
   );
 
+  const siklusList = siklusListData?.data || [];
+
+  // Utamakan pengajuan yang sedang berjalan; bila sudah tidak ada (mis. sudah
+  // selesai dan masuk histori), tetap tampilkan PKS terakhir agar faskes bisa
+  // mengunduh PKS yang sudah ditandatangani.
+  const siklusDitampilkan =
+    siklusList.find(s => !s.selesai_lengkap) || siklusList[0] || null;
+
   React.useEffect(() => {
-    if (!id && siklusListData?.data?.[0]?.id) {
-      history.replace(`/faskes/kontrak/${siklusListData.data[0].id}`);
+    if (!id && siklusDitampilkan?.id) {
+      history.replace(`/faskes/kontrak/${siklusDitampilkan.id}`);
     }
-  }, [id, siklusListData, history]);
+  }, [id, siklusDitampilkan, history]);
 
   const { data: kontrakData, isLoading: loading } = useApi(
     ["kontrak", id],
@@ -111,7 +120,7 @@ export default function FaskesKontrak() {
     setDownloading(type);
     const token = localStorage.getItem("token");
     const endpoint = type === "docx" ? "download-docx" : "download";
-    fetch(`/api/kontrak/${pks.id}/${endpoint}`, {
+    fetch(withLembaga(`/api/kontrak/${pks.id}/${endpoint}`), {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(res => {
@@ -192,7 +201,7 @@ export default function FaskesKontrak() {
     setDownloading("signed");
     const token = localStorage.getItem("token");
     try {
-      const res = await fetch(`/api/kontrak/${pks.id}/signed-pdf`, {
+      const res = await fetch(withLembaga(`/api/kontrak/${pks.id}/signed-pdf`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Gagal mengunduh.");
@@ -218,7 +227,7 @@ export default function FaskesKontrak() {
   if (!pks) {
     return (
       <div className="max-w-[640px] mx-auto mt-10 p-8 text-center">
-        <div className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-2">Belum ada kontrak untuk siklus ini.</div>
+        <div className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-2">Belum ada kontrak untuk pengajuan Anda.</div>
         <div className="text-xs text-slate-400 dark:text-slate-500">Admin Lembaga akan mengirimkan draf PKS setelah dokumen Anda lengkap.</div>
       </div>
     );

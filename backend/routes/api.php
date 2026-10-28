@@ -342,6 +342,8 @@ Route::prefix('rekomendasi')->middleware(['auth:sanctum', 'lembaga'])->group(fun
     Route::middleware('privilege:Rekomendasi,Lihat')
         ->get('/', [RekomendasiController::class, 'index']);
     Route::middleware('privilege:Rekomendasi,Lihat')
+        ->get('/history', [RekomendasiController::class, 'history']);
+    Route::middleware('privilege:Rekomendasi,Lihat')
         ->get('/{laporanVerifikasi}', [RekomendasiController::class, 'show']);
     Route::middleware('privilege:Rekomendasi,Setujui')
         ->post('/{laporanVerifikasi}/setujui', [RekomendasiController::class, 'setujui']);
@@ -471,6 +473,9 @@ Route::prefix('whatsapp-settings')->group(function () {
 Route::prefix('bukti')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
     Route::middleware('privilege:Kontrak & Invoicing,Lihat')
         ->get('/antrian', [BuktiPembayaranController::class, 'antrianMenunggu']);
+    // Histori pembayaran lintas invoice (audit penerimaan kas dari Faskes)
+    Route::middleware('privilege:Kontrak & Invoicing,Lihat')
+        ->get('/histori', [BuktiPembayaranController::class, 'histori']);
     Route::middleware('privilege:Kontrak & Invoicing,Lihat')
         ->get('/{bukti}', [BuktiPembayaranController::class, 'show']);
     Route::middleware('privilege:Kontrak & Invoicing,Lihat')
@@ -639,6 +644,11 @@ Route::prefix('master')->middleware(['auth:sanctum', 'lembaga'])->group(function
 // <img> tag tidak bisa kirim cookie/session, jadi endpoint ini public.
 Route::get('/master/lembaga/{lembaga}/logo', [LembagaController::class, 'getLogo']);
 
+// Opsi pemilih lembaga di header. Tanpa privilege "Master Data,Lihat"
+// supaya role Rekomendator tetap bisa melihat lembaga aktifnya.
+Route::middleware(['auth:sanctum', 'lembaga'])
+    ->get('/lembaga-opsi', [LembagaController::class, 'opsi']);
+
 // =============================================================================
 // Modul Keuangan — Konfigurasi Pajak (FR-5.7), Bukti Potong (FR-5.8/5.9),
 // Dasbor Rekonsiliasi (FR-5.4), PKS Adjustment (FR-5.5)
@@ -673,8 +683,13 @@ Route::prefix('keuangan')->middleware(['auth:sanctum', 'lembaga'])->group(functi
         ->get('/ap-honor/payments', [ApHonorController::class, 'payments']);
     Route::middleware('privilege:Ledger/Keuangan,Lihat')
         ->get('/ap-honor/payments/{id}', [ApHonorController::class, 'showPayment']);
+    // Kas Keluar — daftar pembayaran honor yang sudah dibayar + status jurnalnya
+    Route::middleware('privilege:Ledger/Keuangan,Lihat')
+        ->get('/ap-honor/kas-keluar', [ApHonorController::class, 'kasKeluar']);
     Route::middleware('privilege:Ledger/Keuangan,Tambah')
         ->post('/ap-honor/payments', [ApHonorController::class, 'createPayment']);
+    Route::middleware('privilege:Ledger/Keuangan,Ubah')
+        ->patch('/ap-honor/payments/{id}', [ApHonorController::class, 'updatePayment']);
     Route::middleware('privilege:Ledger/Keuangan,Setujui')
         ->post('/ap-honor/payments/{id}/approve', [ApHonorController::class, 'approvePayment']);
     Route::middleware('privilege:Ledger/Keuangan,Ubah')
@@ -735,6 +750,15 @@ Route::prefix('keuangan')->middleware(['auth:sanctum', 'lembaga'])->group(functi
         ->get('/settlement/{id}', [SettlementJournalController::class, 'show']);
     Route::middleware('privilege:Ledger/Keuangan,Tambah')
         ->post('/settlement/rebuild', [SettlementJournalController::class, 'rebuild']);
+    // Bank Masuk dari AR yang sudah dibayarkan — Dr Bank / Cr Piutang Usaha
+    Route::middleware('privilege:Ledger/Keuangan,Tambah')
+        ->post('/settlement/bank-masuk', [SettlementJournalController::class, 'bankMasuk']);
+    // Bank Keluar dari AP honor yang sudah dibayar — Dr Utang Honor / Cr Bank
+    Route::middleware('privilege:Ledger/Keuangan,Tambah')
+        ->post('/settlement/bank-keluar', [SettlementJournalController::class, 'bankKeluar']);
+    // Bank Keluar dari hutang pajak PPh 21 yang sudah dibayar — Dr Utang PPh 21 / Cr Bank
+    Route::middleware('privilege:Ledger/Keuangan,Tambah')
+        ->post('/settlement/bank-keluar-pajak', [SettlementJournalController::class, 'bankKeluarPajak']);
     Route::middleware('privilege:Ledger/Keuangan,Ubah')
         ->put('/settlement/settings', [SettlementJournalController::class, 'updateSettings']);
 });

@@ -2,131 +2,295 @@
 
 namespace Database\Seeders;
 
-use App\Models\HistoriAntrianPenugasan;
-use App\Models\Role;
-use App\Models\TenagaAhli;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class TenagaAhliSeeder extends Seeder
 {
     public function run(): void
     {
         $data = [
-            // Surveior TKSDU
-            [
-                'nomor' => 'NS-0001',
-                'nama' => 'dr. Joko Pramono, M.Kes',
-                'peran' => 'surveior',
-                'jenis' => 'TKSDU',
-                'status_aktif' => 'Aktif',
-                'status_penugasan_saat_ini' => 'tidak_bertugas',
-            ],
-            [
-                'nomor' => 'NS-0002',
-                'nama' => 'drg. Rina Hartati',
-                'peran' => 'verifikator',
-                'jenis' => null,
-                'status_aktif' => 'Aktif',
-                'status_penugasan_saat_ini' => 'tidak_bertugas',
-            ],
-            [
-                'nomor' => 'NS-0003',
-                'nama' => 'dr. Hendra Kusuma, Sp.MK',
-                'peran' => 'surveior',
-                'jenis' => 'TKSDU',
-                'status_aktif' => 'Aktif',
-                'status_penugasan_saat_ini' => 'tidak_bertugas',
-            ],
+[
+            'id' => '699099a8-d211-4143-a57e-586d21436838',
+            'nomor_induk_surveior' => 'NS-0001',
+            'nama' => 'dr. Joko Pramono, M.Kes',
+            'peran' => 'surveior',
+            'status_aktif' => 'Aktif',
+            'status_penugasan_saat_ini' => 'tidak_bertugas',
+            'batas_penugasan_per_periode' => null,
+            'jenis' => 'TKSDU',
+            'npwp' => '1100000010000001',
+            'nik' => null,
+            'nama_pajak' => 'dr. Joko Pramono, M.Kes',
+            'alamat_pajak' => null,
+            'kota_pajak' => null,
+            'kode_objek_pajak' => '21-100-01',
+            'npwp_diverifikasi_at' => null,
+            'no_rekening' => null,
+            'nama_bank' => null,
+            'atas_nama_rekening' => null,
+            'status_ptkp' => null,
+            'kode_kpp' => null,
+            'no_wa' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
 
-            // Surveior TKPP
-            [
-                'nomor' => 'NS-0004',
-                'nama' => 'dr. Siti Nurhaliza, M.PH',
-                'peran' => 'surveior',
-                'jenis' => 'TKPP',
-                'status_aktif' => 'Aktif',
-                'status_penugasan_saat_ini' => 'tidak_bertugas',
-            ],
-            [
-                'nomor' => 'NS-0005',
-                'nama' => 'dr. Ahmad Wijaya, Sp.PD',
-                'peran' => 'surveior',
-                'jenis' => 'TKPP',
-                'status_aktif' => 'Aktif',
-                'status_penugasan_saat_ini' => 'tidak_bertugas',
-            ],
+[
+            'id' => 'b95d406e-5022-42b4-8a57-852932fde880',
+            'nomor_induk_surveior' => 'NS-0002',
+            'nama' => 'drg. Rina Hartati',
+            'peran' => 'verifikator',
+            'status_aktif' => 'Aktif',
+            'status_penugasan_saat_ini' => 'tidak_bertugas',
+            'batas_penugasan_per_periode' => null,
+            'jenis' => null,
+            'npwp' => '1100000020000002',
+            'nik' => null,
+            'nama_pajak' => 'drg. Rina Hartati',
+            'alamat_pajak' => null,
+            'kota_pajak' => null,
+            'kode_objek_pajak' => '21-100-01',
+            'npwp_diverifikasi_at' => null,
+            'no_rekening' => null,
+            'nama_bank' => null,
+            'atas_nama_rekening' => null,
+            'status_ptkp' => null,
+            'kode_kpp' => null,
+            'no_wa' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
 
-            // Verifikator
-            [
-                'nomor' => 'NS-0006',
-                'nama' => 'drg. Made Dana, M.Kes',
-                'peran' => 'verifikator',
-                'jenis' => null,
-                'status_aktif' => 'Aktif',
-                'status_penugasan_saat_ini' => 'tidak_bertugas',
-            ],
-            [
-                'nomor' => 'NS-0007',
-                'nama' => 'dr. Fajar Nugroho, M.Ked',
-                'peran' => 'verifikator',
-                'jenis' => null,
-                'status_aktif' => 'Aktif',
-                'status_penugasan_saat_ini' => 'tidak_bertugas',
-            ],
+[
+            'id' => '3d27a3f1-d50c-4798-a9f9-bf2ebe85dc1f',
+            'nomor_induk_surveior' => 'NS-0003',
+            'nama' => 'dr. Hendra Kusuma, Sp.MK',
+            'peran' => 'surveior',
+            'status_aktif' => 'Aktif',
+            'status_penugasan_saat_ini' => 'tidak_bertugas',
+            'batas_penugasan_per_periode' => null,
+            'jenis' => 'TKSDU',
+            'npwp' => '1100000030000003',
+            'nik' => null,
+            'nama_pajak' => 'dr. Hendra Kusuma, Sp.MK',
+            'alamat_pajak' => null,
+            'kota_pajak' => null,
+            'kode_objek_pajak' => '21-100-01',
+            'npwp_diverifikasi_at' => null,
+            'no_rekening' => null,
+            'nama_bank' => null,
+            'atas_nama_rekening' => null,
+            'status_ptkp' => null,
+            'kode_kpp' => null,
+            'no_wa' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
 
-            // Surveior兼Verifikator (kedua)
-            [
-                'nomor' => 'NS-0008',
-                'nama' => 'dr. Retno Wulandari, Sp.PD-KEMD',
-                'peran' => 'kedua',
-                'jenis' => 'TKSDU',
-                'status_aktif' => 'Aktif',
-                'status_penugasan_saat_ini' => 'tidak_bertugas',
-            ],
+[
+            'id' => '9c34ae14-4996-4dc3-8a03-d5d820d72d73',
+            'nomor_induk_surveior' => 'NS-0004',
+            'nama' => 'dr. Siti Nurhaliza, M.PH',
+            'peran' => 'surveior',
+            'status_aktif' => 'Aktif',
+            'status_penugasan_saat_ini' => 'tidak_bertugas',
+            'batas_penugasan_per_periode' => null,
+            'jenis' => 'TKPP',
+            'npwp' => '1100000040000004',
+            'nik' => null,
+            'nama_pajak' => 'dr. Siti Nurhaliza, M.PH',
+            'alamat_pajak' => null,
+            'kota_pajak' => null,
+            'kode_objek_pajak' => '21-100-01',
+            'npwp_diverifikasi_at' => null,
+            'no_rekening' => null,
+            'nama_bank' => null,
+            'atas_nama_rekening' => null,
+            'status_ptkp' => null,
+            'kode_kpp' => null,
+            'no_wa' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '66ffaf5f-db39-407d-8733-e755f4201cb1',
+            'nomor_induk_surveior' => 'NS-0005',
+            'nama' => 'dr. Ahmad Wijaya, Sp.PD',
+            'peran' => 'surveior',
+            'status_aktif' => 'Aktif',
+            'status_penugasan_saat_ini' => 'tidak_bertugas',
+            'batas_penugasan_per_periode' => null,
+            'jenis' => 'TKPP',
+            'npwp' => '1100000050000005',
+            'nik' => null,
+            'nama_pajak' => 'dr. Ahmad Wijaya, Sp.PD',
+            'alamat_pajak' => null,
+            'kota_pajak' => null,
+            'kode_objek_pajak' => '21-100-01',
+            'npwp_diverifikasi_at' => null,
+            'no_rekening' => null,
+            'nama_bank' => null,
+            'atas_nama_rekening' => null,
+            'status_ptkp' => null,
+            'kode_kpp' => null,
+            'no_wa' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '5c374b1f-1c66-4ac8-ab18-5804d1694a9e',
+            'nomor_induk_surveior' => 'NS-0006',
+            'nama' => 'drg. Made Dana, M.Kes',
+            'peran' => 'verifikator',
+            'status_aktif' => 'Aktif',
+            'status_penugasan_saat_ini' => 'tidak_bertugas',
+            'batas_penugasan_per_periode' => null,
+            'jenis' => null,
+            'npwp' => '1100000060000006',
+            'nik' => null,
+            'nama_pajak' => 'drg. Made Dana, M.Kes',
+            'alamat_pajak' => null,
+            'kota_pajak' => null,
+            'kode_objek_pajak' => '21-100-01',
+            'npwp_diverifikasi_at' => null,
+            'no_rekening' => null,
+            'nama_bank' => null,
+            'atas_nama_rekening' => null,
+            'status_ptkp' => null,
+            'kode_kpp' => null,
+            'no_wa' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => 'a480fc55-554a-4533-a9ce-63ef8ae001f0',
+            'nomor_induk_surveior' => 'NS-0007',
+            'nama' => 'dr. Fajar Nugroho, M.Ked',
+            'peran' => 'verifikator',
+            'status_aktif' => 'Aktif',
+            'status_penugasan_saat_ini' => 'tidak_bertugas',
+            'batas_penugasan_per_periode' => null,
+            'jenis' => null,
+            'npwp' => '1100000070000007',
+            'nik' => null,
+            'nama_pajak' => 'dr. Fajar Nugroho, M.Ked',
+            'alamat_pajak' => null,
+            'kota_pajak' => null,
+            'kode_objek_pajak' => '21-100-01',
+            'npwp_diverifikasi_at' => null,
+            'no_rekening' => null,
+            'nama_bank' => null,
+            'atas_nama_rekening' => null,
+            'status_ptkp' => null,
+            'kode_kpp' => null,
+            'no_wa' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '44c21a98-687d-48ef-9446-1c62f186776f',
+            'nomor_induk_surveior' => 'NS-0008',
+            'nama' => 'dr. Retno Wulandari, Sp.PD-KEMD',
+            'peran' => 'kedua',
+            'status_aktif' => 'Aktif',
+            'status_penugasan_saat_ini' => 'tidak_bertugas',
+            'batas_penugasan_per_periode' => null,
+            'jenis' => 'TKSDU',
+            'npwp' => '1100000080000008',
+            'nik' => null,
+            'nama_pajak' => 'dr. Retno Wulandari, Sp.PD-KEMD',
+            'alamat_pajak' => null,
+            'kota_pajak' => null,
+            'kode_objek_pajak' => '21-100-01',
+            'npwp_diverifikasi_at' => null,
+            'no_rekening' => null,
+            'nama_bank' => null,
+            'atas_nama_rekening' => null,
+            'status_ptkp' => null,
+            'kode_kpp' => null,
+            'no_wa' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '089d2d07-8fee-4050-a6bc-bd4911fdd7a6',
+            'nomor_induk_surveior' => 'SRV-0002',
+            'nama' => 'RIO SUR TKSDU',
+            'peran' => 'surveior',
+            'status_aktif' => 'Aktif',
+            'status_penugasan_saat_ini' => 'tidak_bertugas',
+            'batas_penugasan_per_periode' => null,
+            'jenis' => 'TKSDU',
+            'npwp' => null,
+            'nik' => null,
+            'nama_pajak' => null,
+            'alamat_pajak' => null,
+            'kota_pajak' => null,
+            'kode_objek_pajak' => '21-100-01',
+            'npwp_diverifikasi_at' => null,
+            'no_rekening' => '03938823',
+            'nama_bank' => 'MANDIRI',
+            'atas_nama_rekening' => null,
+            'status_ptkp' => 'TK/0',
+            'kode_kpp' => null,
+            'no_wa' => '081938527772',
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '3939065f-7e1c-4150-b46b-8957ed60879b',
+            'nomor_induk_surveior' => 'SRV-0001',
+            'nama' => 'RIO SUR TKPP',
+            'peran' => 'surveior',
+            'status_aktif' => 'Aktif',
+            'status_penugasan_saat_ini' => 'tidak_bertugas',
+            'batas_penugasan_per_periode' => null,
+            'jenis' => 'TKPP',
+            'npwp' => null,
+            'nik' => null,
+            'nama_pajak' => null,
+            'alamat_pajak' => null,
+            'kota_pajak' => null,
+            'kode_objek_pajak' => '21-100-01',
+            'npwp_diverifikasi_at' => null,
+            'no_rekening' => '38927389',
+            'nama_bank' => 'BCA',
+            'atas_nama_rekening' => 'RIO S WIBOWO',
+            'status_ptkp' => 'TK/0',
+            'kode_kpp' => null,
+            'no_wa' => '081938527772',
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => 'eb35b10b-5bdd-442f-a12e-106ad34f2a22',
+            'nomor_induk_surveior' => 'VER-001',
+            'nama' => 'RIO VER',
+            'peran' => 'verifikator',
+            'status_aktif' => 'Aktif',
+            'status_penugasan_saat_ini' => 'menunggu',
+            'batas_penugasan_per_periode' => null,
+            'jenis' => null,
+            'npwp' => null,
+            'nik' => null,
+            'nama_pajak' => null,
+            'alamat_pajak' => null,
+            'kota_pajak' => null,
+            'kode_objek_pajak' => '21-100-01',
+            'npwp_diverifikasi_at' => null,
+            'no_rekening' => '123184584',
+            'nama_bank' => 'BCA',
+            'atas_nama_rekening' => 'RIO S WIBOWO',
+            'status_ptkp' => 'K/3',
+            'kode_kpp' => null,
+            'no_wa' => '082232227433',
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ]
         ];
 
-        // Delete ALL histori first (no FK from tenaga_ahli so no cascade issues)
-        DB::table('histori_antrian_penugasan')->delete();
-        // Delete ALL tenaga ahli
-        DB::table('tenaga_ahli')->delete();
-
-        // NPWP/NIK placeholder untuk seed dev. WAJIB diganti Keuangan via UI
-        // sebelum export bukti potong PPh 21 ke Coretax (FR-5.8/5.9).
-        // Format placeholder: 15 digit "11.000.NNNN.N-NNN.NNN" — jelas
-        // bukan NPWP riil (digit 1-2 = "11" yang bukan KPP valid), supaya
-        // tidak lolos validasi Coretax secara tidak sengaja.
-        foreach ($data as $idx => $row) {
-            $taId = (string) Str::uuid();
-            $seq = str_pad((string) ($idx + 1), 4, '0', STR_PAD_LEFT);
-            // NPWP format: 15 digit tanpa titik/strip = "11000NNN0NNNNNNN"
-            // Stored as VARCHAR(20) to allow future format variants (e.g. "11.000.NNNN.0-NNN.NN").
-            // For seeding, use compact format to avoid exceeding column length.
-            $dummyNpwp = "11000{$seq}0" . str_pad($seq, 6, '0', STR_PAD_LEFT);
-
-            DB::table('tenaga_ahli')->insert([
-                'id' => $taId,
-                'nomor_induk_surveior' => $row['nomor'],
-                'nama' => $row['nama'],
-                'peran' => $row['peran'],
-                'jenis' => $row['jenis'],
-                'status_aktif' => $row['status_aktif'],
-                'status_penugasan_saat_ini' => $row['status_penugasan_saat_ini'],
-                'npwp' => $dummyNpwp, // TODO(keuangan): ganti via UI dengan NPWP asli
-                'nama_pajak' => $row['nama'], // default ke nama lengkap, bisa dikoreksi UI
-                'kode_objek_pajak' => '21-100-01', // honorarium — default untuk PPh 21
-            ]);
-
-            // Seed histori antrian for round-robin
-            $peranAntrian = $row['peran'] === 'verifikator' ? 'verifikator' : 'surveior';
-            DB::table('histori_antrian_penugasan')->insert([
-                'id' => (string) Str::uuid(),
-                'tenaga_ahli_id' => $taId,
-                'peran' => $peranAntrian,
-                'nomor_urut' => 0,
-                'status_kesediaan' => 'siap',
-            ]);
+        foreach ($data as $item) {
+            DB::table('tenaga_ahli')->updateOrInsert(
+                ['id' => $item['id']],
+                $item
+            );
         }
     }
 }

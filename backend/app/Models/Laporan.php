@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\ScopedToLembaga;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Laporan extends Model
 {
-    use HasUuids;
+    use HasUuids, ScopedToLembaga;
+
+    protected static $lembagaScopeRelation = 'penugasan.siklus';
 
     protected $table = 'laporan';
 

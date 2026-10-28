@@ -12,7 +12,9 @@ use App\Models\JurnalUmumDetail;
 use App\Models\KategoriJurnal;
 use App\Models\Lembaga;
 use App\Models\PembayaranHonor;
+use App\Services\LembagaResolver;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -61,15 +63,18 @@ class SettlementJournalService
     public const REF_PIUTANG_SETTLEMENT = 'settlement_piutang';
     public const REF_AP_HONOR_SETTLEMENT = 'settlement_ap_honor';
     public const REF_AP_PAJAK_SETTLEMENT = 'settlement_ap_pajak';
+    public const REF_AP_HONOR_REVERSAL = 'settlement_ap_honor_reversal';
 
     /**
      * Settlement 1 — AR (Piutang) lunas sebagian/penuh.
      *
-     * Dipanggil dari BuktiPembayaranController::verifikasi() setiap kali
-     * bukti diterima, TANPA memandang apakah invoice sudah lunas. Setiap
-     * penerimaan kas dari Faskes harus langsung di-record di buku besar
-     * (Dr Bank, Cr Piutang). Jika parsial, piutang berkurang sebagian;
-     * jika kemudian lunas, piutang menjadi 0.
+     * Dipanggil saat Kas Masuk pada AR diposting — baik lewat tombol
+     * "Buat Jurnal Bank Masuk" (SettlementJournalController::bankMasuk)
+     * maupun rebuild jurnal settlement.
+     *
+     * Satu penerimaan kas = satu jurnal: Dr Kas/Bank, Cr Piutang Usaha.
+     * Parsial maupun full, kas masuk dan piutang berkurang harus ter-record
+     * di buku besar.
      */
     public function recordArSettlement(
         BuktiPembayaran $bukti,
@@ -81,8 +86,16 @@ class SettlementJournalService
             return null;
         }
 
-        $bankCoa = $this->resolveBankCoa($bukti->invoice?->siklus?->lembaga_id, $bankCoaId);
-        $piutangCoa = $this->getCoaByKode(self::COA_PIUTANG_USAHA, $bukti->invoice?->siklus?->lembaga_id);
+        // Invoice + siklus di-eager-load eksplisit: method ini juga dipanggil
+        // dari luar (rebuild, scheduler) tanpa relasi ter-load, dan lazy loading
+        // dimatikan di environment non-produksi.
+        $invoice = $bukti->relationLoaded('invoice')
+            ? $bukti->invoice
+            : $bukti->invoice()->with('siklus')->first();
+        $lembagaId = $invoice?->siklus?->lembaga_id;
+
+        $bankCoa = $this->resolveBankCoa($lembagaId, $bankCoaId);
+        $piutangCoa = $this->getCoaByKode(self::COA_PIUTANG_USAHA, $lembagaId);
         if (! $bankCoa || ! $piutangCoa) {
             Log::warning('settlement.ar.skipped', [
                 'bukti_id' => $bukti->id,
@@ -98,25 +111,84 @@ class SettlementJournalService
             kategoriJenis: KategoriJurnal::JENIS_BKM,
             keterangan: sprintf(
                 'Penerimaan kas dari Faskes — Invoice %s — Bukti #%s',
-                $bukti->invoice?->nomor_invoice ?? '—',
+                $invoice?->nomor_invoice ?? '—',
                 substr((string) $bukti->id, 0, 8),
             ),
             refType: self::REF_PIUTANG_SETTLEMENT,
             refId: $bukti->id,
-            lembagaId: $bukti->invoice?->siklus?->lembaga_id,
+            lembagaId: $lembagaId,
             userId: $userId,
             details: [
                 ['coa_id' => $bankCoa->id, 'debit' => $amount, 'kredit' => 0, 'keterangan' => 'Kas/Bank — ' . $bankCoa->nama],
-                ['coa_id' => $piutangCoa->id, 'debit' => 0, 'kredit' => $amount, 'keterangan' => 'Piutang Usaha — Invoice ' . ($bukti->invoice?->nomor_invoice ?? '—')],
+                ['coa_id' => $piutangCoa->id, 'debit' => 0, 'kredit' => $amount, 'keterangan' => 'Piutang Usaha — Invoice ' . ($invoice?->nomor_invoice ?? '—')],
             ],
         );
     }
 
     /**
+     * Buat jurnal Bank Masuk untuk seluruh penerimaan kas pada satu
+     * Invoice AR yang belum punya jurnal settlement.
+     *
+     * Satu jurnal per bukti pembayaran — bukan satu jurnal per invoice.
+     * Alasan akuntansi: satu penerimaan kas = satu mutasi rekening bank.
+     * Menggabungkannya jadi satu jurnal per invoice menghapus jejak
+     *rekonsiliasi bank per transaksi dan menyulitkan audit.
+     *
+     * jurnal yang sudah ada (ref_type + ref_id sama) DILEWATI — pemanggilan
+     * berulang aman dan tidak menghasilkan dobel posted.
+     *
+     * @return array{created: array<int, JurnalUmum>, skipped: array<int, string>, errors: array<int, array>}
+     */
+    public function recordArBankMasuk(
+        Invoice $invoice,
+        ?string $bankCoaId = null,
+        ?string $userId = null,
+        ?string $buktiId = null,
+    ): array {
+        $created = [];
+        $skipped = [];
+        $errors = [];
+
+        $query = BuktiPembayaran::where('invoice_id', $invoice->id)
+            ->where('status_verifikasi', BuktiPembayaran::STATUS_DITERIMA);
+
+        if ($buktiId) {
+            $query->where('id', $buktiId);
+        }
+
+        $buktiList = $query->orderBy('tanggal_verifikasi')->get();
+
+        foreach ($buktiList as $bukti) {
+            if ($this->existingJurnal(self::REF_PIUTANG_SETTLEMENT, $bukti->id)) {
+                $skipped[] = $bukti->id;
+                continue;
+            }
+
+            try {
+                $jurnal = $this->recordArSettlement($bukti, $bankCoaId, $userId);
+                if ($jurnal) {
+                    $created[] = $jurnal;
+                } else {
+                    $errors[] = [
+                        'bukti_id' => $bukti->id,
+                        'error' => 'Akun kas/bank atau piutang usaha belum tersedia. '
+                            . 'Set akun kas/bank default pada menu Pengaturan Settlement.',
+                    ];
+                }
+            } catch (\Throwable $e) {
+                $errors[] = ['bukti_id' => $bukti->id, 'error' => $e->getMessage()];
+            }
+        }
+
+        return ['created' => $created, 'skipped' => $skipped, 'errors' => $errors];
+    }
+
+    /**
      * Settlement 2 — AP Honor dibayar (Surveior/Verifikator/Rekomendator).
      *
-     * Dipanggil dari ApHonorService::approvePayment() setelah status
-     * pembayaran berubah ke disetujui. Mencatat: Dr Utang Honor, Cr Bank.
+     * Dipanggil dari SettlementJournalController::bankKeluar() saat tim
+     * Keuangan menekan tombol "Buat Jurnal Bank Keluar" pada pembayaran
+     * honor yang sudah disetujui. Mencatat: Dr Utang Honor, Cr Bank.
      */
     public function recordApHonorSettlement(
         PembayaranHonor $pembayaran,
@@ -153,6 +225,113 @@ class SettlementJournalService
             details: [
                 ['coa_id' => $utangCoa->id, 'debit' => $amount, 'kredit' => 0, 'keterangan' => 'Utang Honor — ' . $pembayaran->nomor_pembayaran],
                 ['coa_id' => $bankCoa->id, 'debit' => 0, 'kredit' => $amount, 'keterangan' => 'Kas/Bank — ' . $bankCoa->nama],
+            ],
+        );
+    }
+
+    /**
+     * Buat jurnal Bank Keluar untuk satu pembayaran AP honor yang sudah
+     * disetujui (honor sudah dibayar).
+     *
+     * Pasangan dari recordArBankMasuk() untuk sisi AP: jurnal kas keluar
+     * dibuat EKSPLISIT oleh tim Keuangan lewat tombol "Buat Jurnal Bank
+     * Keluar", bukan otomatis saat pembayaran disetujui. Alasan akuntansi
+     * simetris dengan AR — kredit bank hanya sah setelah pengeluaran kas
+     * benar-benar terjadi dan dikonfirmasi terhadap mutasi rekening
+     * (rekonsiliasi bank).
+     *
+     * Satu pembayaran honor = satu mutasi bank = satu jurnal.
+     * Idempotent: ref_type + ref_id yang sama tidak menghasilkan jurnal
+     * ganda, jadi tombol aman diklik berulang tanpa dobel posted.
+     *
+     * @return array{created: array<int, JurnalUmum>, skipped: array<int, string>, errors: array<int, array>}
+     */
+    public function recordApBankKeluar(
+        PembayaranHonor $pembayaran,
+        ?string $bankCoaId = null,
+        ?string $userId = null,
+    ): array {
+        if ($this->existingJurnal(self::REF_AP_HONOR_SETTLEMENT, $pembayaran->id)) {
+            return ['created' => [], 'skipped' => [$pembayaran->id], 'errors' => []];
+        }
+
+        try {
+            $jurnal = $this->recordApHonorSettlement($pembayaran, $bankCoaId, $userId);
+            if ($jurnal) {
+                return ['created' => [$jurnal], 'skipped' => [], 'errors' => []];
+            }
+
+            return ['created' => [], 'skipped' => [], 'errors' => [[
+                'pembayaran_id' => $pembayaran->id,
+                'error' => 'Akun kas/bank atau utang honor belum tersedia. '
+                    . 'Set akun kas/bank default pada menu Pengaturan Settlement.',
+            ]]];
+        } catch (\Throwable $e) {
+            return ['created' => [], 'skipped' => [], 'errors' => [[
+                'pembayaran_id' => $pembayaran->id,
+                'error' => $e->getMessage(),
+            ]]];
+        }
+    }
+
+    /**
+     * Batalkan jurnal Bank Keluar untuk pembayaran honor yang dibatalkan.
+     *
+     * Dipanggil dari ApHonorService::cancelPayment() ketika pembayaran yang
+     * SUDAH punya jurnal settlement dibatalkan. Tanpa pembalikan ini, kas
+     * keluar tetap tercatat di buku besar padahal pembayarannya dibatalkan.
+     *
+     * Jurnal pembalik dicatat dengan ref_type sendiri supaya:
+     *   - tidak bentrok dengan jurnal asli (ref_type + ref_id guard), dan
+     *   - tetap terlihat di daftar jurnal settlement sebagai jejak audit.
+     *
+     * Idempotent: pembalik untuk pembayaran yang sama tidak dibuat dua kali.
+     */
+    public function reverseApHonorSettlement(
+        PembayaranHonor $pembayaran,
+        ?string $bankCoaId = null,
+        ?string $userId = null,
+    ): ?JurnalUmum {
+        $original = $this->existingJurnal(self::REF_AP_HONOR_SETTLEMENT, $pembayaran->id);
+        if (! $original) {
+            return null;
+        }
+
+        // Sudah pernah dibalik — jangan buat pembalik kedua.
+        if ($this->existingJurnal(self::REF_AP_HONOR_REVERSAL, $pembayaran->id)) {
+            return null;
+        }
+
+        $amount = (float) $pembayaran->total_nominal;
+        if ($amount <= 0) {
+            return null;
+        }
+
+        $lembagaId = $this->resolveLembagaIdFromPembayaran($pembayaran);
+        $bankCoa = $this->resolveBankCoa($lembagaId, $bankCoaId);
+        $utangCoa = $this->getCoaByKode(self::COA_UTANG_HONOR, $lembagaId);
+        if (! $bankCoa || ! $utangCoa) {
+            Log::warning('settlement.ap_honor.reversal_skipped', [
+                'pembayaran_id' => $pembayaran->id,
+                'reason' => 'COA bank atau utang honor tidak ditemukan',
+            ]);
+            return null;
+        }
+
+        return $this->createBalancedJurnal(
+            tanggal: now(),
+            kategoriJenis: KategoriJurnal::JENIS_BKK,
+            keterangan: sprintf(
+                'Pembatalan pelunasan honor — %s',
+                $pembayaran->nomor_pembayaran,
+            ),
+            refType: self::REF_AP_HONOR_REVERSAL,
+            refId: $pembayaran->id,
+            lembagaId: $lembagaId,
+            userId: $userId,
+            details: [
+                ['coa_id' => $bankCoa->id, 'debit' => $amount, 'kredit' => 0, 'keterangan' => 'Kas/Bank — pembalik ' . $pembayaran->nomor_pembayaran],
+                ['coa_id' => $utangCoa->id, 'debit' => 0, 'kredit' => $amount, 'keterangan' => 'Utang Honor — pembalik ' . $pembayaran->nomor_pembayaran],
             ],
         );
     }
@@ -204,6 +383,45 @@ class SettlementJournalService
     }
 
     /**
+     * Buat jurnal Bank Keluar untuk satu hutang pajak PPh 21 yang SUDAH
+     * dibayar (status = dibayar).
+     *
+     * Mirrors recordApBankKeluar() untuk sisi AP honor: satu setor pajak =
+     * satu mutasi bank = satu jurnal. Idempotent — hutang yang sudah punya
+     * jurnal settlement dilewati, jadi tombol aman diklik berulang tanpa
+     * dobel posted.
+     *
+     * @return array{created: array<int, JurnalUmum>, skipped: array<int, string>, errors: array<int, array>}
+     */
+    public function recordApPajakBankKeluar(
+        HutangPajak $hutang,
+        ?string $bankCoaId = null,
+        ?string $userId = null,
+    ): array {
+        if ($this->existingJurnal(self::REF_AP_PAJAK_SETTLEMENT, $hutang->id)) {
+            return ['created' => [], 'skipped' => [$hutang->id], 'errors' => []];
+        }
+
+        try {
+            $jurnal = $this->recordApPajakSettlement($hutang, $bankCoaId, $userId);
+            if ($jurnal) {
+                return ['created' => [$jurnal], 'skipped' => [], 'errors' => []];
+            }
+
+            return ['created' => [], 'skipped' => [], 'errors' => [[
+                'hutang_pajak_id' => $hutang->id,
+                'error' => 'Akun kas/bank atau utang PPh 21 belum tersedia. '
+                    . 'Set akun kas/bank default pada menu Pengaturan Settlement.',
+            ]]];
+        } catch (\Throwable $e) {
+            return ['created' => [], 'skipped' => [], 'errors' => [[
+                'hutang_pajak_id' => $hutang->id,
+                'error' => $e->getMessage(),
+            ]]];
+        }
+    }
+
+    /**
      * Lookup jurnal settlement yang sudah ada untuk ref tertentu.
      * Dipakai untuk idempotency check.
      */
@@ -251,10 +469,11 @@ class SettlementJournalService
             ->when($lembagaId, fn ($q) => $q->where('lembaga_id', $lembagaId))
             ->first();
 
-        return DB::transaction(function () use (
-            $tanggal, $keterangan, $refType, $refId, $lembagaId, $userId,
-            $details, $kategori, $totalDebit, $totalKredit,
-        ) {
+        try {
+            return DB::transaction(function () use (
+                $tanggal, $keterangan, $refType, $refId, $lembagaId, $userId,
+                $details, $kategori, $totalDebit, $totalKredit,
+            ) {
             $nomor = $this->generateNomorJurnal($tanggal, $kategori?->jenis);
 
             $jurnal = JurnalUmum::create([
@@ -310,7 +529,17 @@ class SettlementJournalService
             ]);
 
             return $jurnal;
-        });
+            });
+        } catch (QueryException $e) {
+            // Balapan: request lain membuat jurnal untuk ref yang sama lebih
+            // dulu dan(unique ref_type+ref_id) menolak insert ini. Kembalikan
+            // jurnal yang sudah ada daripada meledak jadi 500.
+            $existing = $this->existingJurnal($refType, $refId);
+            if ($existing) {
+                return $existing;
+            }
+            throw $e;
+        }
     }
 
     /**
@@ -367,20 +596,27 @@ class SettlementJournalService
     {
         // PembayaranHonor tidak menyimpan lembaga_id langsung — ambil
         // dari siklus.faskes di ledger entry pertama.
-        $firstDetail = $p->details()->with('ledgerEntry.siklus')->first();
-        return $firstDetail?->ledgerEntry?->siklus?->lembaga_id
-            ?? $firstDetail?->ledgerEntry?->siklus?->faskes?->lembaga_id;
+        return app(LembagaResolver::class)->fromPembayaranHonor($p->id);
     }
 
     private function resolveLembagaIdFromHutang(HutangPajak $h): ?string
     {
-        // HutangPajak terkait ke PembayaranHonor → ledger entry → siklus
-        $p = $h->pembayaranHonor;
-        if (! $p) {
-            return null;
-        }
-        $firstDetail = $p->details()->with('ledgerEntry.siklus')->first();
-        return $firstDetail?->ledgerEntry?->siklus?->lembaga_id;
+        // HutangPajak tidak punya kolom lembaga_id — scoped lewat
+        // PembayaranHonor → detail → ledger entry → siklus.
+        // Relasi di-eager-load eksplisit: method ini dipanggil dari luar
+        // (rebuild, scheduler, controller) tanpa relasi ter-load, dan lazy
+        // loading dimatikan di environment non-produksi.
+        return app(LembagaResolver::class)->fromHutangPajak($h->id);
+    }
+
+    /**
+     * Lembaga pemilik sebuah hutang pajak (null bila tidak bisa ditelusuri).
+     * Dipakai controller untuk guard: hutang hanya boleh di-journal dari
+     * session lembaga yang sama.
+     */
+    public function hutangLembagaId(HutangPajak $hutang): ?string
+    {
+        return $this->resolveLembagaIdFromHutang($hutang);
     }
 
     private function generateNomorJurnal(Carbon $tanggal, ?string $kategoriJenis): string

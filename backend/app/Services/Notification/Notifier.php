@@ -3,6 +3,8 @@
 namespace App\Services\Notification;
 
 use App\Models\NotifikasiTagihan;
+use App\Services\Invoice\InvoicePdfGenerator;
+use App\Services\Invoice\TagihanService;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -28,11 +30,17 @@ class Notifier
     public function __construct(
         private WhatsAppChannel $whatsapp,
         private EmailChannel $email,
+        private InvoicePdfGenerator $invoicePdf,
+        private TagihanService $tagihanService,
     ) {}
 
     /**
      * Send a notification with primary WhatsApp + email fallback.
      * Persists the attempt to notifikasi_tagihan for auditability and retry.
+     *
+     * @param  array  $attachments  Lampiran untuk kanal email (mis. PDF invoice).
+     * @param  string|null  $invoiceId  Id invoice terkait; dipakai agar retry
+     *                                  bisa membuat ulang lampiran PDF.
      *
      * @return array{status: string, channel: string, notifikasi_id: string, error?: string}
      */
@@ -44,6 +52,8 @@ class Notifier
         string $siklusId,
         string $jenis,
         ?string $penugasanId = null,
+        array $attachments = [],
+        ?string $invoiceId = null,
     ): array {
         $phone = $this->whatsapp->send($recipientPhone, $subject, $message);
         if ($phone) {
@@ -55,7 +65,7 @@ class Notifier
                 'recipient' => $recipientPhone,
                 'status' => NotifikasiTagihan::STATUS_TERKIRIM,
                 'dikirim_pada' => now(),
-                'payload' => ['subject' => $subject, 'message' => $message],
+                'payload' => ['subject' => $subject, 'message' => $message, 'invoice_id' => $invoiceId],
             ]);
             return ['status' => 'terkirim', 'channel' => 'whatsapp', 'notifikasi_id' => $notif->id];
         }
@@ -68,7 +78,7 @@ class Notifier
         ]);
 
         if ($recipientEmail) {
-            $emailOk = $this->email->send($recipientEmail, $subject, $message);
+            $emailOk = $this->email->send($recipientEmail, $subject, $message, null, $attachments);
             if ($emailOk) {
                 $notif = $this->persist([
                     'siklus_id' => $siklusId,
@@ -78,7 +88,7 @@ class Notifier
                     'recipient' => $recipientEmail,
                     'status' => NotifikasiTagihan::STATUS_TERKIRIM,
                     'dikirim_pada' => now(),
-                    'payload' => ['subject' => $subject, 'message' => $message, 'whatsapp_fallback_error' => $whatsappError],
+                    'payload' => ['subject' => $subject, 'message' => $message, 'invoice_id' => $invoiceId, 'whatsapp_fallback_error' => $whatsappError],
                 ]);
                 return ['status' => 'terkirim', 'channel' => 'email', 'notifikasi_id' => $notif->id];
             }
@@ -129,6 +139,7 @@ class Notifier
         $payload = $notif->payload ?? [];
         $subject = $payload['subject'] ?? 'Notifikasi';
         $message = $payload['message'] ?? '';
+        $invoiceId = $payload['invoice_id'] ?? null;
 
         $result = $this->sendWithFallback(
             recipientPhone: $notif->recipient,
@@ -138,9 +149,42 @@ class Notifier
             siklusId: $notif->siklus_id,
             jenis: $notif->jenis,
             penugasanId: $notif->penugasan_id,
+            attachments: $this->buildInvoiceAttachments($invoiceId),
+            invoiceId: $invoiceId,
         );
 
         return $result;
+    }
+
+    /**
+     * Buat ulang lampiran PDF invoice untuk percobaan kirim ulang.
+     */
+    private function buildInvoiceAttachments(?string $invoiceId): array
+    {
+        if (! $invoiceId) {
+            return [];
+        }
+
+        $invoice = \App\Models\Invoice::find($invoiceId);
+        if (! $invoice) {
+            return [];
+        }
+
+        try {
+            $pdf = $this->invoicePdf->generate($this->tagihanService->build($invoice));
+
+            return [[
+                'name' => $pdf['filename'],
+                'content' => $pdf['content'],
+                'mime' => 'application/pdf',
+            ]];
+        } catch (\Throwable $e) {
+            Log::error('notifier.invoice_pdf.failed', [
+                'invoice_id' => $invoiceId,
+                'error' => $e->getMessage(),
+            ]);
+            return [];
+        }
     }
 
     private function getFallbackEmailForSiklus(string $siklusId): ?string

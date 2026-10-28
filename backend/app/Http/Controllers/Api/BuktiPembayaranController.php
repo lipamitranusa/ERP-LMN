@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\BuktiPembayaran;
 use App\Models\Invoice;
+use App\Models\JurnalUmum;
 use App\Services\AttachmentService;
 use App\Services\AuditService;
 use App\Services\Keuangan\SettlementJournalService;
@@ -23,7 +24,6 @@ class BuktiPembayaranController extends Controller
         private AuditService $audit,
         private Notifier $notifier,
         private AttachmentService $attachment,
-        private SettlementJournalService $settlementJournal,
     ) {}
 
     public function show(BuktiPembayaran $bukti): JsonResponse
@@ -140,6 +140,141 @@ class BuktiPembayaranController extends Controller
     }
 
     /**
+     * GET /api/bukti/histori
+     * Histori pembayaran Faskes lintas invoice — daftar bukti transfer yang
+     * pernah dikirim (diterima, ditolak, dan masih menunggu), lengkap dengan
+     * status jurnal bank masuknya.
+     *
+     * Berbeda dari antrianMenunggu() yang hanya menampilkan yang masih
+     * menunggu, endpoint ini面向 audit: satu-satunya sumber untuk melihat
+     * seluruh riwayat penerimaan kas dari Faskes beserta jejak bukubesar.
+     *
+     * Filter: q, status, metode, sumber, faskes_id, dari, sampai, page, per_page
+     */
+    public function histori(Request $request): JsonResponse
+    {
+        $query = BuktiPembayaran::query()
+            ->with([
+                'invoice:id,pks_id,siklus_id,nomor_invoice,total_tagihan,status',
+                'invoice.siklus:id,faskes_id,lembaga_id,tahapan',
+                'invoice.siklus.faskes:id,nama,tipe_faskes',
+                'verifier:nama',
+                'submitter:nama',
+            ]);
+
+        // Scope lemma: bukti pembayaran tidak punya kolom lemma_id, jadi
+        // ikut melalui invoice → siklus (sama seperti antrianMenunggu).
+        if ($lembagaId = session('lembaga_id')) {
+            $query->whereHas('invoice.siklus', fn ($q) => $q->where('lembaga_id', $lembagaId));
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status_verifikasi', $request->string('status'));
+        }
+        if ($request->filled('metode')) {
+            $query->where('metode', $request->string('metode'));
+        }
+        if ($request->filled('sumber')) {
+            $query->where('sumber', $request->string('sumber'));
+        }
+        if ($request->filled('faskes_id')) {
+            $query->whereHas('invoice.siklus', fn ($q) => $q->where('faskes_id', $request->string('faskes_id')));
+        }
+        if ($request->filled('dari')) {
+            $query->whereDate('tanggal_submit', '>=', $request->date('dari'));
+        }
+        if ($request->filled('sampai')) {
+            $query->whereDate('tanggal_submit', '<=', $request->date('sampai'));
+        }
+        if ($request->filled('q')) {
+            $term = trim($request->string('q')->toString());
+            $query->where(function ($w) use ($term) {
+                $w->where('nomor_referensi', 'ilike', "%{$term}%")
+                    ->orWhere('dari_rekening', 'ilike', "%{$term}%")
+                    ->orWhere('alasan_penolakan', 'ilike', "%{$term}%")
+                    ->orWhereHas('invoice', fn ($r) => $r->where('nomor_invoice', 'ilike', "%{$term}%"))
+                    ->orWhereHas('invoice.siklus.faskes', fn ($r) => $r->where('nama', 'ilike', "%{$term}%"));
+            });
+        }
+
+        $perPage = min(max((int) $request->integer('per_page', 25), 1), 100);
+        $page = $query->orderByDesc('tanggal_submit')->orderByDesc('created_at')->paginate($perPage);
+
+        // Jurnal bank masuk per bukti (settlement_piutang) — agar UI bisa
+        // menandai pembayaran mana yang sudah terposting ke buku besar.
+        $jurnalByBukti = JurnalUmum::where('ref_type', SettlementJournalService::REF_PIUTANG_SETTLEMENT)
+            ->whereIn('ref_id', collect($page->items())->pluck('id'))
+            ->pluck('nomor', 'ref_id')
+            ->all();
+
+        return response()->json([
+            'data' => collect($page->items())->map(fn (BuktiPembayaran $b) => [
+                'id' => $b->id,
+                'tanggal_submit' => $b->tanggal_submit?->toDateString(),
+                'tanggal_verifikasi' => $b->tanggal_verifikasi?->toDateString(),
+                'nominal' => (float) $b->nominal,
+                'metode' => $b->metode,
+                'sumber' => $b->sumber,
+                'status_verifikasi' => $b->status_verifikasi,
+                'nomor_referensi' => $b->nomor_referensi,
+                'dari_rekening' => $b->dari_rekening,
+                'alasan_penolakan' => $b->alasan_penolakan,
+                'verifier_nama' => $b->verifier?->nama,
+                'submitter_nama' => $b->submitter?->nama,
+                'path_bukti' => $b->path_bukti,
+                'invoice' => $b->invoice ? [
+                    'id' => $b->invoice->id,
+                    'nomor_invoice' => $b->invoice->nomor_invoice,
+                    'total_tagihan' => (float) $b->invoice->total_tagihan,
+                    'status' => $b->invoice->status,
+                ] : null,
+                'faskes' => $b->invoice?->siklus?->faskes ? [
+                    'id' => $b->invoice->siklus->faskes->id,
+                    'nama' => $b->invoice->siklus->faskes->nama,
+                    'tipe_faskes' => $b->invoice->siklus->faskes->tipe_faskes,
+                ] : null,
+                'jurnal_nomor' => $jurnalByBukti[$b->id] ?? null,
+            ])->values(),
+            'meta' => [
+                'kpi' => $this->historiKpi(clone $query),
+                'pagination' => [
+                    'current_page' => $page->currentPage(),
+                    'last_page' => $page->lastPage(),
+                    'per_page' => $page->perPage(),
+                    'total' => $page->total(),
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Ringkasan nilai & jumlah pembayaran untuk halaman histori.
+     * Dipisah dari histori() agar tidak ikut ter-paginate.
+     *
+     * Agregasi di SQL, bukan di PHP — histori bisa tumbuh ratusan ribu baris
+     * pada lembaga dengan riwayat panjang.
+     */
+    private function historiKpi($query): array
+    {
+        $rows = $query
+            ->reorder()
+            ->without(['invoice', 'verifier', 'submitter'])
+            ->toBase()
+            ->selectRaw('status_verifikasi, COUNT(*) as jml, COALESCE(SUM(nominal), 0) as total')
+            ->groupBy('status_verifikasi')
+            ->get();
+
+        $result = [];
+        foreach ([BuktiPembayaran::STATUS_DITERIMA, BuktiPembayaran::STATUS_MENUNGGU, BuktiPembayaran::STATUS_DITOLAK] as $status) {
+            $row = $rows->firstWhere('status_verifikasi', $status);
+            $result["jumlah_{$status}"] = (int) ($row->jml ?? 0);
+            $result["nilai_{$status}"] = round((float) ($row->total ?? 0), 2);
+        }
+
+        return $result;
+    }
+
+    /**
      * FR-2.6 (SLA 1x24 jam tercatat di log), FR-2.7 (tolak + alasan).
      */
     public function verifikasi(Request $request, BuktiPembayaran $bukti): JsonResponse
@@ -175,14 +310,13 @@ class BuktiPembayaranController extends Controller
 
             $newInvoiceStatus = $this->calculator->recalculate($invoice);
 
-            // Settlement AR — catat jurnal umum (Dr Bank, Cr Piutang Usaha)
-            // untuk setiap bukti yang diterima, tanpa memandang apakah
-            // invoice menjadi lunas / sebagian. Parsial maupun full, kas
-            // masuk dan piutang berkurang harus ter-record di buku besar.
-            $this->settlementJournal->recordArSettlement(
-                bukti: $bukti,
-                userId: $user->id,
-            );
+            // Jurnal Bank Masuk (Dr Bank / Cr Piutang Usaha) TIDAK dibuat di
+            // sini. Debit bank adalah aksi eksplisit dari tim Keuangan lewat
+            // tombol "Buat Jurnal Bank Masuk" di halaman Detail Piutang —
+            // akun bank hanya boleh didebit setelah penerimaan kas
+            // dikonfirmasi terhadap mutasi rekening (rekonsiliasi bank).
+            // Selain itu, pembuktian yang DITOLAK tidak boleh pernah
+            // menghasilkan penerimaan kas di buku besar.
 
             if ($data['status'] === BuktiPembayaran::STATUS_DITOLAK) {
                 Log::info('faskes.bukti_transfer.ditolak', [

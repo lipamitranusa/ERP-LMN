@@ -51,7 +51,7 @@ const schema = z.object({
   email: z.string().default(""),
   password: z.string().default(""),
   role_id: z.string().default(""),
-}).refine(d => d.peran !== "verifikator" ? d.jenis : true, {
+}).refine(d => !["surveior", "kedua"].includes(d.peran) ? true : Boolean(d.jenis), {
   message: "Jenis wajib dipilih untuk surveior",
   path: ["jenis"],
 }).refine(d => !d.buat_akun || d.password.length >= 8, {
@@ -80,7 +80,7 @@ const PTKP_OPTIONS = [
   { value: "K/3", label: "K/3 — Kawin, 3 tanggungan" },
 ];
 
-const PERAN_LABEL = { surveior: "Surveior", verifikator: "Verifikator", kedua: "Keduanya" };
+const PERAN_LABEL = { surveior: "Surveior", verifikator: "Verifikator", rekomendator: "Reksa", kedua: "Keduanya" };
 const JENIS_COLORS = {
   TKPP: { bg: "#FEF3C7", fg: "#92400E" },
   TKSDU: { bg: "#DBEAFE", fg: "#1E40AF" },
@@ -199,7 +199,7 @@ export default function MasterTenagaAhli() {
   const onSubmit = (formData) => {
     setServerError("");
     const payload = { ...formData };
-    if (payload.peran === "verifikator") payload.jenis = null;
+    if (payload.peran === "verifikator" || payload.peran === "rekomendator") payload.jenis = null;
     if (payload.batas_penugasan_per_periode === "") payload.batas_penugasan_per_periode = null;
     else payload.batas_penugasan_per_periode = parseInt(payload.batas_penugasan_per_periode, 10);
     if (!payload.buat_akun) {
@@ -225,6 +225,7 @@ export default function MasterTenagaAhli() {
     const n = (r.nama_role || "").toLowerCase();
     if (watchedPeran === "surveior") return n === "surveior";
     if (watchedPeran === "verifikator") return n === "verifikator";
+    if (watchedPeran === "rekomendator") return n === "reksa" || n === "rekomendator";
     return true;
   });
 
@@ -248,7 +249,7 @@ export default function MasterTenagaAhli() {
           <Input placeholder="Cari nama atau NIK..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
         {[
-          { val: filterPeran, set: setFilterPeran, opts: ["", "surveior", "verifikator", "kedua"], labels: ["Semua Peran", "Surveior", "Verifikator", "Keduanya"] },
+          { val: filterPeran, set: setFilterPeran, opts: ["", "surveior", "verifikator", "kedua", "rekomendator"], labels: ["Semua Peran", "Surveior", "Verifikator", "Keduanya", "Reksa"] },
           { val: filterJenis, set: setFilterJenis, opts: ["", "TKPP", "TKSDU"], labels: ["Semua Jenis", "TKPP", "TKSDU"] },
           { val: filterStatus, set: setFilterStatus, opts: ["", "Aktif", "Nonaktif", "Cuti", "Resign"], labels: ["Semua Status", "Aktif", "Nonaktif", "Cuti", "Resign"] },
         ].map(({ val, set, opts, labels }, i) => (
@@ -360,7 +361,7 @@ export default function MasterTenagaAhli() {
                 ))}
                 {[
                   { id: "ta-peran", label: "Peran *", key: "peran" },
-                  { id: "ta-jenis", label: `Jenis ${watchedPeran !== "verifikator" ? "*" : ""}`, key: "jenis", disabled: watchedPeran === "verifikator" },
+                  { id: "ta-jenis", label: `Jenis ${["surveior", "kedua"].includes(watchedPeran) ? "*" : ""}`, key: "jenis", disabled: ["verifikator", "rekomendator"].includes(watchedPeran) },
                   { id: "ta-status", label: "Status Aktif *", key: "status_aktif" },
                 ].map(f => (
                   <div key={f.id} className="space-y-1">
@@ -370,6 +371,7 @@ export default function MasterTenagaAhli() {
                         <option value="surveior">Surveior</option>
                         <option value="verifikator">Verifikator</option>
                         <option value="kedua">Keduanya (Surveior &amp; Verifikator)</option>
+                        <option value="rekomendator">Reksa (Rekomendator)</option>
                       </select>
                     ) : f.key === "status_aktif" ? (
                       <select id={f.id} className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" {...register(f.key)}>
@@ -382,7 +384,7 @@ export default function MasterTenagaAhli() {
                       </select>
                     )}
                     {errors[f.key] && <p className="text-xs text-red-600">{errors[f.key].message}</p>}
-                    {f.key === "jenis" && watchedPeran === "verifikator" && <p className="text-[11px] text-slate-400 dark:text-slate-500">Jenis hanya berlaku untuk surveior.</p>}
+                    {f.key === "jenis" && ["verifikator", "rekomendator"].includes(watchedPeran) && <p className="text-[11px] text-slate-400 dark:text-slate-500">Jenis hanya berlaku untuk surveior.</p>}
                   </div>
                 ))}
                 {[
@@ -488,6 +490,12 @@ export default function MasterTenagaAhli() {
                     </div>
                     {errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}
                   </div>
+                  {watchedPeran === "rekomendator" && (
+                    <p className="col-span-2 text-[11px] text-blue-700 dark:text-blue-300">
+                      Akun Reksa yang dibuat dari tenaga ahli ini tertaut ke data rekening di atas,
+                      sehingga honor reksa otomatis membawa informasi rekening saat pembayaran AP.
+                    </p>
+                  )}
                 </div>
               )}
               {!watchedBuatAkun && (

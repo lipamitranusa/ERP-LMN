@@ -14,9 +14,14 @@ use App\Models\Lembaga;
  */
 class LembagaHeaderService
 {
-    public function getHeader(): array
+    /**
+     * Kop dokumen untuk lembaga tertentu. Tanpa argumen dipakai lembaga
+     * aktif (konteks umum); untuk dokumen yang terikat sebuah siklus,
+     * teruskan siklus->lembaga agar nama & logo sesuai penerbit dokumen.
+     */
+    public function getHeader(?Lembaga $lembaga = null): array
     {
-        $lembaga = $this->resolveActive();
+        $lembaga = $lembaga ?? $this->resolveActive();
 
         if (! $lembaga) {
             return [
@@ -29,6 +34,7 @@ class LembagaHeaderService
                 'telepon' => null,
                 'email' => null,
                 'website' => null,
+                'logo_path' => null,
                 'pejabat' => ['nama' => null, 'jabatan' => null],
             ];
         }
@@ -38,6 +44,7 @@ class LembagaHeaderService
             'nama_singkat' => $this->shortName($lembaga->nama),
             'npwp' => $lembaga->npwp,
             'logo_url' => $lembaga->logo_url,
+            'logo_path' => $lembaga->logo_path,
             'alamat' => $lembaga->alamat,
             'kota' => $lembaga->kota,
             'telepon' => $lembaga->telepon,

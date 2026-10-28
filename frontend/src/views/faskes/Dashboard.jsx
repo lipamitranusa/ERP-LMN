@@ -26,7 +26,7 @@ const schema = z.object({
   kontak: z.string().default(""),
 });
 
-function AjukanForm({ onSuccess, authData }) {
+function AjukanForm({ onSuccess, authData, pengajuanTerakhir }) {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const freshUser = authData?.user || user;
   const faskes = freshUser.faskes || {};
@@ -52,11 +52,14 @@ function AjukanForm({ onSuccess, authData }) {
   const watchedLembagaId = watch("lembaga_id");
 
   useEffect(() => {
+    // Auto-pilih lembaga tanpa memicu validasi: trigger dari setValue
+    // memvalidasi seluruh form, sehingga field yang belum diisi (tanggal
+    // permohonan) ikut ditandai error sebelum user menyentuh form.
     if (lembagaList.length === 1 && !faskesLembagaId) {
-      setValue("lembaga_id", lembagaList[0].id, { shouldValidate: true });
+      setValue("lembaga_id", lembagaList[0].id);
     } else if (faskesLembagaId) {
       const match = lembagaList.find(l => l.id === faskesLembagaId);
-      if (match) setValue("lembaga_id", match.id, { shouldValidate: true });
+      if (match) setValue("lembaga_id", match.id);
     }
   }, [lembagaList, faskesLembagaId, setValue]);
 
@@ -64,7 +67,7 @@ function AjukanForm({ onSuccess, authData }) {
     lembagaList.length === 1 || !!faskesLembagaId
   );
 
-  const mutate = useMutateKeys(["siklus-list-faskes"], {
+  const mutate = useMutateKeys([["siklus-aktif"], ["siklus-histori"]], {
     onSuccess: (data) => {
       if (data?.data) onSuccess(data.data);
     },
@@ -95,6 +98,18 @@ function AjukanForm({ onSuccess, authData }) {
           Isi formulir di bawah untuk memulai proses akreditasi fasilitas kesehatan Anda.
         </p>
       </div>
+
+      {pengajuanTerakhir && (
+        <div className="mb-5 max-w-[860px] p-4 rounded-lg bg-green-50 border border-green-200">
+          <div className="text-[13px] font-semibold text-green-800 mb-1">
+            Pengajuan sebelumnya telah selesai
+          </div>
+          <div className="text-[12px] text-green-700">
+            No. Pengajuan {pengajuanTerakhir.id?.split("-")[0]?.toUpperCase()} ({formatDate(pengajuanTerakhir.tanggal_pengajuan)})
+            telah menyelesaikan seluruh tahapan dan pembayarannya sudah lunas. Pengajuan tersebut tersimpan di Histori Pengajuan.
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 max-w-[860px]">
         <div className="col-span-2">
@@ -222,12 +237,17 @@ function StatusView({ siklus }) {
   }, [invoiceData]);
 
   const surveiSelesai = siklus?.survei_selesai === true;
-  const invoiceBelumLunas = invoiceStatus && !invoiceStatus.lunas;
+  const invoiceBelumLunas = invoiceStatus
+    ? !invoiceStatus.lunas
+    : Boolean(siklus?.invoice_belum_lunas);
 
   // Survei selesai tapi invoice belum lunas → proses tertahan di Pembayaran,
   // sama seperti yang ditampilkan stepper di portal admin.
   const tertahanPembayaran = Boolean(invoiceBelumLunas && surveiSelesai);
   const tahapAktif = tertahanPembayaran ? 4 : tahap;
+
+  // Seluruh tahapan selesai tapi pembayaran belum lunas → belum masuk histori.
+  const menungguPelunasan = Boolean(tahap >= 7 && invoiceBelumLunas);
 
   return (
     <div className="max-w-[720px] mx-auto">
@@ -244,7 +264,11 @@ function StatusView({ siklus }) {
         <svg viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" className="shrink-0">
           <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        {tertahanPembayaran ? (
+        {menungguPelunasan ? (
+          <span className="text-[13px] text-amber-800">
+            Seluruh tahapan akreditasi telah selesai. Mohon selesaikan pelunasan pembayaran agar pengajuan dapat dipindahkan ke Histori Pengajuan.
+          </span>
+        ) : tertahanPembayaran ? (
           <span className="text-[13px] text-amber-800">
             Survei telah selesai — mohon selesaikan pembayaran invoice agar proses verifikasi dapat dilanjutkan.
           </span>
@@ -368,13 +392,24 @@ export default function FaskesDashboard() {
 
   const { data: authData, isLoading: authLoading } = useApi("auth-me", "/auth/me");
 
+  // Pengajuan yang masih berjalan. Pengajuan yang sudah masuk histori
+  // (tuntas + pembayaran lunas) tidak termasuk, sehingga faskes dapat
+  // mengajukan akreditasi kembali.
   const { data: siklusData, isLoading: siklusLoading } = useApi(
-    "siklus-list",
-    "/pendaftaran/siklus?per_page=1",
+    "siklus-aktif",
+    "/pendaftaran/siklus?aktif=1&per_page=1",
     { refetchInterval: 30000 }
   );
 
+  // Pengajuan terakhir yang sudah masuk histori — ditampilkan pada form
+  // pengajuan baru sebagai penanda bahwa siklus sebelumnya sudah tuntas.
+  const { data: historiData } = useApi(
+    "siklus-histori-terakhir",
+    "/pendaftaran/siklus?riwayat=1&per_page=1"
+  );
+
   const siklus = siklusData?.data?.[0] || null;
+  const pengajuanTerakhir = historiData?.data?.[0] || null;
   const loading = authLoading || siklusLoading;
 
   useEffect(() => {
@@ -402,8 +437,8 @@ export default function FaskesDashboard() {
   }
 
   if (!siklus) {
-    return <AjukanForm authData={authData} onSuccess={(newSiklus) => {
-      queryClient.invalidateQueries({ queryKey: ["siklus-list"] });
+    return <AjukanForm authData={authData} pengajuanTerakhir={pengajuanTerakhir} onSuccess={(newSiklus) => {
+      queryClient.invalidateQueries({ queryKey: ["siklus-aktif"] });
     }} />;
   }
 

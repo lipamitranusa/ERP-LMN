@@ -100,6 +100,8 @@ class SlipHonorNotificationController extends Controller
         $p = PembayaranHonor::with([
             'details.ledgerEntry.siklus.faskes',
             'details.ledgerEntry.penerima',
+            'penyetuju',
+            'pembuat',
         ])->find($pembayaranId);
 
         if (! $p) {

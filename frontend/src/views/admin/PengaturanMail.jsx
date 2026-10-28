@@ -125,7 +125,7 @@ export default function PengaturanMail() {
     try {
       const driver = getVal("umum", "driver") || "smtp";
       const { api } = await import("@/lib/api");
-      const res = await api("/mail-settings/test-connection", { method: "POST", body: JSON.stringify({ driver, test_email: email, test_message }) });
+      const res = await api("/mail-settings/test-connection", { method: "POST", body: JSON.stringify({ driver, test_email: email, test_message: testMessage }) });
       showToast(res.message, "success");
     } catch (err) { showToast(err.message || "Gagal mengirim email test.", "error"); } finally { setTesting(false); }
   };

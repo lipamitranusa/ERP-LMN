@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useApi, useMutateKeys, useMutate } from "@/hooks/useApi";
+import { withLembaga } from "@/lib/api";
 import InvoiceStatusCard from "@/components/InvoiceStatusCard";
 import { formatDate } from "../../utils/dateFormat";
 import { Textarea } from "@/components/ui/textarea";
@@ -236,7 +237,7 @@ function DetailPanel({ pksId, onClose }) {
     if (!pks?.path_signed_pdf) return;
     const token = localStorage.getItem("token");
     try {
-      const res = await fetch(`/api/kontrak/${pks.id}/signed-pdf`, {
+      const res = await fetch(withLembaga(`/api/kontrak/${pks.id}/signed-pdf`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Gagal mengambil file.");
@@ -601,16 +602,38 @@ function DetailPanel({ pksId, onClose }) {
                   <>
                     {tagihanResult ? (
                       <div>
-                        {tagihanResult.data?.success || tagihanResult.success ? (
-                          <div style={{ background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: "8px", padding: "16px", color: "#15803D", fontSize: "13px" }}>
-                            <strong>Berhasil!</strong><br />
-                            {tagihanResult.data?.whatsapp?.message || tagihanResult.data?.email?.message || tagihanResult.message}
-                          </div>
-                        ) : (
-                          <div style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "12px", color: "#DC2626", fontSize: "13px" }}>
-                            {tagihanResult.message || "Gagal mengirim tagihan."}
-                          </div>
-                        )}
+                        {(() => {
+                          const results = tagihanResult.data?.results || [];
+                          const anySuccess = results.some(r => r.status === 'terkirim');
+                          const allSuccess = anySuccess && results.every(r => r.status === 'terkirim');
+                          return (
+                            <div style={anySuccess ? { background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: "8px", padding: "16px", color: "#15803D", fontSize: "13px" } : { background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "12px", color: "#DC2626", fontSize: "13px" }}>
+                              <strong>{anySuccess ? (allSuccess ? "Berhasil!" : "Sebagian terkirim:") : "Gagal"}</strong>
+                              <ul style={{ margin: "8px 0 0 16px", padding: 0 }}>
+                                {results.map((r, i) => (
+                                  <li key={i} style={{ marginBottom: "4px" }}>
+                                    {r.channel === 'whatsapp' ? 'WhatsApp' : 'Email'}{' '}
+                                    → {r.recipient || '(tanpa tujuan)'}{' '}
+                                    {r.status === 'terkirim' ? '✅ terkirim' : '❌ ' + (r.error || 'gagal')}
+                                    {r.attachments?.length > 0 && (
+                                      <span style={{ display: "block", fontSize: "12px", opacity: 0.85 }}>
+                                        📎 {r.attachments.join(", ")}
+                                      </span>
+                                    )}
+                                    {r.warning && (
+                                      <span style={{ display: "block", fontSize: "12px", color: "#92400E" }}>
+                                        {r.warning}
+                                      </span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                              {tagihanResult.message && !anySuccess && (
+                                <div style={{ marginTop: "8px" }}>{tagihanResult.message}</div>
+                              )}
+                            </div>
+                          );
+                        })()}
                         <Button variant="outline" style={{ marginTop: "12px" }} onClick={() => { setTagihanPanelOpen(false); setTagihanResult(null); setTagihanInvId(null); }}>
                           Tutup
                         </Button>
@@ -751,7 +774,7 @@ function DetailPanel({ pksId, onClose }) {
                         onClick={async () => {
                           const token = localStorage.getItem("token");
                           setTagihanPreviewHtml("");
-                          const res = await fetch(`/api/invoice/${inv.id}/tagihan/preview`, {
+                          const res = await fetch(withLembaga(`/api/invoice/${inv.id}/tagihan/preview`), {
                             headers: { Authorization: `Bearer ${token}` },
                           });
                           if (res.ok) {

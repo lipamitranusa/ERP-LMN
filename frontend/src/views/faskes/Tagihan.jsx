@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useHistory } from "react-router-dom";
+import { useHistory, useLocation } from "react-router-dom";
 import InvoiceStatusCard from "@/components/InvoiceStatusCard";
 import PaymentMethodSelector from "@/components/PaymentMethodSelector";
 import { formatDate } from "@/utils/dateFormat";
@@ -14,6 +14,7 @@ function formatRp(n) {
 
 export default function FaskesTagihan() {
   const history = useHistory();
+  const location = useLocation();
   const [selectedSiklus, setSelectedSiklus] = useState(null);
 
   const { data: siklusListData, isLoading: loading } = useApi(
@@ -23,11 +24,17 @@ export default function FaskesTagihan() {
 
   const siklusList = siklusListData?.data || [];
 
+  // Deep-link dari Histori Pengajuan: /faskes/tagihan?siklus=<id>
+  const params = new URLSearchParams(location.search);
+  const siklusDariUrl = params.get("siklus");
+
   React.useEffect(() => {
-    if (siklusList.length > 0 && !selectedSiklus) {
+    if (siklusDariUrl && siklusList.some(s => s.id === siklusDariUrl)) {
+      setSelectedSiklus(siklusDariUrl);
+    } else if (siklusList.length > 0 && !selectedSiklus) {
       setSelectedSiklus(siklusList[0].id);
     }
-  }, [siklusList, selectedSiklus]);
+  }, [siklusList, siklusDariUrl, selectedSiklus]);
 
   const { data: invoicesData } = useApi(
     ["invoices", selectedSiklus],

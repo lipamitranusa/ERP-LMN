@@ -2,14 +2,16 @@ import React, { useState, useEffect, useRef } from "react";
 import { useHistory, useParams } from "react-router-dom";
 import { formatDate } from "@/utils/dateFormat";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { withLembaga } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Printer, Send, X } from "lucide-react";
+import { ArrowLeft, Banknote, Pencil, Printer, Send, X } from "lucide-react";
 import SettlementJournalPanel from "@/components/SettlementJournalPanel";
+import { useAuth } from "@/hooks/useAuth";
 
 function formatRp(n) { return `Rp ${Number(n || 0).toLocaleString("id-ID")}`; }
 const METODE_LABEL = { transfer_bank: "Transfer Bank", tunai: "Tunai", lainnya: "Lainnya" };
@@ -22,6 +24,7 @@ function StatusBadge({ status }) {
 export default function ApHonorPaymentDetail() {
   const history = useHistory();
   const { id } = useParams();
+  const { can } = useAuth();
   const [error, setError] = useState("");
   const [actionInProgress, setActionInProgress] = useState(false);
   const [showCancelForm, setShowCancelForm] = useState(false);
@@ -37,14 +40,36 @@ export default function ApHonorPaymentDetail() {
   const [showPrintModal, setShowPrintModal] = useState(false);
   const slipIframeRef = useRef(null);
 
-  const { data, isLoading } = useApi(["ap-honor-payment-detail", id], `/keuangan/ap-honor/payments/${id}`);
+  const { data: response, isLoading } = useApi(["ap-honor-payment-detail", id], `/keuangan/ap-honor/payments/${id}`);
+  // Endpoint membungkus payload dalam { data: ... } — tanpa di-unpack di sini
+  // semua field pembayaran (nomor, status, detail) jadi undefined dan halaman
+  // tampil kosong tanpa tombol aksi.
+  const data = response?.data;
+  const loadError = !data && response?.message ? response.message : "";
   const approveMutate = useMutateKeys([["ap-honor-payment-detail", id], ["ap-honor-history"]]);
   const cancelMutate = useMutateKeys([["ap-honor-payment-detail", id], ["ap-honor-history"]]);
+  const bankKeluarMutate = useMutateKeys([["ap-honor-payment-detail", id], ["ap-honor-kas-keluar"], ["ap-honor-history"]]);
+
+  const canPostJournal = can("Ledger/Keuangan", "Tambah");
+
+  const handleBuatBankKeluar = async () => {
+    // Jurnal Bank Keluar sudah ada → jangan buat lagi (satu kas keluar = satu jurnal).
+    if (data?.sudah_dijurnal) return;
+    if (!confirm(`Buat jurnal Bank Keluar untuk ${data?.nomor_pembayaran}?`)) return;
+    setActionInProgress(true); setError("");
+    try {
+      await bankKeluarMutate.mutateAsync({
+        path: "/keuangan/settlement/bank-keluar",
+        method: "POST",
+        body: { pembayaran_id: id },
+      });
+    } catch (err) { setError(err.message); } finally { setActionInProgress(false); }
+  };
 
   const loadSlip = () => {
     if (!id) return;
     setSlipLoading(true); setSlipError("");
-    fetch(`/api/ledger/slip-honor/${id}/generate`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch(withLembaga(`/api/ledger/slip-honor/${id}/generate`), { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then(r => r.json())
       .then(d => {
         if (d.message && !d.data) setSlipError(d.message);
@@ -55,7 +80,7 @@ export default function ApHonorPaymentDetail() {
   };
 
   const loadSlipHtml = async (slipId) => {
-    const res = await fetch(`/api/ledger/slip-honor/${slipId}/preview`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+    const res = await fetch(withLembaga(`/api/ledger/slip-honor/${slipId}/preview`), { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
     if (res.ok) setSlipPreviewHtml(await res.text());
     else setSlipError(`Preview gagal dimuat (HTTP ${res.status}).`);
   };
@@ -63,7 +88,7 @@ export default function ApHonorPaymentDetail() {
   const handleSendSlip = async () => {
     setSendLoading(true); setSendResult(null);
     try {
-      const res = await fetch(`/api/ledger/slip-honor/${id}/send`, {
+      const res = await fetch(withLembaga(`/api/ledger/slip-honor/${id}/send`), {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
         body: JSON.stringify({ channel: sendChannel }),
       });
@@ -89,9 +114,17 @@ export default function ApHonorPaymentDetail() {
   };
 
   if (isLoading && !data) return <div className="p-10 text-center text-sm" style={{ color: "#94A3B8" }}>Memuat detail pembayaran...</div>;
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="p-10 text-center space-y-3">
+        <div className="text-sm" style={{ color: "#DC2626" }}>{loadError || "Pembayaran tidak ditemukan."}</div>
+        <Button variant="outline" onClick={() => history.push("/admin/ap-honor/history")}>← Kembali ke Riwayat</Button>
+      </div>
+    );
+  }
 
   const isDraft = data.status === "draft", isApproved = data.status === "disetujui", isCancelled = data.status === "dibatalkan";
+  const tidakKonsisten = data.konsisten === false;
 
   return (
     <div className="space-y-5">
@@ -102,7 +135,8 @@ export default function ApHonorPaymentDetail() {
           <div className="flex gap-2">
             {(isDraft || isApproved) && (
               <>
-                {isDraft && <Button onClick={handleApprove} disabled={actionInProgress} className="bg-green-600 hover:bg-green-700"><span className="mr-1">✓</span> Setujui</Button>}
+                {isDraft && <Button onClick={handleApprove} disabled={actionInProgress || tidakKonsisten} title={tidakKonsisten ? "Total pembayaran tidak sesuai jumlah line item" : undefined} className="bg-green-600 hover:bg-green-700"><span className="mr-1">✓</span> Setujui</Button>}
+                {isDraft && <Button variant="outline" onClick={() => history.push(`/admin/ap-honor/bayar?edit=${id}`)} disabled={actionInProgress}><Pencil size={16} className="mr-1" /> Edit</Button>}
                 <Button variant="outline" onClick={() => setShowCancelForm(v => !v)} disabled={actionInProgress} className="text-red-500">{isApproved ? "Batalkan" : "Hapus Draft"}</Button>
               </>
             )}
@@ -110,6 +144,24 @@ export default function ApHonorPaymentDetail() {
               <>
                 <Button onClick={() => { setShowPrintModal(true); setSlipData(null); }} className="bg-blue-600 hover:bg-blue-700"><Printer size={16} className="mr-1" /> Cetak Slip</Button>
                 <Button onClick={() => { setShowSlipPanel(true); setSlipData(null); }} className="bg-purple-600 hover:bg-purple-700"><Send size={16} className="mr-1" /> Kirim Slip</Button>
+                {canPostJournal && (data.sudah_dijurnal ? (
+                  <span
+                    className="inline-flex items-center px-3 py-2 rounded-md text-[12px] font-semibold"
+                    style={{ background: "#DCFCE7", color: "#166534" }}
+                    title="Jurnal Bank Keluar sudah dibuat untuk pembayaran ini."
+                  >
+                    Sudah dijurnal {data.jurnal_nomor ? `(${data.jurnal_nomor})` : ""}
+                  </span>
+                ) : (
+                  <Button
+                    onClick={handleBuatBankKeluar}
+                    disabled={bankKeluarMutate.isLoading}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    <Banknote size={16} className="mr-1" />
+                    {bankKeluarMutate.isLoading ? "Membuat jurnal..." : "Buat Bank Keluar"}
+                  </Button>
+                ))}
               </>
             )}
           </div>
@@ -117,6 +169,13 @@ export default function ApHonorPaymentDetail() {
       />
 
       {error && <div className="p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
+
+      {tidakKonsisten && (
+        <div className="p-3 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          Total pembayaran ({formatRp(data.total_nominal)}) tidak sesuai dengan jumlah line item ({formatRp(data.total_detail)}).
+          Pembayaran ini tidak dapat disetujui sampai selaras.
+        </div>
+      )}
 
       {showCancelForm && (
         <Card className="p-4 border border-red-200 bg-red-50">
@@ -147,7 +206,7 @@ export default function ApHonorPaymentDetail() {
               ...(data.nomor_rekening_tujuan ? [["No. Rekening", <span className="font-mono">{data.nomor_rekening_tujuan}</span>]] : []),
               ...(data.atas_nama ? [["Atas Nama", data.atas_nama]] : []),
               ...(data.catatan ? [["Catatan", data.catatan]] : []),
-              ...(data.url_bukti_transfer ? ["Bukti Transfer", <a href={data.url_bukti_transfer} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-[13px] underline">Lihat Bukti Transfer</a>] : []),
+              ...(data.url_bukti_transfer ? [["Bukti Transfer", <a href={data.url_bukti_transfer} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-[13px] underline">Lihat Bukti Transfer</a>]] : []),
             ].map(([label, value]) => (
               <React.Fragment key={label}>
                 <div className="text-slate-500 dark:text-slate-400 dark:text-slate-500">{label}</div>
@@ -182,7 +241,17 @@ export default function ApHonorPaymentDetail() {
         </div>
       </div>
 
-      {isApproved && <SettlementJournalPanel refType="settlement_ap_honor" refId={id} title="Jurnal Pelunasan Hutang Honor" />}
+      {isApproved && (
+        <SettlementJournalPanel
+          refType="settlement_ap_honor"
+          refId={id}
+          title="Jurnal Pelunasan Hutang Honor"
+          onCreate={canPostJournal ? handleBuatBankKeluar : undefined}
+          creating={bankKeluarMutate.isLoading}
+          createLabel="Buat Jurnal Bank Keluar"
+          emptyMessage="Kas keluar honor ini belum diposting ke buku besar. Klik tombol di bawah untuk membuat jurnal Bank Keluar (Debit Utang Honor / Kredit Kas-Bank)."
+        />
+      )}
 
       {/* Slip panel */}
       {showSlipPanel && (

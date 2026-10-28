@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\BelongsToLembaga;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -120,9 +121,77 @@ class SiklusAkreditasi extends Model
         );
     }
 
+    /**
+     * Status siklus yang menandakan seluruh tahapan akreditasi telah selesai.
+     */
+    public const STATUS_TUNTAS = ['selesai', 'terakreditasi'];
+
+    /**
+     * Status invoice yang dianggap pembayaran sudah lunas.
+     */
+    public const INVOICE_LUNAS = ['lunas', 'dibayar'];
+
     public function isComplete(): bool
     {
         return $this->status_kelengkapan === 'lengkap';
+    }
+
+    /**
+     * Seluruh tahapan akreditasi sudah selesai?
+     *
+     * Penanda utama adalah kolom `tahapan` = 7. Penutupan verifikasi melalui
+     * VerifikasiWorkspaceController men-set status 'selesai', sedangkan
+     * penyelesaian penugasan verifikasi (PenugasanController) hanya menaikkan
+     * `tahapan` tanpa mengubah status — sehingga status siklus pada siklus
+     * yang sudah tuntas bisa berupa 'lunas' atau 'verifikasi'.
+     */
+    public function isTahapanSelesai(): bool
+    {
+        $tahapan = (int) ($this->attributes['tahapan'] ?? 0);
+
+        return $tahapan >= 7 || in_array($this->status, self::STATUS_TUNTAS, true);
+    }
+
+    /**
+     * Siklus dianggap tuntas (masuk histori) bila seluruh tahapan selesai
+     * DAN pembayaran invoice sudah lunas.
+     */
+    public function isSelesaiLengkap(): bool
+    {
+        if (! $this->isTahapanSelesai()) {
+            return false;
+        }
+
+        $invoice = $this->relationLoaded('invoice') ? $this->invoice : $this->invoice()->first();
+
+        return $invoice && in_array($invoice->status, self::INVOICE_LUNAS, true);
+    }
+
+    /**
+     * Scope: siklus yang sudah masuk histori (tuntas + lunas).
+     */
+    public function scopeSelesaiLengkap(Builder $query): Builder
+    {
+        return $query->where(function (Builder $q) {
+            $q->whereRaw('COALESCE(siklus_akreditasi.tahapan, 0) >= 7')
+                ->orWhereIn('siklus_akreditasi.status', self::STATUS_TUNTAS);
+        })->whereHas('invoice', fn ($q) => $q->whereIn('status', self::INVOICE_LUNAS));
+    }
+
+    /**
+     * Scope: siklus yang masih berjalan (belum masuk histori).
+     */
+    public function scopeBelumSelesaiLengkap(Builder $query): Builder
+    {
+        return $query->where(function (Builder $q) {
+            $q->where(function (Builder $inner) {
+                $inner->whereRaw('COALESCE(siklus_akreditasi.tahapan, 0) < 7')
+                    ->where(function (Builder $s) {
+                        $s->whereNull('siklus_akreditasi.status')
+                            ->orWhereNotIn('siklus_akreditasi.status', self::STATUS_TUNTAS);
+                    });
+            })->orWhereDoesntHave('invoice', fn ($iq) => $iq->whereIn('status', self::INVOICE_LUNAS));
+        });
     }
 
     /**

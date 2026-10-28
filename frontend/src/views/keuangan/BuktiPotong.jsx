@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { useApi } from "@/hooks/useApi";
+import { withLembaga } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 async function apiBlob(path, options = {}) {
   const token = localStorage.getItem("token");
   const headers = { ...options.headers };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
+  const res = await fetch(withLembaga(`/api${path}`), { ...options, headers });
   if (res.status === 401) {
     localStorage.removeItem("token");
     window.location.href = "/auth/login";

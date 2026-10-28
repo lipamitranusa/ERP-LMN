@@ -2,112 +2,46 @@
 
 namespace Database\Seeders;
 
-use App\Models\AkunPengguna;
-use App\Models\BiayaPerJenisFaskes;
-use App\Models\Faskes;
-use App\Models\Invoice;
-use App\Models\InvoiceItem;
-use App\Models\Pks;
-use App\Models\SiklusAkreditasi;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 class PksSeeder extends Seeder
 {
     public function run(): void
     {
-        $faskes = Faskes::where('nama', 'RS Demo Faskes')->first();
-        if (! $faskes) {
-            return;
-        }
+        $data = [
+[
+            'id' => '01a15c80-d3f6-72fb-82a9-dba1cb9d1e1c',
+            'siklus_id' => '606704ee-3402-4b29-92a1-5681d57e1769',
+            'tanggal_disetujui' => '2026-10-21',
+            'status' => 'selesai',
+            'nomor_pks' => 'PKS/2026/BIX9WBO1',
+            'dibuat_oleh' => 'b9e32c67-40dd-4861-96f1-9dcd185be067',
+            'draf_dikirim_pada' => '2026-10-21 10:29:05',
+            'tanda_tangan_pada' => '2026-10-21 10:30:16',
+            'path_pdf' => 'pks/2026/10/lGkArviJ_01a15c80-d3f6-72fb-82a9-dba1cb9d1e1c.pdf',
+            'path_tanda_tangan' => null,
+            'nama_penandatangan' => 'RIO',
+            'jabatan_penandatangan' => 'Direktur',
+            'nik_penandatangan' => null,
+            'konten_pks' => null,
+            'created_at' => '2026-10-21 10:28:29',
+            'updated_at' => '2026-10-21 10:31:00',
+            'path_docx' => null,
+            'path_signed_pdf' => 'pks_signed/2026/10/HSECM8Hg_PKS-PKS_2026_4JYDGOSG.pdf',
+            'signed_uploaded_at' => '2026-10-21 10:30:16',
+            'admin_validated_at' => '2026-10-21 10:31:00',
+            'admin_validated_by' => 'b9e32c67-40dd-4861-96f1-9dcd185be067',
+            'path_lampiran_pdf' => 'pks/2026/10/CJTlhkwT_PKS-Tertanda-PKS_2026_4JYDGOSG.pdf',
+            'lampiran_nama_asli' => 'PKS-Tertanda-PKS_2026_4JYDGOSG.pdf',
+        ]
+        ];
 
-        $siklus = SiklusAkreditasi::where('faskes_id', $faskes->id)->first();
-        if (! $siklus) {
-            return;
-        }
-
-        // Jika PKS sudah ada, skip
-        if (Pks::where('siklus_id', $siklus->id)->exists()) {
-            return;
-        }
-
-        $admin = AkunPengguna::where('email', 'admin@demo.local')->first();
-        $dibuatOleh = $admin?->id;
-
-        $pksId = (string) \Illuminate\Support\Str::uuid();
-        $tanggalHariIni = now();
-        $tanggalSurvei = $tanggalHariIni->copy()->subDays(20);
-        $tanggalDokumen = $tanggalHariIni->copy()->subDays(15);
-
-        $nomorPks = 'PKS/LAM-KES/' . date('Y') . '/0001';
-
-        Pks::updateOrCreate(
-            ['siklus_id' => $siklus->id],
-            [
-                'id' => $pksId,
-                'nomor_pks' => $nomorPks,
-                'dibuat_oleh' => $dibuatOleh,
-                'status' => 'selesai',
-                'tanggal_disetujui' => $tanggalHariIni->copy()->subDays(5)->toDateString(),
-                'draf_dikirim_pada' => $tanggalSurvei,
-                'tanda_tangan_pada' => $tanggalDokumen,
-                'nama_penandatangan' => 'dr. John Doe, M.Kes',
-                'jabatan_penandatangan' => 'Direktur Utama',
-                'nik_penandatangan' => '3171234567890001',
-                'path_tanda_tangan' => 'pks/ dummy-signed.pdf',
-                'admin_validated_at' => $tanggalHariIni->copy()->subDays(3),
-                'admin_validated_by' => $dibuatOleh,
-            ]
-        );
-
-        $nomorInvoice = 'INV/' . date('Y') . '/00000001';
-        $dueDate = $tanggalHariIni->copy()->addDays(30)->toDateString();
-
-        $invoice = Invoice::updateOrCreate(
-            ['pks_id' => $pksId],
-            [
-                'id' => (string) \Illuminate\Support\Str::uuid(),
-                'siklus_id' => $siklus->id,
-                'nomor_invoice' => $nomorInvoice,
-                'total_tagihan' => 0,
-                'status' => 'belum_bayar',
-                'due_date' => $dueDate,
-                'diterbitkan_pada' => $tanggalHariIni->copy()->subDays(3),
-                'dibuat_oleh' => $dibuatOleh,
-            ]
-        );
-
-        $biayas = BiayaPerJenisFaskes::where('jenis_faskes_id', $faskes->jenis_faskes_id)
-            ->where('status', 'aktif')
-            ->get();
-
-        // Fallback ke RS jika jenis_faskes_id tidak cocok
-        if ($biayas->isEmpty()) {
-            $rsJenis = \App\Models\JenisFaskes::where('kode', 'RS')->first();
-            $biayas = BiayaPerJenisFaskes::where('jenis_faskes_id', $rsJenis?->id)
-                ->where('status', 'aktif')
-                ->get();
-        }
-
-        $totalTagihan = 0;
-        foreach ($biayas as $biaya) {
-            InvoiceItem::updateOrCreate(
-                [
-                    'invoice_id' => $invoice->id,
-                    'biaya_id' => $biaya->id,
-                ],
-                [
-                    'id' => (string) \Illuminate\Support\Str::uuid(),
-                    'nama_biaya' => $biaya->nama_biaya,
-                    'deskripsi' => $biaya->deskripsi,
-                    'jumlah' => $biaya->jumlah,
-                    'satuan' => $biaya->satuan,
-                    'tipe' => $biaya->tipe,
-                    'wajib' => $biaya->wajib,
-                ]
+        foreach ($data as $item) {
+            DB::table('pks')->updateOrInsert(
+                ['id' => $item['id']],
+                $item
             );
-            $totalTagihan += (float) $biaya->jumlah;
         }
-
-        $invoice->update(['total_tagihan' => $totalTagihan]);
     }
 }

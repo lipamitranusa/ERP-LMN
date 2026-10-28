@@ -34,6 +34,7 @@ const lazyComponents = {
   AuditTrail: lazy(() => import("@/views/admin/AuditTrail")),
   KontrakInvoicing: lazy(() => import("@/views/admin/KontrakInvoicing")),
   VerifikasiPembayaran: lazy(() => import("@/views/admin/VerifikasiPembayaran")),
+  HistoriPembayaran: lazy(() => import("@/views/admin/HistoriPembayaran")),
   PiutangDashboard: lazy(() => import("@/views/admin/PiutangDashboard")),
   PiutangDetail: lazy(() => import("@/views/admin/PiutangDetail")),
   FaskesDashboard: lazy(() => import("@/views/faskes/Dashboard")),
@@ -41,6 +42,7 @@ const lazyComponents = {
   FaskesTagihan: lazy(() => import("@/views/faskes/Tagihan")),
   FaskesTagihanDetail: lazy(() => import("@/views/faskes/TagihanDetail")),
   FaskesDokumen: lazy(() => import("@/views/faskes/Dokumen")),
+  FaskesHistori: lazy(() => import("@/views/faskes/Histori")),
   FaskesChangePassword: lazy(() => import("@/views/faskes/ChangePassword")),
   RefundApproval: lazy(() => import("@/views/keuangan/RefundApproval")),
   LedgerJournal: lazy(() => import("@/views/keuangan/LedgerJournal")),
@@ -50,6 +52,7 @@ const lazyComponents = {
   ApHonorBayar: lazy(() => import("@/views/admin/ApHonorBayar")),
   ApHonorHistory: lazy(() => import("@/views/admin/ApHonorHistory")),
   ApHonorPaymentDetail: lazy(() => import("@/views/admin/ApHonorPaymentDetail")),
+  ApHonorKasKeluar: lazy(() => import("@/views/admin/ApHonorKasKeluar")),
   HutangPajakList: lazy(() => import("@/views/admin/HutangPajakList")),
   HutangPajakDetail: lazy(() => import("@/views/admin/HutangPajakDetail")),
   RekonsiliasiDashboard: lazy(() => import("@/views/keuangan/RekonsiliasiDashboard")),
@@ -77,6 +80,7 @@ const lazyComponents = {
   PengaturanWhatsApp: lazy(() => import("@/views/admin/PengaturanWhatsApp")),
   ProfilePage: lazy(() => import("@/views/admin/ProfilePage")),
   RekomendasiWorkspace: lazy(() => import("@/views/rekomendator/RekomendasiWorkspace")),
+  RekomendasiHistory: lazy(() => import("@/views/rekomendator/RekomendasiHistory")),
   RekomendasiSettings: lazy(() => import("@/views/rekomendator/RekomendasiSettings")),
 };
 
@@ -114,6 +118,8 @@ function App() {
       window.location.replace("/surveior/penugasan");
     } else if (user.role === "Verifikator") {
       window.location.replace("/surveior/penugasan");
+    } else if (user.role === "Rekomendator") {
+      window.location.replace("/admin/rekomendasi");
     } else if (user.role === "Directeur/Keuangan") {
       window.location.replace("/admin/piutang");
     } else {

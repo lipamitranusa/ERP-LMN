@@ -5,6 +5,7 @@ namespace App\Services\Keuangan;
 use App\Models\BuktiPembayaran;
 use App\Models\Faskes;
 use App\Models\Invoice;
+use App\Models\JurnalUmum;
 use App\Models\SiklusAkreditasi;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -147,6 +148,9 @@ class PiutangService
                     ->where('bukti_pembayaran.status_verifikasi', '=', BuktiPembayaran::STATUS_DITERIMA);
             })
             ->whereIn('invoice.status', [Invoice::STATUS_BELUM_BAYAR, Invoice::STATUS_SEBAGIAN])
+            ->when($lembagaId = session('lembaga_id'), function ($q) use ($lembagaId) {
+                $q->where('siklus_akreditasi.lembaga_id', $lembagaId);
+            })
             ->groupBy('faskes.id', 'faskes.nama', 'faskes.tipe_faskes', 'faskes.telepon', 'faskes.email')
             ->select([
                 'faskes.id as faskes_id',
@@ -296,6 +300,21 @@ class PiutangService
             ? (int) $today->diffInDays(Carbon::parse($inv->due_date), false) * -1
             : 0;
 
+        $buktiPembayaran = $inv->buktiPembayaran()
+            ->with('verifier')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Jurnal Bank Masuk (settlement_piutang) yang sudah dibuat per bukti
+        // pembayaran — dipakai UI untuk menentukan tombol masih perlu ditekan.
+        $jurnalByBukti = JurnalUmum::where('ref_type', SettlementJournalService::REF_PIUTANG_SETTLEMENT)
+            ->whereIn('ref_id', $buktiPembayaran->pluck('id'))
+            ->pluck('nomor', 'ref_id')
+            ->all();
+
+        $buktiDiterima = $buktiPembayaran
+            ->filter(fn ($b) => $b->status_verifikasi === BuktiPembayaran::STATUS_DITERIMA);
+
         return [
             'id' => $inv->id,
             'nomor_invoice' => $inv->nomor_invoice,
@@ -326,19 +345,21 @@ class PiutangService
                 'status' => $inv->siklus->status,
                 'tanggal_pengajuan' => $inv->siklus->tanggal_pengajuan?->toDateString(),
             ] : null,
-            'bukti_pembayaran' => $inv->buktiPembayaran()
-                ->orderBy('created_at', 'desc')
-                ->get()
-                ->map(fn ($b) => [
-                    'id' => $b->id,
-                    'nominal' => (float) $b->nominal,
-                    'metode' => $b->metode,
-                    'status_verifikasi' => $b->status_verifikasi,
-                    'tanggal' => $b->created_at?->toDateString(),
-                    'diverifikasi_oleh_nama' => $b->verifier?->nama,
-                    'keterangan' => $b->keterangan,
-                ])
-                ->all(),
+            'bukti_pembayaran' => $buktiPembayaran->map(fn ($b) => [
+                'id' => $b->id,
+                'nominal' => (float) $b->nominal,
+                'metode' => $b->metode,
+                'status_verifikasi' => $b->status_verifikasi,
+                'tanggal' => $b->created_at?->toDateString(),
+                'diverifikasi_oleh_nama' => $b->verifier?->nama,
+                'keterangan' => $b->keterangan,
+                'jurnal_nomor' => $jurnalByBukti[$b->id] ?? null,
+            ])->all(),
+            'jurnal_bank_masuk' => [
+                'total_penerimaan' => $buktiDiterima->count(),
+                'sudah_dijurnal' => $buktiDiterima->filter(fn ($b) => isset($jurnalByBukti[$b->id]))->count(),
+                'belum_dijurnal' => $buktiDiterima->filter(fn ($b) => ! isset($jurnalByBukti[$b->id]))->count(),
+            ],
         ];
     }
 }

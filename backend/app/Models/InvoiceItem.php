@@ -2,11 +2,16 @@
 
 namespace App\Models;
 
+use App\Traits\ScopedToLembaga;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class InvoiceItem extends Model
 {
+    use ScopedToLembaga;
+
+    protected static $lembagaScopeRelation = 'invoice.siklus';
+
     protected $table = 'invoice_items';
     public $incrementing = false;
     protected $keyType = 'string';

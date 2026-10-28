@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LMNIcon } from "@/components/LMNIcon";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const NAV = [
   {
@@ -221,9 +222,12 @@ export default function SurveiorLayout({ children }) {
             </Button>
             <h1 className="text-base font-semibold text-slate-700 dark:text-slate-200">{currentNav.label}</h1>
           </div>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <Bell size={16} />
-          </Button>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Bell size={16} />
+            </Button>
+          </div>
         </header>
         <main className="flex-1 p-4 lg:p-6 bg-background">{children}</main>
         <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 lg:px-6 py-4">

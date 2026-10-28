@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { useHistory } from "react-router-dom";
 import { formatDate } from "@/utils/dateFormat";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { JENIS_DOKUMEN, downloadDokumen } from "@/lib/dokumen";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -15,16 +16,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Upload, Check, FileText, History, X, Download, Edit3, AlertTriangle } from "lucide-react";
-
-const JENIS_DOKUMEN = [
-  { key: "dfo",            label: "Screenshot DFO",       desc: "Screenshot Daftar Tilik Fasilitas (DFO) yang sudah diisi",           icon: "clipboard",  wajib: true  },
-  { key: "surat_permohonan", label: "Surat Permohonan Survei", desc: "Surat resmi dari Faskes yang mengajukan permohonan survei",     icon: "mail",       wajib: true  },
-  { key: "self_assessment",  label: "Self Assessment",      desc: "Hasil penilaian mandiri oleh Faskes terhadap standar akreditasi",   icon: "checklist",  wajib: true  },
-  { key: "sisdmk",           label: "Sisdmk / SISDMK",       desc: "Sistem Informasi SDM Kesehatan",                                 icon: "users",      wajib: false },
-  { key: "aspak",            label: "ASPak",                desc: "Aksi Cepat Pasien Keselamatan Pasien",                            icon: "shield",     wajib: false },
-  { key: "inm",              label: "INM",                  desc: "Indikator Nasional Mutu",                                        icon: "chart",     wajib: false },
-  { key: "ikp",              label: "IKP",                  desc: "Indikator Kinerja Prioritas",                                    icon: "target",     wajib: false },
-];
 
 const ICONS = {
   clipboard: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>,
@@ -50,9 +41,9 @@ function formatSize(bytes) {
 }
 
 function FileIcon({ mimeType }) {
-  if (mimeType?.includes("pdf"))    return <Badge variant="outline" className="text-[11px] font-bold px-1.5" style={{background:"#FEE2E2",color:"#EF4444",borderColor:"transparent"}}>PDF</Badge>;
-  if (mimeType?.includes("image"))  return <Badge variant="outline" className="text-[11px] font-bold px-1.5" style={{background:"#DBEAFE",color:"#3B82F6",borderColor:"transparent"}}>IMG</Badge>;
-  if (mimeType?.includes("word") || mimeType?.includes("document")) return <Badge variant="outline" className="text-[11px] font-bold px-1.5" style={{background:"#EDE9FE",color:"#7C3AED",borderColor:"transparent"}}>DOC</Badge>;
+  if (mimeType?.includes("pdf"))    return <Badge variant="outline" className="text-[11px] font-bold px-1.5 border-transparent bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300">PDF</Badge>;
+  if (mimeType?.includes("image"))  return <Badge variant="outline" className="text-[11px] font-bold px-1.5 border-transparent bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300">IMG</Badge>;
+  if (mimeType?.includes("word") || mimeType?.includes("document")) return <Badge variant="outline" className="text-[11px] font-bold px-1.5 border-transparent bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300">DOC</Badge>;
   return <Badge variant="outline" className="text-[11px] font-bold px-1.5">FILE</Badge>;
 }
 
@@ -98,20 +89,24 @@ function RevisiModal({ currentVersion, onConfirm, onCancel, loading }) {
             />
             <div
               onClick={() => fileRef.current?.click()}
-              className="border-2 border-dashed rounded-lg p-3 cursor-pointer flex items-center gap-3 transition-colors"
-              style={{
-                borderColor: file ? "#2E7D32" : "#CBD5E1",
-                background: file ? "#F0FDF4" : "#F8FAFC",
-              }}
+              className={`border-2 border-dashed rounded-lg p-3 cursor-pointer flex items-center gap-3 transition-colors ${
+                file
+                  ? "border-green-500 bg-green-50 dark:border-green-400 dark:bg-green-950/40"
+                  : "border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-800/40"
+              }`}
             >
-              <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0" style={{ background: file ? "#E8F5E9" : "#E2E8F0", color: file ? "#2E7D32" : "#94A3B8" }}>
+              <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
+                file
+                  ? "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400"
+                  : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+              }`}>
                 {file ? ICONS.check : ICONS.upload}
               </div>
               <div className="flex-1 min-w-0">
                 {file ? (
                   <>
                     <div className="text-[13px] font-medium text-slate-800 dark:text-slate-200 truncate">{file.name}</div>
-                    <div className="text-[11px] text-green-600">{formatSize(file.size)}</div>
+                    <div className="text-[11px] text-green-600 dark:text-green-400">{formatSize(file.size)}</div>
                   </>
                 ) : (
                   <>
@@ -178,17 +173,23 @@ function RiwayatModal({ dokumenId, jenisLabel, onClose }) {
               {versions.map((v, i) => (
                 <div
                   key={v.id}
-                  className="grid grid-cols-[1fr_1.5fr_1.5fr_1.2fr_auto] gap-2 items-start p-3 rounded-lg text-[12px]"
-                  style={{
-                    background: i === 0 ? "#F0FDF4" : "#fff",
-                    border: `1px solid ${i === 0 ? "#BBF7D0" : "#F1F5F9"}`,
-                  }}
+                  className={`grid grid-cols-[1fr_1.5fr_1.5fr_1.2fr_auto] gap-2 items-start p-3 rounded-lg text-[12px] ${
+                    i === 0
+                      ? "bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800"
+                      : "bg-white dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700"
+                  }`}
                 >
                   <div className="flex items-center gap-1.5">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold" style={{ background: i === 0 ? "#2E7D32" : "#E2E8F0", color: i === 0 ? "#fff" : "#64748B" }}>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                        i === 0
+                          ? "bg-green-700 dark:bg-green-600 text-white"
+                          : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                      }`}
+                    >
                       v{v.versi}
                     </span>
-                    {i === 0 && <span className="text-[10px] font-bold text-green-600">TERBARU</span>}
+                    {i === 0 && <span className="text-[10px] font-bold text-green-600 dark:text-green-400">TERBARU</span>}
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5 mb-0.5">
@@ -197,9 +198,9 @@ function RiwayatModal({ dokumenId, jenisLabel, onClose }) {
                     </div>
                     <div className="text-[11px] text-slate-400 dark:text-slate-500">{formatSize(v.ukuran_file)}</div>
                     {v.alasan_revisi && (
-                      <div className="mt-1.5 p-1.5 rounded-md bg-orange-50 border border-orange-200">
-                        <div className="text-[10px] font-semibold text-orange-700 mb-0.5">Alasan revisi:</div>
-                        <div className="text-[11px] text-orange-800 leading-relaxed">{v.alasan_revisi}</div>
+                      <div className="mt-1.5 p-1.5 rounded-md bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
+                        <div className="text-[10px] font-semibold text-orange-700 dark:text-orange-300 mb-0.5">Alasan revisi:</div>
+                        <div className="text-[11px] text-orange-800 dark:text-orange-200 leading-relaxed">{v.alasan_revisi}</div>
                       </div>
                     )}
                   </div>
@@ -208,14 +209,12 @@ function RiwayatModal({ dokumenId, jenisLabel, onClose }) {
                     <div className="text-[11px] text-slate-400 dark:text-slate-500">{v.uploader?.role?.nama || ""}</div>
                   </div>
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{formatDate(v.created_at)}</div>
-                  <a
-                    href={`/api/pendaftaran/dokumen/${v.id}/download`}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    onClick={() => downloadDokumen(v).catch(err => alert(err.message))}
                     className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 dark:border-slate-700 rounded-md bg-white text-[11px] font-medium text-slate-600 dark:text-slate-300 dark:text-slate-500 hover:bg-slate-50 dark:bg-slate-800/50 whitespace-nowrap"
                   >
                     <Download size={12} /> Unduh
-                  </a>
+                  </button>
                 </div>
               ))}
             </div>
@@ -254,8 +253,11 @@ function DropZone({ jenis, currentDok, onUpload, onReplace, uploading, error }) 
     e.target.value = "";
   }
 
-  const borderColor = dragOver ? "#2E7D32" : currentDok ? "#CBD5E1" : "#D1FAE5";
-  const bgColor = dragOver ? "#F0FDF4" : currentDok ? "#FAFAFA" : "#F0FDF4";
+  const zoneClasses = dragOver
+    ? "border-green-500 bg-green-50 dark:border-green-400 dark:bg-green-950/40"
+    : currentDok
+      ? "border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-800/40"
+      : "border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/20";
 
   return (
     <div
@@ -263,8 +265,8 @@ function DropZone({ jenis, currentDok, onUpload, onReplace, uploading, error }) 
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
       onClick={() => !uploading && inputRef.current?.click()}
-      className="border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors"
-      style={{ borderColor, background: bgColor, cursor: uploading ? "wait" : "pointer" }}
+      className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${zoneClasses}`}
+      style={{ cursor: uploading ? "wait" : "pointer" }}
     >
       <input
         ref={inputRef}
@@ -279,11 +281,11 @@ function DropZone({ jenis, currentDok, onUpload, onReplace, uploading, error }) 
           <svg viewBox="0 0 24 24" fill="none" stroke="#2E7D32" strokeWidth="2" width="24" height="24" className="animate-spin mx-auto mb-1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
           </svg>
-          <div className="text-[12px] text-green-600 font-medium">Mengunggah...</div>
+          <div className="text-[12px] text-green-600 dark:text-green-400 font-medium">Mengunggah...</div>
         </div>
       ) : currentDok ? (
         <div className="flex items-center gap-2.5 text-left">
-          <div className="w-9 h-9 rounded-lg bg-green-100 flex items-center justify-center text-green-600 shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center text-green-600 dark:text-green-400 shrink-0">
             {ICONS.check}
           </div>
           <div className="flex-1 min-w-0">
@@ -292,19 +294,19 @@ function DropZone({ jenis, currentDok, onUpload, onReplace, uploading, error }) 
               v{currentDok.versi} · {formatSize(currentDok.ukuran_file)} · {formatDate(currentDok.created_at)}
             </div>
           </div>
-          <div className="text-[11px] text-green-600 font-semibold shrink-0">Tersimpan</div>
+          <div className="text-[11px] text-green-600 dark:text-green-400 font-semibold shrink-0">Tersimpan</div>
         </div>
       ) : (
         <div>
-          <div className="w-9 h-9 rounded-lg bg-green-100 flex items-center justify-center mx-auto mb-2 text-green-600">
+          <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center mx-auto mb-2 text-green-600 dark:text-green-400">
             {ICONS.upload}
           </div>
-          <div className="text-[13px] font-semibold text-green-600 mb-0.5">Klik atau drag file ke sini</div>
+          <div className="text-[13px] font-semibold text-green-700 dark:text-green-400 mb-0.5">Klik atau drag file ke sini</div>
           <div className="text-[11px] text-slate-400 dark:text-slate-500">PDF, JPG, PNG, DOC, DOCX, XLS, XLSX · Maks 10 MB</div>
         </div>
       )}
 
-      {error && <div className="mt-1.5 text-[11px] text-red-600">{error}</div>}
+      {error && <div className="mt-1.5 text-[11px] text-red-600 dark:text-red-400">{error}</div>}
     </div>
   );
 }
@@ -320,11 +322,11 @@ function ProgressHeader({ uploaded, total }) {
           <span className="text-[13px] font-semibold text-slate-800 dark:text-slate-200">Kelengkapan Dokumen</span>
           <span className="text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500 ml-2">{uploaded} / {total} terunggah</span>
         </div>
-        <span className="text-[12px] font-bold px-2.5 py-0.5 rounded-full" style={{ color: allDone ? "#2E7D32" : "#D97706", background: allDone ? "#E8F5E9" : "#FEF3C7" }}>
+        <Badge variant={allDone ? "success" : "warning"} className="text-[12px] font-bold px-2.5 py-0.5">
           {pct}%
-        </span>
+        </Badge>
       </div>
-      <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+      <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
         <div className="h-full rounded-full transition-all duration-400" style={{ width: `${pct}%`, background: "#2E7D32" }} />
       </div>
     </div>
@@ -335,62 +337,52 @@ function ProgressHeader({ uploaded, total }) {
 export default function FaskesDokumen() {
   const history = useHistory();
   const [refreshKey, setRefreshKey] = useState(0);
-  const [siklus, setSiklus] = useState(null);
-  const [dokumenMap, setDokumenMap] = useState({});
-  const [catatan, setCatatan] = useState([]);
   const [uploadingFor, setUploadingFor] = useState(null);
   const [uploadError, setUploadError] = useState({});
   const [revisiModal, setRevisiModal] = useState(null);
   const [riwayatModal, setRiwayatModal] = useState(null);
 
-  const wajibList = JENIS_DOKUMEN.filter(d => d.wajib);
-  const totalWajib = wajibList.length;
-  const uploadedWajib = wajibList.filter(d => dokumenMap[d.key]).length;
-
   const { data: siklusListData, isLoading: siklusListLoading } = useApi(
-    ["siklus-list", refreshKey],
-    "/pendaftaran/siklus?per_page=1"
+    ["siklus-aktif-dokumen", refreshKey],
+    "/pendaftaran/siklus?aktif=1&per_page=1"
   );
 
   const siklusId = siklusListData?.data?.[0]?.id || null;
 
-  const { data: siklusDetailData, isLoading: siklusDetailLoading } = useApi(
+  const {
+    data: siklusDetailData,
+    isError: siklusDetailError,
+  } = useApi(
     ["siklus-detail", siklusId, refreshKey],
-    siklusId ? `/pendaftaran/siklus/${siklusId}` : "/pendaftaran/siklus?per_page=1",
-    { enabled: true }
+    siklusId ? `/pendaftaran/siklus/${siklusId}` : null,
+    { enabled: !!siklusId }
   );
 
-  const loading = siklusListLoading || siklusDetailLoading;
+  // Detail siklus sudah dipilih tapi belum arrives → masih memuat.
+  // Halaman kosong hanya ditampilkan bila memang tidak ada pengajuan aktif.
+  const detailPending = !!siklusId && !siklusDetailData?.data && !siklusDetailError;
+  const loading = siklusListLoading || detailPending;
 
-  React.useEffect(() => {
-    if (!siklusDetailData?.data) {
-      if (!siklusListLoading && !siklusId) {
-        setSiklus(null);
-        setDokumenMap({});
-        setCatatan([]);
-      }
-      return;
-    }
-    const s = siklusListData?.data?.[0];
-    if (s) setSiklus(s);
-    const docs = siklusDetailData.data.dokumen || [];
-    const docMap = {};
-    docs.forEach(doc => {
+  const siklus = siklusDetailData?.data || siklusListData?.data?.[0] || null;
+
+  const dokumenMap = React.useMemo(() => {
+    const map = {};
+    (siklus?.dokumen || []).forEach(doc => {
       const key = doc.jenis_dokumen;
-      if (!docMap[key] || doc.versi > docMap[key].versi) {
-        docMap[key] = doc;
-      }
+      if (!map[key] || doc.versi > map[key].versi) map[key] = doc;
     });
-    setDokumenMap(docMap);
-    setCatatan(siklusDetailData.data.catatan_revisi || []);
-  }, [siklusDetailData, siklusListData, siklusId, siklusListLoading]);
+    return map;
+  }, [siklus]);
+
+  const catatan = siklus?.catatan_revisi || [];
+
+  const wajibList = JENIS_DOKUMEN.filter(d => d.wajib);
+  const totalWajib = wajibList.length;
+  const uploadedWajib = wajibList.filter(d => dokumenMap[d.key]).length;
 
   const uploadMutation = useMutateKeys(["siklus-detail", siklusId], {
-    onSuccess: (data) => {
+    onSuccess: () => {
       setRefreshKey(k => k + 1);
-      if (data?.status_kelengkapan === "lengkap") {
-        setSiklus(s => s ? { ...s, status_kelengkapan: "lengkap" } : s);
-      }
     },
     onError: (err) => {
       setUploadError(prev => ({ ...prev, [uploadMutation._uploadJenis]: err.message }));
@@ -418,12 +410,9 @@ export default function FaskesDokumen() {
   }
 
   const revisiMutation = useMutateKeys(["siklus-detail", siklusId], {
-    onSuccess: (data) => {
+    onSuccess: () => {
       setRevisiModal(null);
       setRefreshKey(k => k + 1);
-      if (data?.status_kelengkapan === "lengkap") {
-        setSiklus(s => s ? { ...s, status_kelengkapan: "lengkap" } : s);
-      }
     },
     onError: (err) => {
       if (revisiModal) {
@@ -505,17 +494,17 @@ export default function FaskesDokumen() {
 
       {/* Catatan revisi */}
       {catatan.length > 0 && (
-        <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200">
+        <div className="mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center shrink-0">
               <AlertTriangle size={16} className="text-white" />
             </div>
             <div className="flex-1">
-              <div className="text-[13px] font-bold text-amber-800 mb-2">Catatan dari Tim Validasi</div>
+              <div className="text-[13px] font-bold text-amber-800 dark:text-amber-300 mb-2">Catatan dari Tim Validasi</div>
               {catatan.map((c, i) => (
                 <div key={i} className="mb-2 last:mb-0">
-                  <div className="text-[12px] text-amber-900 leading-relaxed">{c.catatan}</div>
-                  <div className="text-[11px] text-amber-600 mt-0.5">{c.creator?.nama || "Validator"} · {formatDate(c.created_at)}</div>
+                  <div className="text-[12px] text-amber-900 dark:text-amber-200 leading-relaxed">{c.catatan}</div>
+                  <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">{c.creator?.nama || "Validator"} · {formatDate(c.created_at)}</div>
                 </div>
               ))}
             </div>
@@ -535,24 +524,35 @@ export default function FaskesDokumen() {
           return (
             <Card key={dok.key} className="p-0 overflow-hidden">
               <div
-                className="px-4 py-3.5 border-b border-slate-100 flex items-center gap-2.5"
-                style={{ background: current ? "#FAFAFA" : dok.wajib ? "#F0FDF4" : "#FAFAFA" }}
+                className={`px-4 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2.5 ${
+                  current
+                    ? "bg-slate-50 dark:bg-slate-800/40"
+                    : dok.wajib
+                      ? "bg-green-50 dark:bg-green-950/20"
+                      : "bg-slate-50 dark:bg-slate-800/40"
+                }`}
               >
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: current ? "#E8F5E9" : dok.wajib ? "#DCFCE7" : "#F1F5F9" }}>
-                  <span style={{ color: current ? "#2E7D32" : dok.wajib ? "#16A34A" : "#94A3B8" }}>{ICONS[dok.icon]}</span>
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                  current
+                    ? "bg-green-100 dark:bg-green-900/40"
+                    : dok.wajib
+                      ? "bg-green-100 dark:bg-green-900/40"
+                      : "bg-slate-100 dark:bg-slate-700"
+                }`}>
+                  <span className={current ? "text-green-700 dark:text-green-400" : dok.wajib ? "text-green-600 dark:text-green-400" : "text-slate-500 dark:text-slate-400"}>{ICONS[dok.icon]}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{dok.label}</span>
                     {dok.wajib && (
-                      <Badge variant="outline" className="text-[10px] font-bold px-1.5" style={{background:"#2E7D32",color:"#fff",borderColor:"transparent"}}>WAJIB</Badge>
+                      <Badge variant="outline" className="text-[10px] font-bold px-1.5 border-transparent bg-green-700 text-white dark:bg-green-600">WAJIB</Badge>
                     )}
                   </div>
                   <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{dok.desc}</div>
                 </div>
                 {current && (
-                  <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center shrink-0">
-                    <span className="w-3 h-3 text-green-600">{ICONS.check}</span>
+                  <div className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center shrink-0">
+                    <span className="w-3 h-3 text-green-600 dark:text-green-400">{ICONS.check}</span>
                   </div>
                 )}
               </div>
@@ -583,7 +583,7 @@ export default function FaskesDokumen() {
                       };
                       input.click();
                     }}
-                    className="flex-1 h-7 text-[11px] text-amber-700 border border-amber-200 bg-amber-50 hover:bg-amber-100"
+                    className="flex-1 h-7 text-[11px] text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50"
                   >
                     <Edit3 size={12} className="mr-1" />Revisi
                   </Button>
@@ -595,14 +595,12 @@ export default function FaskesDokumen() {
                   >
                     <History size={12} className="mr-1" />Riwayat
                   </Button>
-                  <a
-                    href={`/api/pendaftaran/dokumen/${current.id}/download`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 px-2.5 h-7 text-[11px] text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 rounded-md font-medium transition-colors"
+                  <button
+                    onClick={() => downloadDokumen(current).catch(err => alert(err.message))}
+                    className="inline-flex items-center gap-1 px-2.5 h-7 text-[11px] text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md font-medium transition-colors"
                   >
                     <Download size={12} />Unduh
-                  </a>
+                  </button>
                 </div>
               )}
             </Card>
@@ -610,8 +608,8 @@ export default function FaskesDokumen() {
         })}
       </div>
 
-      <div className="mt-5 p-3.5 rounded-lg bg-blue-50 border border-blue-200">
-        <div className="text-[12px] text-blue-800">
+      <div className="mt-5 p-3.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+        <div className="text-[12px] text-blue-800 dark:text-blue-200">
           <strong>Format:</strong> PDF, JPG, PNG, DOC, DOCX, XLS, XLSX · Maks 10 MB per file.
           Klik pada dokumen yang sudah terunggah untuk memperbarui versi. Setiap revisi wajib disertai alasan.
         </div>

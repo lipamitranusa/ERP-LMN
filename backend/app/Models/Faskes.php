@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToLembaga;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Faskes extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasUuids, BelongsToLembaga;
 
     public $incrementing = false;
     protected $keyType = 'string';

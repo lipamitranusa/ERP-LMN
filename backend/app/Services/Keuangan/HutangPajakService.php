@@ -4,10 +4,12 @@ namespace App\Services\Keuangan;
 
 use App\Models\AuditTrail;
 use App\Models\HutangPajak;
+use App\Models\JurnalUmum;
 use App\Models\LedgerEntry;
 use App\Models\PembayaranHonor;
 use Carbon\Carbon;
 use App\Services\Keuangan\SettlementJournalService;
+use App\Services\LembagaResolver;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -69,7 +71,7 @@ class HutangPajakService
                 'id' => (string) Str::uuid(),
                 'jenis_pajak' => HutangPajak::JENIS_PPH21_BUKAN_PEGAWAI,
                 'nomor_pokok_wajib_pajak' => $penerima?->npwp ?? null,
-                'nama_wajib_pajak' => $penerima?->nama ?? null,
+                'nama_wajib_pajak' => $penerima?->nama ?? ($e->detail['penerima_nama'] ?? null),
                 'pembayaran_honor_id' => $pembayaran->id,
                 'nomor_pembayaran' => $pembayaran->nomor_pembayaran,
                 'tanggal_pembayaran_honor' => $tanggalHonor->toDateString(),
@@ -142,11 +144,21 @@ class HutangPajakService
             });
         }
 
-        return $query
+        $payments = $query
             ->orderByDesc('tanggal_pembayaran_honor')
             ->orderByDesc('created_at')
-            ->get()
-            ->map(fn (HutangPajak $h) => $this->present($h));
+            ->get();
+
+        // Nomor jurnal settlement per hutang — supaya UI bisa membedakan
+        // hutang yang sudah diposting ke buku besar dari yang belum.
+        $jurnalByHutang = JurnalUmum::where('ref_type', SettlementJournalService::REF_AP_PAJAK_SETTLEMENT)
+            ->whereIn('ref_id', $payments->pluck('id'))
+            ->pluck('nomor', 'ref_id')
+            ->all();
+
+        return $payments
+            ->map(fn (HutangPajak $h) => $this->present($h, jurnalNomor: $jurnalByHutang[$h->id] ?? null))
+            ->values();
     }
 
     /**
@@ -161,7 +173,15 @@ class HutangPajakService
             'pembayar',
         ])->find($id);
 
-        return $h ? $this->present($h, withDetails: true) : null;
+        if (! $h) {
+            return null;
+        }
+
+        $jurnal = JurnalUmum::where('ref_type', SettlementJournalService::REF_AP_PAJAK_SETTLEMENT)
+            ->where('ref_id', $h->id)
+            ->first();
+
+        return $this->present($h, withDetails: true, jurnalNomor: $jurnal?->nomor);
     }
 
     /**
@@ -199,16 +219,13 @@ class HutangPajakService
                 'catatan' => $catatan ?? $hutang->catatan,
             ]);
 
-            // Settlement AP Pajak — catat jurnal umum (Dr Utang PPh 21, Cr Bank)
-            // agar kas keluar setor PPh 21 tercatat di buku besar sesuai
-            // prinsip double-entry. Idempotent: tidak membuat duplikat jika
-            // sudah pernah dipanggil untuk hutang ini.
-            $settlementService = new SettlementJournalService();
-            $settlementService->recordApPajakSettlement(
-                hutang: $hutang,
-                userId: $userId,
-            );
-
+            // Catat status dibayar. Jurnal settlement (Dr Utang PPh 21 /
+            // Cr Bank) TIDAK dibuat di sini — dibuat EKSPLISIT oleh tim
+            // Keuangan lewat tombol "Buat Bank Keluar", sama seperti Kas
+            // Masuk (AR) dan Kas Keluar honor. Alasan akuntansi: kredit
+            // bank hanya sah setelah setor PPh benar-benar keluar dari
+            // rekening. Jurnal yang hilang bisa di-backfill lewat
+            // `php artisan settlement:rebuild --scope=ap_pajak`.
             $this->audit('hutang_pajak.paid', $hutang, $userId, [
                 'jumlah_pajak' => (float) $hutang->jumlah_pajak,
                 'tanggal_dibayar' => $hutang->tanggal_dibayar,
@@ -249,7 +266,7 @@ class HutangPajakService
 
     // ─── Presenters ─────────────────────────────────────────────────────────
 
-    private function present(HutangPajak $h, bool $withDetails = false): array
+    private function present(HutangPajak $h, bool $withDetails = false, ?string $jurnalNomor = null): array
     {
         $base = [
             'id' => $h->id,
@@ -274,6 +291,12 @@ class HutangPajakService
             'dibuat_oleh' => $h->pembuat?->nama ?? $h->dibuat_oleh,
             'dibayar_oleh' => $h->pembayar?->nama ?? $h->dibayar_oleh,
             'tanggal_dibuat' => $h->created_at?->toIso8601String(),
+
+            // Status jurnal Bank Keluar (settment) — dipakai UI untuk
+            // menampilkan tombol "Buat Bank Keluar" hanya untuk hutang
+            // yang belum diposting ke buku besar.
+            'sudah_dijurnal' => $jurnalNomor !== null,
+            'jurnal_nomor' => $jurnalNomor,
         ];
 
         if ($withDetails) {
@@ -290,7 +313,10 @@ class HutangPajakService
                     'penerima' => $d->ledgerEntry?->penerima ? [
                         'nama' => $d->ledgerEntry->penerima->nama,
                         'nomor_induk_surveior' => $d->ledgerEntry->penerima->nomor_induk_surveior,
-                    ] : null,
+                    ] : (($d->ledgerEntry?->detail['penerima_nama'] ?? null) ? [
+                        'nama' => $d->ledgerEntry->detail['penerima_nama'],
+                        'nomor_induk_surveior' => null,
+                    ] : null),
                 ])->values(),
             ] : null;
         }
@@ -306,6 +332,10 @@ class HutangPajakService
             'aksi' => $aksi,
             'target_type' => 'HutangPajak',
             'target_id' => $h->id,
+            'lembaga_id' => app(LembagaResolver::class)->resolve(
+                app(LembagaResolver::class)->fromHutangPajak($h->id),
+                $userId
+            ),
             'data_sebelum' => null,
             'data_sesudah' => array_merge([
                 'jumlah_pajak' => (float) $h->jumlah_pajak,

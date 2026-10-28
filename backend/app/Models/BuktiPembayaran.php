@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use App\Traits\ScopedToLembaga;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BuktiPembayaran extends Model
 {
-    use HasUuids;
+    use HasUuids, ScopedToLembaga;
+
+    protected static $lembagaScopeRelation = 'invoice.siklus';
 
     public $incrementing = false;
     protected $keyType = 'string';

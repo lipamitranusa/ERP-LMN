@@ -11,8 +11,21 @@ import { formatDate } from "@/utils/dateFormat";
  *   - refType: 'settlement_piutang' | 'settlement_ap_honor' | 'settlement_ap_pajak'
  *   - refId:   uuid sumber
  *   - title:   judul panel (opsional)
+ *   - onCreate: callback untuk membuat jurnal saat belum ada (opsional).
+ *               Jika diberikan, panel menampilkan tombol aksi pada kotak peringatan.
+ *   - creating: sedang proses membuat jurnal
+ *   - createLabel: teks tombol aksi
+ *   - emptyMessage: teks penjelasan saat jurnal belum ada (opsional).
  */
-export default function SettlementJournalPanel({ refType, refId, title = "Jurnal Settlement" }) {
+export default function SettlementJournalPanel({
+  refType,
+  refId,
+  title = "Jurnal Settlement",
+  onCreate,
+  creating = false,
+  createLabel = "Buat Jurnal Bank Masuk",
+  emptyMessage,
+}) {
   const { data, isLoading } = useApi(
     ["settlement-source", refType, refId],
     `/keuangan/settlement/source-info?ref_type=${encodeURIComponent(refType)}&ref_id=${encodeURIComponent(refId)}`,
@@ -113,9 +126,25 @@ export default function SettlementJournalPanel({ refType, refId, title = "Jurnal
           <div style={{ fontSize: "11px" }}>
             Sumber: {source ? `${source.type} #${(source.id || "").slice(0, 8)}` : "—"}
             <br />
-            Jurnal akan dibuat otomatis saat settlement diproses. Untuk data historis,
-            gunakan menu <b>Jurnal Settlement → Rebuild Jurnal</b>.
+            {emptyMessage ?? (onCreate
+              ? "Penerimaan kas pada AR ini belum diposting ke buku besar. Klik tombol di bawah untuk membuat jurnal Bank Masuk (Debit Bank / Kredit Piutang Usaha)."
+              : "Jurnal akan dibuat otomatis saat settlement diproses. Untuk data historis, gunakan menu Jurnal Settlement → Rebuild Jurnal.")}
           </div>
+          {onCreate && (
+            <button
+              type="button"
+              onClick={onCreate}
+              disabled={creating}
+              style={{
+                marginTop: "8px", padding: "6px 12px", borderRadius: "6px",
+                border: "1px solid #16A34A", background: "#16A34A", color: "#FFFFFF",
+                fontSize: "12px", fontWeight: 600, cursor: creating ? "wait" : "pointer",
+                opacity: creating ? 0.7 : 1,
+              }}
+            >
+              {creating ? "Membuat jurnal..." : createLabel}
+            </button>
+          )}
         </div>
       )}
     </div>

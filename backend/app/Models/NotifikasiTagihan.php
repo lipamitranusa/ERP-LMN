@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use App\Traits\ScopedToLembaga;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class NotifikasiTagihan extends Model
 {
-    use HasUuids;
+    use HasUuids, ScopedToLembaga;
+
+    protected static $lembagaScopeRelation = 'siklus';
 
     protected $table = 'notifikasi_tagihan';
 

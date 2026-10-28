@@ -13,6 +13,7 @@ use App\Models\TenagaAhli;
 use App\Services\AttachmentService;
 use App\Services\AuditService;
 use App\Services\Keuangan\LedgerService;
+use App\Services\Verifikasi\RekomendasiQueueService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -921,7 +922,7 @@ class PenugasanController extends Controller
      * Payload (FormData): file_laporan (opsional, image/pdf), keterangan (opsional)
      * Reset status tenaga ahli.
      */
-    public function selesai(Request $request, Penugasan $penugasan, AttachmentService $attachment, AuditService $audit): JsonResponse
+    public function selesai(Request $request, Penugasan $penugasan, AttachmentService $attachment, AuditService $audit, RekomendasiQueueService $rekomendasiQueue): JsonResponse
     {
         if (! $penugasan->isSedangBertugas()) {
             abort(response()->json(['message' => 'Penugasan belum berjalan.'], 422));
@@ -973,6 +974,13 @@ class PenugasanController extends Controller
             'status' => Penugasan::STATUS_SELESAI,
             'tanggal_selesai' => now()->toDateString(),
         ])->save();
+
+        // Survei selesai → laporan hasil survei (dokumen untuk rekomendator).
+        // Verifikasi selesai → laporan verifikasi masuk antrean rekomendator.
+        $rekomendasiQueue->ensureLaporanSurvei($penugasan);
+        if ($penugasan->jenis === Penugasan::JENIS_VERIFIKASI) {
+            $rekomendasiQueue->ensureLaporanVerifikasi($penugasan, $user);
+        }
 
         // AP honor (surveior / verifikator / rekomendator) tidak lagi
         // dibuat di sini — pencatatan ditunda sampai rekomendasi disetujui.

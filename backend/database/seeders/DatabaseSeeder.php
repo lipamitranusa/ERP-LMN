@@ -9,31 +9,40 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            MenuActionsTableSeeder::class,
-            RolesTableSeeder::class,
-            DefaultPrivilegesSeeder::class,
+            RolesSeeder::class,
+            MenuActionsSeeder::class,
+            RolePrivilegesSeeder::class,
             LembagaSeeder::class,
-            // Master data
             JenisFaskesSeeder::class,
             FaskesSeeder::class,
-            BiayaPerJenisFaskesSeeder::class,
-            // SDM
             TenagaAhliSeeder::class,
-            // Akun (dari DB, bukan config)
-            AkunPenggunaSeeder::class,
-            // Template PKS
-            PksTemplateSeeder::class,
-            // Konfigurasi
-            PaymentSettingSeeder::class,
-            MailSettingSeeder::class,
-            WhatsAppSettingSeeder::class,
-            KonfigurasiPajakSeeder::class,
-            // Akuntansi
-            CoaSeeder::class,
             KategoriJurnalSeeder::class,
+            CoaSeeder::class,
+            ReplikasiMasterAkuntansiSeeder::class,
+            KonfigurasiPajakSeeder::class,
             MasterBiayaTenagaAhliSeeder::class,
-            // Transaksi dummy
-            DummyTransaksiSeeder::class,
+            BiayaPerJenisFaskesSeeder::class,
+            // Akun WAJIB di-seed sebelum seeder transaksi (pks, invoice,
+            // checklist, ...) — kolom FK seperti pks.dibuat_oleh dan
+            // invoice.dibuat_oleh menunjuk akun_pengguna.id. Kalau akun
+            // di-seed belakangan, insert transaksi gagal FK.
+            AkunPenggunaSeeder::class,
+            AkunPenggunaLembagaSeeder::class,
+            SiklusAkreditasiSeeder::class,
+            PksSeeder::class,
+            InvoiceSeeder::class,
+            InvoiceItemsSeeder::class,
+            PenugasanSeeder::class,
+            SuratTugasSeeder::class,
+            HistoriAntrianPenugasanSeeder::class,
+            DokumenPermohonanSeeder::class,
+            ChecklistValidasiSeeder::class,
+            LaporanPengerjaanSeeder::class,
+            KonfigurasiPenugasanSeeder::class,
+            PksTemplatesSeeder::class,
+            PaymentSettingsSeeder::class,
+            MailSettingsSeeder::class,
+            WhatsappSettingsSeeder::class,
         ]);
     }
 }

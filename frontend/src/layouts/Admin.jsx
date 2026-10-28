@@ -52,6 +52,10 @@ function MobileNavItem({ route, onNavigate }) {
 
 function MobileSidebar({ routes, onNavigate, open, onClose }) {
   const history = useHistory();
+  // Baca langsung dari localStorage agar langsung tampil saat render pertama
+  const lembagaName = localStorage.getItem("lembaga_name") || null;
+  const lembagaLogo = localStorage.getItem("lembaga_logo") || null;
+  const companyName = lembagaName || "LIPA MITRA NUSA";
   // Hanya kelompok yang sengaja dikolapsikan yang disimpan; sisanya default expand
   // dan state-nya diambil dari localStorage (lihat lib/uiPrefs) saat mount.
   const [closedGroups, setClosedGroups] = useState(() => {

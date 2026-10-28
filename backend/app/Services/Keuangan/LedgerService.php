@@ -11,6 +11,7 @@ use App\Models\NotifikasiTagihan;
 use App\Models\Penugasan;
 use App\Models\Pks;
 use App\Models\SiklusAkreditasi;
+use App\Services\LembagaResolver;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -100,6 +101,9 @@ class LedgerService
                 'aksi' => 'ledger.entry.piutang_lunas',
                 'target_type' => 'LedgerEntry',
                 'target_id' => $entry->id,
+                'lembaga_id' => app(LembagaResolver::class)->resolve(
+                    app(LembagaResolver::class)->fromInvoice($invoice->id)
+                ),
                 'data_sebelum' => null,
                 'data_sesudah' => [
                     'tipe' => $entry->tipe,
@@ -254,11 +258,19 @@ class LedgerService
      */
     public function triggerHonorSetelahRekomendasi(LaporanVerifikasi $lv): array
     {
+        // Relasi dimuat di sini karena lazy loading dimatikan — HonorCalculator
+        // dan lookup tarif master butuh siklus → faskes → jenis faskes.
+        $lv->loadMissing([
+            'laporan.penugasan.siklus.faskes.jenisFaskes',
+            'verifikasiPenugasan.siklus.faskes.jenisFaskes',
+        ]);
+
         $siklus = $lv->laporan?->penugasan?->siklus ?? $lv->verifikasiPenugasan?->siklus;
         $verifikasiPenugasan = $lv->verifikasiPenugasan;
         $surveiPenugasans = Penugasan::where('siklus_id', $verifikasiPenugasan->siklus_id)
             ->where('jenis', Penugasan::JENIS_SURVEI)
             ->where('status', Penugasan::STATUS_SELESAI)
+            ->with(['siklus.faskes.jenisFaskes'])
             ->get();
 
         $entries = [];
@@ -312,6 +324,12 @@ class LedgerService
     /**
      * Buat AP entry rekomendator tanpa baris penugasan. Menggunakan
      * default rekomendator user dari konfigurasi.
+     *
+     * Rekomendator belum tentu punya relasi tenaga_ahli (akun murni
+     * rekomendator). Dalam kasus itu entry tetap dicatat dengan penerima
+     * kosong dan identitas akun disimpan di detail — honor tetap masuk
+     * daftar AP, tinggal dilengkapi saat akun rekomendator ditautkan ke
+     * tenaga ahli.
      */
     private function catatHonorRekomendatorOtomatis(LaporanVerifikasi $lv): ?LedgerEntry
     {
@@ -324,20 +342,25 @@ class LedgerService
         }
 
         $akun = \App\Models\AkunPengguna::with('tenagaAhli')->find($userId);
-        $ta = $akun?->tenagaAhli;
-        if (! $ta) {
+        if (! $akun) {
             return null;
         }
+        $ta = $akun->tenagaAhli;
 
         $siklus = $lv->verifikasiPenugasan?->siklus ?? $lv->laporan?->penugasan?->siklus;
         if (! $siklus) {
             return null;
         }
 
-        // Idempotent: cek apakah sudah pernah ada entry rekomendator untuk siklus ini + TA ini
+        // Idempotent: cek apakah sudah pernah ada entry rekomendator untuk siklus ini + penerima ini
         $existing = LedgerEntry::where('siklus_id', $siklus->id)
             ->where('tipe', LedgerEntry::TIPE_AP_HONOR_REKOMENDATOR)
-            ->where('penerima_tenaga_ahli_id', $ta->id)
+            ->when(
+                $ta,
+                fn ($q) => $q->where('penerima_tenaga_ahli_id', $ta->id),
+                fn ($q) => $q->whereNull('penerima_tenaga_ahli_id')
+                    ->where('detail->akun_pengguna_id', $akun->id),
+            )
             ->first();
         if ($existing) {
             return $existing;
@@ -350,12 +373,29 @@ class LedgerService
             : null;
         $bruto = (float) ($master?->tarif_dasar ?? self::HONOR_SURVEIOR_DEFAULT);
 
+        if (! $ta) {
+            \Log::warning('rekomendator.tanpa_tenaga_ahli', [
+                'laporan_verifikasi_id' => $lv->id,
+                'akun_pengguna_id' => $akun->id,
+            ]);
+        }
+
         return $this->createHonorEntry(
             penugasan: $lv->verifikasiPenugasan, // untuk siklus_id + tanggal acuan
             tipe: LedgerEntry::TIPE_AP_HONOR_REKOMENDATOR,
             bruto: $bruto,
             laporanVerifikasi: $lv,
-            overrideTenagaAhliId: $ta->id,
+            overrideTenagaAhliId: $ta?->id,
+            overridePenerimaKosong: ! $ta,
+            detailTambahan: [
+                'akun_pengguna_id' => $akun->id,
+                'penerima_nama' => $akun->nama,
+                // Snapshot data transfer — dipakai AP Honor saat reksa tidak
+                // tertaut ke tenaga_ahli (rekening hanya ada di tenaga_ahli).
+                'no_rekening' => $ta?->no_rekening,
+                'nama_bank' => $ta?->nama_bank,
+                'atas_nama_rekening' => $ta?->atas_nama_rekening,
+            ],
         );
     }
 
@@ -426,6 +466,9 @@ class LedgerService
                 'aksi' => 'pks.revisi.superseded_invoice',
                 'target_type' => 'Invoice',
                 'target_id' => $invoice->id,
+                'lembaga_id' => app(LembagaResolver::class)->resolve(
+                    app(LembagaResolver::class)->fromInvoice($invoice->id)
+                ),
                 'data_sebelum' => ['status' => $previousStatus],
                 'data_sesudah' => [
                     'status' => Invoice::STATUS_SUPERSEDED,
@@ -465,6 +508,8 @@ class LedgerService
         float $bruto,
         ?LaporanVerifikasi $laporanVerifikasi = null,
         ?string $overrideTenagaAhliId = null,
+        bool $overridePenerimaKosong = false,
+        array $detailTambahan = [],
     ): LedgerEntry {
         $hitung = $this->honorCalc->hitungHonor(
             nominalBruto: $bruto,
@@ -478,9 +523,11 @@ class LedgerService
         // (informasi PPh tetap disimpan dalam audit trail + notifikasi).
         $konfigurasiPajakId = $ppnId ?? $pphId;
 
-        $penerimaTaId = $overrideTenagaAhliId ?? $penugasan->tenaga_ahli_id;
+        $penerimaTaId = $overridePenerimaKosong
+            ? null
+            : ($overrideTenagaAhliId ?? $penugasan->tenaga_ahli_id);
 
-        return DB::transaction(function () use ($penugasan, $tipe, $hitung, $konfigurasiPajakId, $laporanVerifikasi, $penerimaTaId) {
+        return DB::transaction(function () use ($penugasan, $tipe, $hitung, $konfigurasiPajakId, $laporanVerifikasi, $penerimaTaId, $detailTambahan) {
             $entry = LedgerEntry::create([
                 'id' => (string) Str::uuid(),
                 'siklus_id' => $penugasan->siklus_id,
@@ -492,12 +539,12 @@ class LedgerService
                 'potongan_ppn' => $hitung['potongan_ppn'],
                 'potongan_pph' => $hitung['potongan_pph'],
                 'nominal_neto' => $hitung['nominal_neto'],
-                'detail' => [
+                'detail' => array_merge([
                     'penugasan_id' => $penugasan->id,
                     'tenaga_ahli_id' => $penerimaTaId,
                     'laporan_verifikasi_id' => $laporanVerifikasi?->id,
                     'tarif_snapshot' => $hitung['pajak'],
-                ],
+                ], $detailTambahan),
                 'created_at' => now(),
             ]);
 
@@ -509,6 +556,9 @@ class LedgerService
                 'aksi' => 'ledger.entry.honor_created',
                 'target_type' => 'LedgerEntry',
                 'target_id' => $entry->id,
+                'lembaga_id' => app(LembagaResolver::class)->resolve(
+                    app(LembagaResolver::class)->fromSiklus($penugasan->siklus_id)
+                ),
                 'data_sebelum' => null,
                 'data_sesudah' => [
                     'tipe' => $tipe,

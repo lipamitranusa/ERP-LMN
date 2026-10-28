@@ -17,10 +17,11 @@ import { Eye, Download, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { withLembaga } from "@/lib/api";
 
 async function fetchBlob(path) {
   const token = localStorage.getItem("token");
-  const res = await fetch(path, {
+  const res = await fetch(withLembaga(path), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -138,7 +139,7 @@ export default function PenugasanSaya() {
     defaultValues: { deskripsi: "" },
   });
 
-  const submitKendalaMutate = useMutateKeys(["penugasan-saya", "laporan-kendala-saya"], {
+  const submitKendalaMutate = useMutateKeys([["penugasan-saya"], ["laporan-kendala-saya"]], {
     onSuccess: () => {
       setKendalaTarget(null);
     },
@@ -274,9 +275,8 @@ export default function PenugasanSaya() {
                 </div>
 
                 <div className="border-t border-slate-100 pt-3 space-y-1 text-xs text-slate-600 dark:text-slate-300 dark:text-slate-500">
-                  <div>Jadwal: <strong className="text-slate-800 dark:text-slate-200">{p.tanggal_mulai_survei ? `${formatDate(p.tanggal_mulai_survei, { long: true })} s/d ${formatDate(p.tanggal_selesai_survei, { long: true })}` : "—"}</strong></div>
-                  <div>Tanggal Survei: <strong className="text-slate-800 dark:text-slate-200">{p.tanggal_mulai_survei ? formatDate(p.tanggal_mulai_survei, { long: true }) : "—"}</strong></div>
-                  <div>Tanggal Selesai: <strong className="text-slate-800 dark:text-slate-200">{p.tanggal_selesai ? formatDate(p.tanggal_selesai, { long: true }) : "—"}</strong></div>
+                  <div>Tanggal Selesai Survei: <strong className="text-slate-800 dark:text-slate-200">{p.tanggal_selesai_survei ? formatDate(p.tanggal_selesai_survei, { long: true }) : "—"}</strong></div>
+                  <div>Tanggal Selesai Verifikasi: <strong className="text-slate-800 dark:text-slate-200">{p.tanggal_selesai ? formatDate(p.tanggal_selesai, { long: true }) : "—"}</strong></div>
                 </div>
 
                 {(p.surat_tugas ?? siblingSuratMap[`${p.siklus_id}|${p.jenis}`]) && (() => {

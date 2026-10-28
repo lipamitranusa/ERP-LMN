@@ -10,6 +10,7 @@ const STATUS_MAP = {
   disetujui: { label: "Disetujui", variant: "success" },
   final: { label: "Final", variant: "success" },
   success: { label: "Berhasil", variant: "success" },
+  lunas: { label: "Lunas", variant: "success" },
   // Warning
   menunggu: { label: "Menunggu", variant: "warning" },
   menunggu_dokumen: { label: "Menunggu Dokumen", variant: "warning" },
@@ -17,6 +18,8 @@ const STATUS_MAP = {
   menunggu_persetujuan: { label: "Menunggu Persetujuan", variant: "warning" },
   menunggu_kontrak: { label: "Menunggu Kontrak", variant: "warning" },
   menunggu_pembayaran: { label: "Menunggu Pembayaran", variant: "warning" },
+  belum_bayar: { label: "Belum Bayar", variant: "warning" },
+  sebagian: { label: "Sebagian", variant: "warning" },
   aktifasi_akun: { label: "Aktifasi Akun", variant: "warning" },
   warning: { label: "Warning", variant: "warning" },
   // Danger
@@ -29,8 +32,10 @@ const STATUS_MAP = {
   info: { label: "Info", variant: "info" },
   survei: { label: "Survei", variant: "info" },
   verifikasi: { label: "Verifikasi", variant: "info" },
+  refunded: { label: "Refund", variant: "info" },
   // Secondary
   draft: { label: "Draft", variant: "secondary" },
+  superseded: { label: "Digantikan", variant: "secondary" },
 };
 
 /**

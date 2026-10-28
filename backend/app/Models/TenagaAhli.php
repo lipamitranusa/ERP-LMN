@@ -79,6 +79,7 @@ class TenagaAhli extends Model
 
     public const PERAN_SURVEIOR = 'surveior';
     public const PERAN_VERIFIKATOR = 'verifikator';
+    public const PERAN_REKOMENDATOR = 'rekomendator';
     public const PERAN_KEDUA = 'kedua'; // bisa jadi keduanya
 
     // Jenis surveyor (FR-3.1: setiap siklus butuh 2 surveyor beda jenis)

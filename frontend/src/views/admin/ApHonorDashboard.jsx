@@ -159,7 +159,7 @@ export default function ApHonorDashboard() {
                 {top_penerima.length === 0 ? (
                   <tr><td colSpan={3} className="text-center py-6 text-sm text-muted-foreground">Tidak ada AP outstanding.</td></tr>
                 ) : top_penerima.map(row => (
-                  <tr key={row.tenaga_ahli_id} className="hover:bg-muted/50">
+                  <tr key={row.penerima_key || row.tenaga_ahli_id} className="hover:bg-muted/50">
                     <td className="px-4 py-2">
                       <div className="text-[13px] font-medium text-foreground">{row.nama}</div>
                       <div className="text-[11px] text-muted-foreground">{row.nomor_induk_surveior}</div>

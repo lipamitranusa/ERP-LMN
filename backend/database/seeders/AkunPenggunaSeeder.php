@@ -2,148 +2,360 @@
 
 namespace Database\Seeders;
 
-use App\Models\AkunPengguna;
-use App\Models\Faskes;
-use App\Models\Role;
-use App\Models\TenagaAhli;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 
 class AkunPenggunaSeeder extends Seeder
 {
     public function run(): void
     {
-        $roleAdmin = Role::where('nama_role', 'Admin Lembaga')->first();
-        $roleAdministrator = Role::where('nama_role', 'Administrator')->first();
-        $roleFaskes = Role::where('nama_role', 'Faskes')->first();
-        $roleSurveior = Role::where('nama_role', 'Surveior')->first();
-        $roleVerifikator = Role::where('nama_role', 'Verifikator')->first();
-        $roleRekomendator = Role::where('nama_role', 'Rekomendator')->first();
-        $roleSdm = Role::where('nama_role', 'Divisi SDM')->first();
-        $roleKeuangan = Role::where('nama_role', 'Direktur/Keuangan')->first();
+        $data = [
+[
+            'id' => '01a15c87-4b3e-709c-ade1-b613fdba97ba',
+            'role_id' => '01a157fc-a231-7126-a136-56906d329192',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => 'eb35b10b-5bdd-442f-a12e-106ad34f2a22',
+            'nama' => 'RIO VER',
+            'email' => 'rioblibli3@gmail.com',
+            'password_hash' => '$2y$12$x9JFrc0vh5TRnEVJocXMTeuM9nWVZdJj3RCyUtdxdYLZ0IlhxcXeC',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-21 10:35:33',
+            'last_login_at' => '2026-10-21 13:54:13',
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
 
-        $klinikFaskes = Faskes::where('nama', 'Klinik Pratama Sejahtera')->first();
-        $puskesMas = Faskes::where('nama', 'Puskesmas Kec. Tanah Sereal')->first();
+[
+            'id' => '02d70fac-08c8-4630-9faa-c0b8d72c628b',
+            'role_id' => '01a157fc-a230-72b3-af0e-65169922d228',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => '699099a8-d211-4143-a57e-586d21436838',
+            'nama' => 'dr. Joko Pramono, M.Kes',
+            'email' => 'ns-0001@surveyor.local',
+            'password_hash' => '$2y$12$x037LpliCVqIbtSIVX8tTugaCBr4BpYE.0RSIDmhYpwcx4WxgBff2',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:58',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
 
-        // ─── Akun Administrator (akses penuh) ─────────────────────────────
-        $this->upsertAkun([
-            'role_id' => $roleAdministrator?->id,
-            'nama' => 'Administrator',
-            'email' => 'admin@erp.local',
+[
+            'id' => '75995027-7e5d-42cc-a5b4-5c44b312cbe4',
+            'role_id' => '01a157fc-a231-7126-a136-56906d329192',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => 'b95d406e-5022-42b4-8a57-852932fde880',
+            'nama' => 'drg. Rina Hartati',
+            'email' => 'ns-0002@surveyor.local',
+            'password_hash' => '$2y$12$42mEayut4M3S0mKpWSA5R.xffzv5Bg63kuvfeGFoD0uNZ2N.isXye',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:58',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => 'c04e0a37-b866-496c-ab32-222e56be2327',
+            'role_id' => '01a157fc-a230-72b3-af0e-65169922d228',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => '3d27a3f1-d50c-4798-a9f9-bf2ebe85dc1f',
+            'nama' => 'dr. Hendra Kusuma, Sp.MK',
+            'email' => 'ns-0003@surveyor.local',
+            'password_hash' => '$2y$12$zmIYoS2B1NN3wg3weFzhj.UptBstgicgPB1rrC.8y5KHrxqP/8S2q',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:58',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '5a98dca1-0192-4e65-80bc-fe44a6944178',
+            'role_id' => '01a157fc-a230-72b3-af0e-65169922d228',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => '9c34ae14-4996-4dc3-8a03-d5d820d72d73',
+            'nama' => 'dr. Siti Nurhaliza, M.PH',
+            'email' => 'ns-0004@surveyor.local',
+            'password_hash' => '$2y$12$dHMxCvpk1SHEQws54VqaQeko2ww5pqr./cR.6c7nbc73TGjt4I94m',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:58',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '174ccdf2-c3b5-46d6-a9aa-69888741b094',
+            'role_id' => '01a157fc-a230-72b3-af0e-65169922d228',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => '66ffaf5f-db39-407d-8733-e755f4201cb1',
+            'nama' => 'dr. Ahmad Wijaya, Sp.PD',
+            'email' => 'ns-0005@surveyor.local',
+            'password_hash' => '$2y$12$.yh5X9pQew.0zita1c4xbeY/z8ZFK2KDLewOdNvUSqPF4buOvRXji',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:59',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '46684332-21c3-4d07-9bb7-28810acbff0f',
+            'role_id' => '01a157fc-a233-7182-892a-c6be1fc3f948',
             'faskes_id' => null,
             'tenaga_ahli_id' => null,
-        ]);
-
-        // ─── Akun Admin Lembaga ───────────────────────────────────────────
-        $this->upsertAkun([
-            'role_id' => $roleAdmin?->id,
-            'nama' => 'Administrator Sistem',
-            'email' => 'admin@lembaga.local',
-            'faskes_id' => null,
-            'tenaga_ahli_id' => null,
-        ]);
-
-        $this->upsertAkun([
-            'role_id' => $roleAdmin?->id,
-            'nama' => 'Operator Lembaga',
-            'email' => 'operator@lembaga.local',
-            'faskes_id' => null,
-            'tenaga_ahli_id' => null,
-        ]);
-
-        // ─── Akun Divisi SDM ─────────────────────────────────────────────
-        $this->upsertAkun([
-            'role_id' => $roleSdm?->id,
             'nama' => 'Staff SDM',
             'email' => 'sdm@lembaga.local',
+            'password_hash' => '$2y$12$Y6LEsjun.3KtUWCFda203uu6vROMYRJHz5nG5GdWkUYL6XpFuaUNm',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:56',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '363e4697-bd87-463b-9c09-dc179bf24c54',
+            'role_id' => '01a157fc-a231-7126-a136-56906d329192',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => '44c21a98-687d-48ef-9446-1c62f186776f',
+            'nama' => 'dr. Retno Wulandari, Sp.PD-KEMD',
+            'email' => 'ns-0008@surveyor.local',
+            'password_hash' => '$2y$12$HzLjUl2Ybk4G1y5UzcIv4u3gd5UpZVEXLBU6FNMO/RGyPK4iOP4tu',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:59',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '94090ae8-3445-4aed-a302-893d3dff4cfe',
+            'role_id' => '01a157fc-a22e-714a-b993-af2120f3d2c6',
             'faskes_id' => null,
             'tenaga_ahli_id' => null,
-        ]);
+            'nama' => 'Administrator Sistem',
+            'email' => 'admin@lembaga.local',
+            'password_hash' => '$2y$12$S5JK6kEY22/jKp0qxqL1huAzcrscU/YRFZwOAfPk1QNEuSMB7kvKy',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:56',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
 
-        // ─── Akun Keuangan / Direktur ────────────────────────────────────
-        $this->upsertAkun([
-            'role_id' => $roleKeuangan?->id,
+[
+            'id' => '38d0705d-b3e5-48bb-94cf-c37f465015df',
+            'role_id' => '01a157fc-a22e-714a-b993-af2120f3d2c6',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => null,
+            'nama' => 'Operator Lembaga',
+            'email' => 'operator@lembaga.local',
+            'password_hash' => '$2y$12$OO1p8qlM7oIfD0pz.pMIqOuaLTKo3hc5QULOUUY.UPJrh0ODrRolm',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:56',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => 'b9108ebb-9145-41fa-b991-5e1f829b5faf',
+            'role_id' => '01a157fc-a235-7102-8742-7458707079b8',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => null,
             'nama' => 'Kepala Keuangan',
             'email' => 'keuangan@lembaga.local',
+            'password_hash' => '$2y$12$LDfBL/h4HzFqonJjlpyIb.oAleRR3TnzEBr8uS3xuNYC/jYtZW.li',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:57',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => 'e3e9053b-e1c6-4272-99f6-3e738c1b346c',
+            'role_id' => '01a157fc-a235-7102-8742-7458707079b8',
             'faskes_id' => null,
             'tenaga_ahli_id' => null,
-        ]);
-
-        $this->upsertAkun([
-            'role_id' => $roleKeuangan?->id,
             'nama' => 'Direktur Utama',
             'email' => 'direktur@lembaga.local',
+            'password_hash' => '$2y$12$kJ7RNhk1OBucUT3S8GE5C.gz6dGJR2Fjgwgm5tioeOTIbnDJZyrvq',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:57',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '9518214c-5cc8-4973-9031-1620c084aeb0',
+            'role_id' => '01a157fc-a22d-72fd-8836-e034797a9df6',
             'faskes_id' => null,
             'tenaga_ahli_id' => null,
-        ]);
+            'nama' => 'Kontak Klinik Sejahtera',
+            'email' => 'klinik-sejahtera@faskes.local',
+            'password_hash' => '$2y$12$QsCxhAqhogC4m0c/HzdqquNAnCY6Q92IzRUrJh10Z5PFiZ.3WtbwG',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:57',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
 
-        // ─── Akun Faskes ─────────────────────────────────────────────────
-        if ($klinikFaskes) {
-            $this->upsertAkun([
-                'role_id' => $roleFaskes?->id,
-                'nama' => 'Kontak Klinik Sejahtera',
-                'email' => 'klinik-sejahtera@faskes.local',
-                'faskes_id' => $klinikFaskes->id,
-                'tenaga_ahli_id' => null,
-            ]);
+[
+            'id' => 'bf850ad2-457b-4f98-a616-b71ee6723183',
+            'role_id' => '01a157fc-a22d-72fd-8836-e034797a9df6',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => null,
+            'nama' => 'Kontak Puskesmas Tanah Sereal',
+            'email' => 'puskesmastns@faskes.local',
+            'password_hash' => '$2y$12$/EwmkZq2L9tD8s4jK5gJPOo3o3ljROG/aMQUXTIykglk8DGULTsWS',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:57',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '01a15994-b2d4-7013-b2cb-ef3844293f05',
+            'role_id' => '01a157fc-a230-72b3-af0e-65169922d228',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => '3939065f-7e1c-4150-b46b-8957ed60879b',
+            'nama' => 'RIO SUR TKPP',
+            'email' => 'rioblibli1@gmail.com',
+            'password_hash' => '$2y$12$/fdxWWbpZaKcwR6DK8afSuWyVMHbTgmysYBTjU4A4UswLiaLiIZXS',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 20:51:20',
+            'last_login_at' => '2026-10-21 14:42:02',
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '01a1598f-cc3a-7300-87d2-31695dd15593',
+            'role_id' => '01a157fc-a22d-72fd-8836-e034797a9df6',
+            'faskes_id' => '01a158be-8f79-724e-973b-b33cab73de3a',
+            'tenaga_ahli_id' => null,
+            'nama' => 'optima',
+            'email' => 'optima@gmail.com',
+            'password_hash' => '$2y$12$DKkePXgCLbSZVAKcMp8gE.ftwtFYJzKfklc8jBO7N4jLcjCQt2aGW',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 20:45:59',
+            'last_login_at' => '2026-10-21 14:52:38',
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => 'optima',
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '01a159b1-c152-72b3-b2f4-e2a065acd9eb',
+            'role_id' => '01a157fc-a230-72b3-af0e-65169922d228',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => '089d2d07-8fee-4050-a6bc-bd4911fdd7a6',
+            'nama' => 'RIO SUR TKSDU',
+            'email' => 'rioblibli2@gmail.com',
+            'password_hash' => '$2y$12$SJ8GWv5d/eO1jYhcM5bI/OcZyiF6faeDWUiJDqFGzefHJngLQGhF2',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 21:23:04',
+            'last_login_at' => '2026-10-21 13:56:29',
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => '14cbdc0d-e9cd-4433-8bd0-8b925492e283',
+            'role_id' => '01a157fc-a231-7126-a136-56906d329192',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => '5c374b1f-1c66-4ac8-ab18-5804d1694a9e',
+            'nama' => 'drg. Made Dana, M.Kes',
+            'email' => 'ns-0006@surveyor.local',
+            'password_hash' => '$2y$12$0oILQgM5OaizbT0HWTFXA.Nyk7UyWse4i77L7L1ewjDaplEXXbI2W',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:59',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => 'e0594458-5899-4334-9137-ba4bb09ed647',
+            'role_id' => '01a157fc-a231-7126-a136-56906d329192',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => 'a480fc55-554a-4533-a9ce-63ef8ae001f0',
+            'nama' => 'dr. Fajar Nugroho, M.Ked',
+            'email' => 'ns-0007@surveyor.local',
+            'password_hash' => '$2y$12$bfixA6fLFjgAIvrWQtgZnu9RdvZYnUDR4fuooiVCx7ZrZMvGhEYNC',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:59',
+            'last_login_at' => null,
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ],
+
+[
+            'id' => 'b9e32c67-40dd-4861-96f1-9dcd185be067',
+            'role_id' => '01a157fc-a22b-7038-9720-d36a2e1b64e5',
+            'faskes_id' => null,
+            'tenaga_ahli_id' => null,
+            'nama' => 'Administrator',
+            'email' => 'admin@erp.local',
+            'password_hash' => '$2y$12$ddSUO8ZzPcxm6fbV0rbRU.gpVWvPJ0tKrC5.a.e8OdRYnHsZ3Dwza',
+            'status_akun' => 'Aktif',
+            'created_at' => '2026-10-20 13:29:56',
+            'last_login_at' => '2026-10-21 16:45:25',
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'username' => null,
+            'lembaga_id' => '00000000-0000-0000-0000-000000000002',
+        ]
+        ];
+
+        foreach ($data as $item) {
+            DB::table('akun_pengguna')->updateOrInsert(
+                ['id' => $item['id']],
+                $item
+            );
         }
-
-        if ($puskesMas) {
-            $this->upsertAkun([
-                'role_id' => $roleFaskes?->id,
-                'nama' => 'Kontak Puskesmas Tanah Sereal',
-                'email' => 'puskesmastns@faskes.local',
-                'faskes_id' => $puskesMas->id,
-                'tenaga_ahli_id' => null,
-            ]);
-        }
-
-        // ─── Auto-create akun untuk setiap Tenaga Ahli aktif ──────────────
-        $tenagaAhlis = TenagaAhli::where('status_aktif', 'Aktif')->get();
-
-        foreach ($tenagaAhlis as $ta) {
-            if ($ta->peran === 'verifikator' || $ta->peran === 'kedua') {
-                $role = $roleVerifikator;
-            } elseif ($ta->peran === 'rekomendator') {
-                $role = $roleRekomendator;
-            } else {
-                $role = $roleSurveior;
-            }
-
-            if (! $role) {
-                continue;
-            }
-
-            $email = strtolower($ta->nomor_induk_surveior) . '@surveyor.local';
-
-            $this->upsertAkun([
-                'role_id' => $role->id,
-                'nama' => $ta->nama,
-                'email' => $email,
-                'faskes_id' => null,
-                'tenaga_ahli_id' => $ta->id,
-            ]);
-        }
-    }
-
-    private function upsertAkun(array $data): void
-    {
-        if (! $data['role_id']) {
-            return;
-        }
-
-        $existing = AkunPengguna::where('email', $data['email'])->first();
-        $id = $existing?->id ?? (string) Str::uuid();
-
-        AkunPengguna::updateOrCreate(
-            ['email' => $data['email']],
-            array_merge($data, [
-                'id' => $id,
-                'password_hash' => Hash::make('password'),
-                'status_akun' => 'Aktif',
-                'created_at' => now(),
-            ]),
-        );
     }
 }

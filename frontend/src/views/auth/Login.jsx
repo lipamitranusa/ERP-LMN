@@ -83,6 +83,9 @@ export default function Login() {
         history.push("/surveior/penugasan");
       } else if (role === "Verifikator") {
         history.push("/surveior/penugasan");
+      } else if (role === "Rekomendator") {
+        // Portal Rekomendator hanya punya satu menu: Rekomendasi.
+        history.push("/admin/rekomendasi");
       } else if (role === "Divisi SDM") {
         history.push("/admin/dashboard");
       } else if (role === "Directeur/Keuangan") {

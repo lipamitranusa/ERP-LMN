@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -6,9 +6,7 @@ import {
   ChevronDown,
   Home,
   LogOut,
-  Moon,
   Settings,
-  Sun,
   User,
 } from "lucide-react";
 import {
@@ -21,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { api } from "@/lib/api";
 import { useLembaga } from "@/contexts/LembagaContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -30,25 +29,12 @@ export function AdminHeader({ onMenuToggle }) {
   const { user: authUser } = useAuth();
   const user = authUser || JSON.parse(localStorage.getItem("user") || "{}");
   const { lembagaId, lembagaName, switchLembaga } = useLembaga();
-  const [isDark, setIsDark] = useState(() => {
-    return localStorage.getItem("theme") === "dark" ||
-      (!localStorage.getItem("theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  });
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (isDark) {
-      root.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      root.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  }, [isDark]);
+  const [switchError, setSwitchError] = useState(null);
+  const [switching, setSwitching] = useState(false);
 
   const { data: lembagaList } = useQuery({
-    queryKey: ["lembaga-list"],
-    queryFn: () => api("/master/lembaga?per_page=100").then(r => r.data ?? []),
+    queryKey: ["lembaga-opsi"],
+    queryFn: () => api("/lembaga-opsi").then(r => r.data ?? []),
     enabled: true,
   });
 
@@ -63,10 +49,15 @@ export function AdminHeader({ onMenuToggle }) {
 
   const handleSwitchLembaga = async (newId) => {
     const lembaga = displayLembagas.find(l => l.id === newId);
+    setSwitchError(null);
+    setSwitching(true);
     try {
       await switchLembaga(newId, lembaga?.nama);
       window.location.reload();
-    } catch {}
+    } catch (err) {
+      setSwitchError(err?.message || "Gagal mengganti lembaga aktif.");
+      setSwitching(false);
+    }
   };
 
   const handleLogout = () => {
@@ -127,7 +118,7 @@ export function AdminHeader({ onMenuToggle }) {
   const breadcrumb = crumbs.join(" / ");
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 sm:h-16 items-center gap-2 sm:gap-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 sm:h-16 items-center gap-2 sm:gap-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 sm:px-6 relative">
       {/* Mobile menu toggle */}
       <button
         onClick={onMenuToggle}
@@ -170,7 +161,7 @@ export function AdminHeader({ onMenuToggle }) {
         {lembagaId && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 gap-2 border-green-200 bg-green-50 text-green-800 hover:bg-green-100 hover:text-green-900 font-medium text-xs">
+              <Button disabled={switching} variant="outline" size="sm" className="h-8 gap-2 border-green-200 bg-green-50 text-green-800 hover:bg-green-100 hover:text-green-900 font-medium text-xs">
                 <Home size={12} />
                 <span className="max-w-[120px] sm:max-w-[160px] truncate">
                   {displayName}
@@ -201,15 +192,7 @@ export function AdminHeader({ onMenuToggle }) {
         )}
 
         {/* Dark mode toggle */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 w-8 p-0 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-          onClick={() => setIsDark(v => !v)}
-          title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-        >
-          {isDark ? <Sun size={15} className="text-amber-400" /> : <Moon size={15} className="text-slate-500" />}
-        </Button>
+        <ThemeToggle />
 
         {/* Notifications */}
         <Button variant="outline" size="icon" className="relative h-8 w-8 p-0 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">
@@ -270,6 +253,15 @@ export function AdminHeader({ onMenuToggle }) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {switchError && (
+        <div
+          role="alert"
+          className="absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 shadow-lg dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+        >
+          {switchError}
+        </div>
+      )}
     </header>
   );
 }

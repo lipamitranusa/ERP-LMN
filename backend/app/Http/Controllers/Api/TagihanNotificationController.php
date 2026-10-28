@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\NotifikasiTagihan;
+use App\Services\Invoice\InvoicePdfGenerator;
+use App\Services\Invoice\TagihanService;
 use App\Services\LembagaHeaderService;
 use App\Services\Notification\EmailChannel;
 use App\Services\Notification\WhatsAppChannel;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * TagihanNotificationController — kirim invoice/tagihan ke faskes
@@ -29,6 +31,8 @@ class TagihanNotificationController extends Controller
         private WhatsAppChannel $wa,
         private EmailChannel $email,
         private LembagaHeaderService $lembaga,
+        private InvoicePdfGenerator $invoicePdf,
+        private TagihanService $tagihanService,
     ) {}
 
     /**
@@ -39,7 +43,7 @@ class TagihanNotificationController extends Controller
     {
         $invoice->load(['siklus.faskes.jenisFaskes', 'items', 'pks']);
 
-        $tagihan = $this->buildTagihanData($invoice);
+        $tagihan = $this->tagihanService->build($invoice);
 
         return response()->json(['data' => $tagihan]);
     }
@@ -52,7 +56,7 @@ class TagihanNotificationController extends Controller
     {
         $invoice->load(['siklus.faskes.jenisFaskes', 'items', 'pks']);
 
-        $tagihan = $this->buildTagihanData($invoice);
+        $tagihan = $this->tagihanService->build($invoice);
         $html = $this->renderHtml($tagihan);
 
         return response($html, 200, ['Content-Type' => 'text/html']);
@@ -68,7 +72,7 @@ class TagihanNotificationController extends Controller
         $invoice->load(['siklus.faskes.jenisFaskes', 'items', 'pks']);
 
         $channel = $request->string('channel', 'whatsapp')->toString();
-        $tagihan = $this->buildTagihanData($invoice);
+        $tagihan = $this->tagihanService->build($invoice);
         $htmlSlip = $this->renderHtml($tagihan);
         $plainSlip = $this->renderPlain($tagihan);
         $subject = "Invoice {$tagihan['nomor_invoice']} — {$tagihan['faskes']['nama']}";
@@ -109,12 +113,37 @@ class TagihanNotificationController extends Controller
 
         if ($channel === 'email' || $channel === 'both') {
             if ($faskes->email) {
-                $sent = $this->email->send($faskes->email, $subject, $plainSlip);
+                $attachments = [];
+                $warning = null;
+
+                try {
+                    $pdf = $this->invoicePdf->generate($tagihan);
+                    $attachments[] = [
+                        'name' => $pdf['filename'],
+                        'content' => $pdf['content'],
+                        'mime' => 'application/pdf',
+                    ];
+                } catch (\Throwable $e) {
+                    Log::error('invoice.pdf.generate_failed', [
+                        'invoice_id' => $invoice->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    $warning = 'Lampiran PDF gagal dibuat, email dikirim tanpa lampiran.';
+                }
+
+                $plainBody = $plainSlip;
+                if (count($attachments) > 0) {
+                    $plainBody .= "\n\nLampiran: ".implode(', ', array_column($attachments, 'name'));
+                }
+
+                $sent = $this->email->send($faskes->email, $subject, $plainBody, $htmlSlip, $attachments);
                 $results[] = [
                     'channel' => 'email',
                     'recipient' => $faskes->email,
                     'status' => $sent ? 'terkirim' : 'gagal',
                     'error' => $sent ? null : $this->email->getLastError(),
+                    'warning' => $warning,
+                    'attachments' => count($attachments) > 0 ? [array_column($attachments, 'name')] : [],
                 ];
             }
         }
@@ -143,6 +172,7 @@ class TagihanNotificationController extends Controller
         $anyFailed = count(array_filter($results, fn ($r) => $r['status'] === 'gagal')) > 0;
 
         return response()->json([
+            'success' => $allSent,
             'message' => $allSent
                 ? ($anyFailed ? 'Sebagian tagihan terkirim.' : 'Tagihan berhasil dikirim.')
                 : 'Gagal mengirim tagihan.',
@@ -153,103 +183,6 @@ class TagihanNotificationController extends Controller
                 'results' => $results,
             ],
         ]);
-    }
-
-    // ─── Build Data ─────────────────────────────────────────────────────
-
-    private function buildTagihanData(Invoice $inv): array
-    {
-        $faskes = $inv->siklus->faskes;
-        $items = [];
-        $totalItems = 0.0;
-
-        foreach ($inv->items as $item) {
-            $jumlah = (float) $item->jumlah;
-            $totalItems += $jumlah;
-            $items[] = [
-                'no' => count($items) + 1,
-                'nama_biaya' => $item->nama_biaya,
-                'deskripsi' => $item->deskripsi,
-                'satuan' => $this->satuanLabel($item->satuan),
-                'jumlah' => $jumlah,
-            ];
-        }
-
-        $statusLabel = match ($inv->status) {
-            Invoice::STATUS_BELUM_BAYAR => 'BELUM LUNAS',
-            Invoice::STATUS_SEBAGIAN => 'SEBAGIAN LUNAS',
-            Invoice::STATUS_LUNAS => 'LUNAS',
-            Invoice::STATUS_EXPIRED => 'EXPIRED',
-            Invoice::STATUS_REFUNDED => 'REFUNDED',
-            default => strtoupper($inv->status),
-        };
-
-        $statusColor = match ($inv->status) {
-            Invoice::STATUS_LUNAS => '#16A34A',
-            Invoice::STATUS_SEBAGIAN => '#D97706',
-            Invoice::STATUS_EXPIRED, Invoice::STATUS_REFUNDED => '#DC2626',
-            default => '#2563EB',
-        };
-
-        $metodeLabel = $this->metodeLabel($inv);
-
-        return [
-            'invoice_id' => $inv->id,
-            'nomor_invoice' => $inv->nomor_invoice,
-            'nomor_pks' => $inv->pks?->nomor_pks,
-            'tanggal_terbit' => Carbon::parse($inv->diterbitkan_pada)->translatedFormat('d F Y'),
-            'tanggal_cetak' => now()->translatedFormat('d F Y H:i'),
-            'due_date' => Carbon::parse($inv->due_date)->translatedFormat('d F Y'),
-            'hari_due' => (int) now()->startOfDay()->diffInDays(Carbon::parse($inv->due_date)->startOfDay(), false) * -1,
-            'status' => $inv->status,
-            'status_label' => $statusLabel,
-            'status_color' => $statusColor,
-            'total_tagihan' => (float) $inv->total_tagihan,
-            'total_diterima' => (float) $inv->totalDiterima(),
-            'sisa_tagihan' => (float) $inv->sisaTagihan(),
-            'metode_pembayaran' => $metodeLabel,
-            'va_number' => $inv->payment_reference,
-            'va_expired' => $inv->payment_expired_at?->translatedFormat('d F Y H:i'),
-            'va_bank' => $inv->va_bank,
-            'faskes' => [
-                'nama' => $faskes->nama,
-                'jenis' => $faskes->jenis,
-                'alamat' => $faskes->alamat,
-                'kota' => $faskes->kota,
-                'provinsi' => $faskes->provinsi,
-                'email' => $faskes->email,
-                'telepon' => $faskes->telepon,
-                'nama_pimpinana' => $faskes->nama_pimpinana,
-            ],
-            'siklus' => [
-                'nama' => $inv->siklus?->nama,
-            ],
-            'items' => $items,
-            'total_items' => round($totalItems, 2),
-        ];
-    }
-
-    private function satuanLabel(string $satuan): string
-    {
-        return match ($satuan) {
-            'tetap' => 'Tetap',
-            'per_siklus' => 'Per Siklus',
-            'per_sertifikat' => 'Per Sertifikat',
-            'per_tahun' => 'Per Tahun',
-            'periksa' => 'Per Periksa',
-            'sekali' => 'Sekali Bayar',
-            default => ucfirst($satuan),
-        };
-    }
-
-    private function metodeLabel(Invoice $inv): string
-    {
-        return match ($inv->metode_pembayaran) {
-            'va', 'virtual_account' => 'Virtual Account',
-            'qris' => 'QRIS',
-            'transfer' => 'Transfer Manual',
-            default => $inv->metode_pembayaran ?: 'Transfer Manual',
-        };
     }
 
     // ─── WhatsApp Message ───────────────────────────────────────────────
@@ -298,7 +231,7 @@ class TagihanNotificationController extends Controller
 
         $lines[] = "";
         $lines[] = "Hormat kami,";
-        $lines[] = config('app.name', 'Lembaga Akreditasi Kesehatan');
+        $lines[] = $tagihan['lembaga']['nama'] ?? config('app.name', 'Lembaga Akreditasi Kesehatan');
 
         return implode("\n", $lines);
     }
@@ -317,7 +250,7 @@ class TagihanNotificationController extends Controller
         $isLunas = $tagihan['status'] === 'lunas';
         $isExpired = $tagihan['hari_due'] < 0 && ! $isLunas;
 
-        $kop = $this->lembaga->getHeader();
+        $kop = $tagihan['lembaga'] ?? $this->lembaga->getHeader();
         $logoHtml = $kop['logo_url']
             ? "<img src='{$kop['logo_url']}' alt='{$kop['nama']}' style='width:48px;height:48px;object-fit:contain;border-radius:8px' />"
             : "<div class='logo'>{$kop['nama_singkat']}</div>";
@@ -562,7 +495,7 @@ HTML;
         $lines[] = "";
         $lines[] = "═══════════════════════════════════════════════════";
         $lines[] = "Dicetak: {$tagihan['tanggal_cetak']}";
-        $lines[] = "Lembaga Akreditasi Kesehatan";
+        $lines[] = $tagihan['lembaga']['nama'] ?? 'Lembaga Akreditasi Kesehatan';
 
         return implode("\n", $lines);
     }

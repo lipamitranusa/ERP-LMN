@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from "react";
 import { useHistory } from "react-router-dom";
 import { formatDate } from "@/utils/dateFormat";
-import { useApi } from "@/hooks/useApi";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Banknote } from "lucide-react";
 
 function formatRp(n) { return `Rp ${Number(n || 0).toLocaleString("id-ID")}`; }
 
@@ -25,9 +27,16 @@ function StatusBadge({ status }) {
 
 export default function HutangPajakList() {
   const history = useHistory();
+  const { can } = useAuth();
   const [filterStatus, setFilterStatus] = useState("");
   const [filterBulan, setFilterBulan] = useState("");
   const [search, setSearch] = useState("");
+  const [creatingId, setCreatingId] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
+  const [lastResult, setLastResult] = useState(null);
+
+  const canPostJournal = can("Ledger/Keuangan", "Tambah");
 
   const { data: dashboardData } = useApi("hutang-pajak-dashboard", "/keuangan/hutang-pajak/dashboard");
 
@@ -42,8 +51,51 @@ export default function HutangPajakList() {
     "/keuangan/hutang-pajak" + (qs ? "?" + qs : "")
   );
 
+  // Invalidasi memakai bentuk array-of-array — "hutang-pajak-list" dan
+  // "hutang-pajak-dashboard" adalah dua key TERPISAH, bukan satu key
+  // gabungan (lihat catatan di useMutateKeys).
+  const createJurnalMutate = useMutateKeys(
+    [["hutang-pajak-list"], ["hutang-pajak-dashboard"], ["settlement-source"]],
+    {
+      onSuccess: (res) => {
+        setErrorMsg(null);
+        setLastResult(res);
+        setSuccessMsg(
+          res?.message
+            || (res?.data?.created_count > 0
+              ? "Jurnal bank keluar berhasil dibuat."
+              : "Jurnal bank keluar sudah ada untuk hutang pajak ini.")
+        );
+        setCreatingId(null);
+      },
+      onError: (err) => {
+        setSuccessMsg(null);
+        setLastResult(null);
+        setErrorMsg(err.message);
+        setCreatingId(null);
+      },
+    }
+  );
+
+  function buatBankKeluar(hutangId) {
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setLastResult(null);
+    setCreatingId(hutangId);
+    createJurnalMutate.mutate({
+      path: "/keuangan/settlement/bank-keluar-pajak",
+      method: "POST",
+      body: { hutang_pajak_id: hutangId },
+    });
+  }
+
   const dashboard = dashboardData?.data ?? null;
   const data = listData?.data ?? null;
+
+  // Jurnal yang sudah ada sebelumnya dibalas 200 dengan created_count 0 —
+  // banner dibuat netral, bukan hijau, supaya tidak terlihat seperti jurnal
+  // baru saja dibuat.
+  const dibuatBaru = (lastResult?.data?.created_count || 0) > 0;
 
   const filteredEntries = useMemo(() => {
     if (!data?.entries) return [];
@@ -89,6 +141,25 @@ export default function HutangPajakList() {
             <div className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 dark:text-slate-500">Total Keseluruhan</div>
             <div className="text-lg font-bold text-slate-800 dark:text-slate-200">{formatRp(dashboard.total_seluruh)}</div>
           </Card>
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="px-4 py-3 rounded-md text-sm" style={{ background: "#FEE2E2", color: "#991B1B", border: "1px solid #FECACA" }}>
+          Gagal membuat jurnal bank keluar: {errorMsg}
+        </div>
+      )}
+
+      {successMsg && (
+        <div
+          className="px-4 py-3 rounded-md text-sm font-medium"
+          style={{
+            background: dibuatBaru ? "#DCFCE7" : "#F8FAFC",
+            color: dibuatBaru ? "#166534" : "#475569",
+            border: `1px solid ${dibuatBaru ? "#BBF7D0" : "#E2E8F0"}`,
+          }}
+        >
+          {successMsg}
         </div>
       )}
 
@@ -139,11 +210,12 @@ export default function HutangPajakList() {
                 <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">PPh 21</th>
                 <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Jatuh Tempo</th>
                 <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Status</th>
+                <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">Jurnal Bank Keluar</th>
               </tr>
             </thead>
             <tbody>
               {filteredEntries.length === 0 ? (
-                <tr><td colSpan={9} className="text-center py-8 text-sm" style={{ color: "#94A3B8" }}>Tidak ada data hutang pajak.</td></tr>
+                <tr><td colSpan={10} className="text-center py-8 text-sm" style={{ color: "#94A3B8" }}>Tidak ada data hutang pajak.</td></tr>
               ) : filteredEntries.map(e => (
                 <tr key={e.id} className="hover:bg-slate-50/50 cursor-pointer" onClick={() => history.push(`/admin/hutang-pajak/${e.id}`)}>
                   <td className="px-4 py-2 font-mono text-[12px]">{e.nomor_pokok_wajib_pajak || "—"}</td>
@@ -155,6 +227,24 @@ export default function HutangPajakList() {
                   <td className="px-4 py-2 text-right text-[12px] font-semibold text-red-600">{formatRp(e.jumlah_pajak)}</td>
                   <td className="px-4 py-2 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{formatDate(e.tanggal_jatuh_tempo)}</td>
                   <td className="px-4 py-2"><StatusBadge status={e.status} /></td>
+                  <td className="px-4 py-2 text-[12px]">
+                    {e.sudah_dijurnal ? (
+                      <span className="font-mono text-emerald-700">{e.jurnal_nomor}</span>
+                    ) : e.status === "dibayar" && canPostJournal ? (
+                      <Button
+                        size="sm"
+                        className="h-7 text-[11px]"
+                        style={{ background: "#DC2626", color: "#FFFFFF" }}
+                        disabled={createJurnalMutate.isLoading}
+                        onClick={(ev) => { ev.stopPropagation(); buatBankKeluar(e.id); }}
+                      >
+                        <Banknote size={13} className="mr-1" />
+                        {creatingId === e.id ? "Membuat..." : "Buat Bank Keluar"}
+                      </Button>
+                    ) : (
+                      <span className="text-amber-600">Belum dijurnal</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

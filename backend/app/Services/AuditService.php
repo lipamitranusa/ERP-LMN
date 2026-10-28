@@ -26,12 +26,7 @@ class AuditService
         ?string $lembagaId = null,
     ): AuditTrail {
         $aktorId = $this->request?->user()?->id;
-        $resolvedLembagaId = $lembagaId
-            ?? $after?->lembaga_id
-            ?? $before?->lembaga_id
-            // Lembaga is root entity: its own id IS the lembaga_id
-            ?? ($after instanceof \App\Models\Lembaga ? $after->id : null)
-            ?? ($before instanceof \App\Models\Lembaga ? $before->id : null);
+        $resolvedLembagaId = $this->resolveLembagaId($lembagaId, $after, $before);
 
         return AuditTrail::create([
             'id' => (string) Str::uuid(),
@@ -54,7 +49,11 @@ class AuditService
     public function log(string $action, string $targetType, string $targetId, array $extra = [], ?string $lembagaId = null): AuditTrail
     {
         $aktorId = $this->request?->user()?->id;
-        $resolvedLembagaId = $lembagaId ?? session('lembaga_id');
+        $resolvedLembagaId = $lembagaId
+            ?? $this->deriveFromTarget($targetType, $targetId)
+            ?? session('lembaga_id')
+            ?? app(LembagaResolver::class)->fromAkunPengguna($aktorId)
+            ?? app(LembagaResolver::class)->fallback();
 
         return AuditTrail::create([
             'id' => (string) Str::uuid(),
@@ -70,6 +69,71 @@ class AuditService
         ]);
     }
 
+    /**
+     * `audit_trail.lembaga_id` bertipe NOT NULL, sementara `session('lembaga_id')`
+     * hanya ada pada request HTTP. Di console/scheduler/test nilainya null —
+     * karena itu lemma diturunkan dari objek target (invoice → siklus, dsb.)
+     * sebelum jatuh ke session.
+     */
+    private function resolveLembagaId(?string $explicit, ?Model $after, ?Model $before): ?string
+    {
+        if ($explicit) {
+            return $explicit;
+        }
+
+        foreach ([$after, $before] as $model) {
+            if (! $model) {
+                continue;
+            }
+
+            // Lembaga is root entity: its own id IS the lembaga_id
+            if ($model instanceof \App\Models\Lembaga) {
+                return $model->id;
+            }
+
+            $fromModel = $model->lembaga_id;
+            if ($fromModel) {
+                return $fromModel;
+            }
+
+            $derived = $this->deriveFromModel($model);
+            if ($derived) {
+                return $derived;
+            }
+        }
+
+        return session('lembaga_id')
+            ?? app(LembagaResolver::class)->fromAkunPengguna($this->request?->user()?->id)
+            ?? app(LembagaResolver::class)->fallback();
+    }
+
+    private function deriveFromModel(Model $model): ?string
+    {
+        $resolver = app(LembagaResolver::class);
+        $id = $model->getKey();
+
+        return match ($model::class) {
+            \App\Models\Invoice::class => $resolver->fromInvoice($id),
+            \App\Models\PembayaranHonor::class => $resolver->fromPembayaranHonor($id),
+            \App\Models\HutangPajak::class => $resolver->fromHutangPajak($id),
+            \App\Models\JurnalUmum::class => $resolver->fromJurnal($id),
+            default => null,
+        };
+    }
+
+    private function deriveFromTarget(string $targetType, string $targetId): ?string
+    {
+        $resolver = app(LembagaResolver::class);
+        $short = str_contains($targetType, '\\') ? class_basename($targetType) : $targetType;
+
+        return match ($short) {
+            'Invoice' => $resolver->fromInvoice($targetId),
+            'PembayaranHonor' => $resolver->fromPembayaranHonor($targetId),
+            'HutangPajak' => $resolver->fromHutangPajak($targetId),
+            'JurnalUmum' => $resolver->fromJurnal($targetId),
+            default => null,
+        };
+    }
     private function normalize(?Model $model): ?array
     {
         if (! $model) {

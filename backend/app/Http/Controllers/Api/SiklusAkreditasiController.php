@@ -32,7 +32,7 @@ class SiklusAkreditasiController extends Controller
         $query = SiklusAkreditasi::with([
             'faskes:id,nama',
             'lembaga:id,nama',
-            'invoice:id,siklus_id,status',
+            'invoice:id,siklus_id,status,total_tagihan,tanggal_lunas',
         ])->withCount('catatanRevisi');
 
         if ($request->filled('q')) {
@@ -56,6 +56,20 @@ class SiklusAkreditasiController extends Controller
             $query->where('status_kelengkapan', $request->string('status_kelengkapan'));
         }
 
+        // Filter riwayat / aktif untuk portal faskes:
+        //  riwayat → siklus yang sudah masuk histori (tuntas + pembayaran lunas)
+        //  aktif   → siklus yang masih berjalan (belum masuk histori)
+        if ($request->boolean('riwayat')) {
+            // Histori perlu menampilkan dokumen yang diunggah pada tiap
+            // pengajuan, jadi relasinya ikut di-eager-load (bukan N+1).
+            $query->selesaiLengkap()->with([
+                'dokumen:id,siklus_id,jenis_dokumen,versi,nama_file_asli,ukuran_file,mime_type,diunggah_oleh,tanggal_unduh',
+                'dokumen.uploader:id,nama',
+            ]);
+        } elseif ($request->boolean('aktif')) {
+            $query->belumSelesaiLengkap();
+        }
+
         $perPage = min((int) $request->integer('per_page', 15), 50);
         $items = $query->orderBy('tanggal_pengajuan', 'desc')->paginate($perPage);
 
@@ -67,12 +81,35 @@ class SiklusAkreditasiController extends Controller
 
         $items->getCollection()->transform(function ($siklus) use ($selesaiIds) {
             $siklus->survei_selesai = in_array($siklus->id, $selesaiIds, true);
+            $siklus->selesai_lengkap = $siklus->isSelesaiLengkap();
             $siklus->invoice_belum_lunas = $siklus->invoice
                 && ! in_array($siklus->invoice->status, ['lunas', 'dibayar'], true);
+            $siklus->status = $this->statusTerlihat($siklus);
             return $siklus;
         });
 
         return response()->json($items);
+    }
+
+    /**
+     * Status yang ditampilkan ke user.
+     *
+     * Siklus yang masih berstatus 'menunggu_pembayaran' tapi invoice-nya
+     * sudah lunas (data lama / siklus yang sudah lanjut tahap) menampilkan
+     * status pembayaran invoice, bukan "Menunggu Pembayaran" yang basi.
+     */
+    private function statusTerlihat(SiklusAkreditasi $siklus): string
+    {
+        if ($siklus->status !== 'menunggu_pembayaran' || ! $siklus->invoice) {
+            return $siklus->status;
+        }
+
+        $statusInvoice = $siklus->invoice->status;
+        if (in_array($statusInvoice, ['lunas', 'dibayar', 'sebagian', 'refunded', 'superseded'], true)) {
+            return $statusInvoice;
+        }
+
+        return $siklus->status;
     }
 
     /**
@@ -101,6 +138,21 @@ class SiklusAkreditasiController extends Controller
 
         if (! $faskesId) {
             abort(response()->json(['message' => 'faskes_id wajib diisi untuk akun non-Faskes.'], 422));
+        }
+
+        // Satu faskes hanya boleh punya satu pengajuan yang masih berjalan.
+        // Pengajuan yang sudah masuk histori (tuntas + pembayaran lunas) tidak
+        // dihitung, sehingga faskes dapat mengajukan akreditasi kembali.
+        if ($user->faskes_id) {
+            $siklusAktif = SiklusAkreditasi::where('faskes_id', $faskesId)
+                ->belumSelesaiLengkap()
+                ->exists();
+
+            if ($siklusAktif) {
+                abort(response()->json([
+                    'message' => 'Anda masih memiliki pengajuan akreditasi yang sedang berjalan. Selesaikan proses saat ini sebelum mengajukan yang baru.',
+                ], 422));
+            }
         }
 
         $siklus = SiklusAkreditasi::create([
@@ -155,6 +207,7 @@ class SiklusAkreditasiController extends Controller
         $siklus->survei_selesai = $this->cekSurveiSelesai($siklus->id);
         $siklus->invoice_belum_lunas = $siklus->invoice
             && ! in_array($siklus->invoice->status, ['lunas', 'dibayar'], true);
+        $siklus->status = $this->statusTerlihat($siklus);
 
         return response()->json(['data' => $siklus]);
     }

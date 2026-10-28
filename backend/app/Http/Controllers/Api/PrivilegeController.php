@@ -8,6 +8,7 @@ use App\Models\MenuAction;
 use App\Models\Role;
 use App\Models\RolePrivilege;
 use App\Services\AuditService;
+use App\Services\LembagaResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -116,6 +117,9 @@ class PrivilegeController extends Controller
             'aksi' => 'privilege.update',
             'target_type' => 'Role',
             'target_id' => $role->id,
+            'lembaga_id' => app(LembagaResolver::class)
+                ->fromAkunPengguna($request->user()?->id)
+                ?? app(LembagaResolver::class)->fallback(),
             'data_sebelum' => ['privileges' => $before],
             'data_sesudah' => ['privileges' => $after],
             'ip_address' => $request->ip(),

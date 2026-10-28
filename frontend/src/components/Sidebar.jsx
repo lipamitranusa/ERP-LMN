@@ -16,6 +16,8 @@ function hasPrivilege(route, menuActions) {
 
 function routeVisibleForRole(route, roleName) {
   if (roleName === "Rekomendator" && route.name === "Penugasan") return false;
+  // Portal Rekomendator hanya punya satu menu: Rekomendasi.
+  if (roleName === "Rekomendator" && route.path === "/rekomendasi-settings") return false;
   return true;
 }
 

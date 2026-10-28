@@ -13,14 +13,13 @@ use Illuminate\Support\Facades\DB;
  * - master_biaya_tenaga_ahli → default ke lembaga pertama
  * - konfigurasi_pajak  → default ke lembaga pertama
  * - biaya_per_jenis_faskes → via jenis_faskes.lembaga_id
- * - akun_pengguna      → via faskes.lembaga_id ATAU tenaga_ahli.lembaga_id
+ * - akun_pengguna      → via tenaga_ahli.lembaga_id
  * - jurnal_umum        → via coa.lembaga_id (dari jurnal_umum_detail[0].coa)
  * - audit_trail        → via aktor_id → akun_pengguna.lembaga_id
  * - tenaga_ahli        → KOSONG (NULL) — admin assign manual setelah migrasi
  *
- * CATATAN: Jika data existing sudah terkait dengan lembaga (misalnya
- * biaya_per_jenis_faskes sudah punya jenis_faskes_id yang punya lembaga_id),
- * maka backfill akan menggunakan nilai tersebut.
+ * CATATAN: Semua query memakai subquery berkorelasi (bukan "UPDATE ... FROM")
+ * supaya sintaksnya jalan di Postgres (dev) maupun MySQL (test DB).
  */
 return new class extends Migration
 {
@@ -30,8 +29,16 @@ return new class extends Migration
         $defaultLembagaId = DB::table('lembaga')->value('id');
 
         if (! $defaultLembagaId) {
-            // Tidak ada lembaga — skip semua backfill
-            return;
+            // Fresh install (migrate:fresh tanpa seed): tabel lemma masih
+            // kosong karena data lembaga dibuat oleh seeder, bukan migrasi.
+            // Tanpa baris ini backfill tidak punya target dan constraint
+            // NOT NULL di migrasi berikutnya akan gagal.
+            // Id ini sama dengan id yang dipakai LembagaSeeder (updateOrInsert).
+            $defaultLembagaId = '00000000-0000-0000-0000-000000000001';
+            DB::table('lembaga')->insert([
+                'id' => $defaultLembagaId,
+                'nama' => 'Lembaga Default',
+            ]);
         }
 
         // 2. jenis_faskes — backfill ke default (kolom lama kosong/null)
@@ -50,58 +57,64 @@ return new class extends Migration
         $this->backfillWhereNull('konfigurasi_pajak', 'lembaga_id', $defaultLembagaId);
 
         // 7. biaya_per_jenis_faskes — via jenis_faskes.lembaga_id
-        DB::statement("
-            UPDATE biaya_per_jenis_faskes b
-            SET lembaga_id = j.lembaga_id
-            FROM jenis_faskes j
-            WHERE b.jenis_faskes_id = j.id
-              AND b.lembaga_id IS NULL
-              AND j.lembaga_id IS NOT NULL
-        ");
+        DB::statement('
+            UPDATE biaya_per_jenis_faskes
+            SET lembaga_id = (
+                SELECT j.lembaga_id FROM jenis_faskes j
+                WHERE j.id = biaya_per_jenis_faskes.jenis_faskes_id
+            )
+            WHERE lembaga_id IS NULL
+              AND jenis_faskes_id IN (SELECT id FROM jenis_faskes WHERE lembaga_id IS NOT NULL)
+        ');
         // Sisanya ke default
         $this->backfillWhereNull('biaya_per_jenis_faskes', 'lembaga_id', $defaultLembagaId);
 
         // 8. akun_pengguna — via tenaga_ahli.lembaga_id
         // (faskes_id tidak digunakan di DB ini dan faskes tidak punya kolom lembaga_id)
-        DB::statement("
-            UPDATE akun_pengguna a
-            SET lembaga_id = ta.lembaga_id
-            FROM tenaga_ahli ta
-            WHERE a.tenaga_ahli_id = ta.id
-              AND a.lembaga_id IS NULL
-              AND ta.lembaga_id IS NOT NULL
-        ");
+        DB::statement('
+            UPDATE akun_pengguna
+            SET lembaga_id = (
+                SELECT ta.lembaga_id FROM tenaga_ahli ta
+                WHERE ta.id = akun_pengguna.tenaga_ahli_id
+            )
+            WHERE lembaga_id IS NULL
+              AND tenaga_ahli_id IN (SELECT id FROM tenaga_ahli WHERE lembaga_id IS NOT NULL)
+        ');
         // Sisanya ke default
         $this->backfillWhereNull('akun_pengguna', 'lembaga_id', $defaultLembagaId);
 
         // 9. jurnal_umum — via coa.lembaga_id dari jurnal_umum_detail[0]
-        // Join ke jurnal_umum_detail untuk dapat coa_id pertama
-        DB::statement("
-            UPDATE jurnal_umum j
-            SET lembaga_id = c.lembaga_id
-            FROM (
-                SELECT DISTINCT ON (jurnal_umum_id)
-                       jurnal_umum_id, coa_id
-                FROM jurnal_umum_detail
-                ORDER BY jurnal_umum_id, created_at
-            ) d
-            JOIN coa c ON c.id = d.coa_id
-            WHERE j.id = d.jurnal_umum_id
-              AND j.lembaga_id IS NULL
-              AND c.lembaga_id IS NOT NULL
-        ");
+        DB::statement('
+            UPDATE jurnal_umum
+            SET lembaga_id = (
+                SELECT c.lembaga_id
+                FROM jurnal_umum_detail d
+                JOIN coa c ON c.id = d.coa_id
+                WHERE d.jurnal_umum_id = jurnal_umum.id
+                  AND c.lembaga_id IS NOT NULL
+                LIMIT 1
+            )
+            WHERE lembaga_id IS NULL
+              AND EXISTS (
+                SELECT 1 FROM jurnal_umum_detail d
+                JOIN coa c ON c.id = d.coa_id
+                WHERE d.jurnal_umum_id = jurnal_umum.id
+                  AND c.lembaga_id IS NOT NULL
+              )
+        ');
         // Sisanya ke default
         $this->backfillWhereNull('jurnal_umum', 'lembaga_id', $defaultLembagaId);
 
         // 10. audit_trail — via aktor_id → akun_pengguna.lembaga_id
-        DB::statement("
-            UPDATE audit_trail at
-            SET lembaga_id = ap.lembaga_id
-            FROM akun_pengguna ap
-            WHERE at.aktor_id = ap.id
-              AND at.lembaga_id IS NULL
-              AND ap.lembaga_id IS NOT NULL
-        ");
+        DB::statement('
+            UPDATE audit_trail
+            SET lembaga_id = (
+                SELECT ap.lembaga_id FROM akun_pengguna ap
+                WHERE ap.id = audit_trail.aktor_id
+            )
+            WHERE lembaga_id IS NULL
+              AND aktor_id IN (SELECT id FROM akun_pengguna WHERE lembaga_id IS NOT NULL)
+        ');
         // Sisanya ke default
         $this->backfillWhereNull('audit_trail', 'lembaga_id', $defaultLembagaId);
 

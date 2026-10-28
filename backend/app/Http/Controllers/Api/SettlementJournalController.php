@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BuktiPembayaran;
 use App\Models\Coa;
 use App\Models\HutangPajak;
+use App\Models\Invoice;
 use App\Models\JurnalUmum;
 use App\Models\Lembaga;
 use App\Models\PembayaranHonor;
@@ -46,6 +47,7 @@ class SettlementJournalController extends Controller
                 SettlementJournalService::REF_PIUTANG_SETTLEMENT,
                 SettlementJournalService::REF_AP_HONOR_SETTLEMENT,
                 SettlementJournalService::REF_AP_PAJAK_SETTLEMENT,
+                SettlementJournalService::REF_AP_HONOR_REVERSAL,
             ]);
 
         if (! empty($filters['ref_type'])) {
@@ -203,6 +205,265 @@ class SettlementJournalController extends Controller
     }
 
     /**
+     * POST /api/keuangan/settlement/bank-masuk
+     * Buat Jurnal Bank Masuk untuk AR yang sudah dibayarkan.
+     *
+     * Body: { invoice_id, bukti_id? }
+     *   - invoice_id : invoice AR yang pembayaran sudah diterima
+     *   - bukti_id   : (opsional) batasi hanya ke satu bukti pembayaran
+     *
+     * Jurnal yang dihasilkan (prinsip double-entry):
+     *   Dr. Kas/Bank (akun bank default lembaga)
+     *   Cr. Piutang Usaha (1105)
+     *
+     * Idempotent — bukti pembayaran yang sudah punya jurnal settlement
+     * dilewati, jadi tombol bisa diklik berulang tanpa dobel posted.
+     */
+    public function bankMasuk(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'invoice_id' => 'required|uuid',
+            'bukti_id' => 'nullable|uuid',
+            'bank_coa_id' => 'nullable|uuid',
+        ]);
+
+        $invoice = Invoice::with('siklus')->find($data['invoice_id']);
+        if (! $invoice) {
+            return response()->json(['message' => 'Invoice tidak ditemukan.'], 404);
+        }
+
+        // Guard lembaga: invoice hanya boleh/journal dari session lembaga yang sama.
+        $sessionLembagaId = session('lembaga_id');
+        if ($sessionLembagaId !== null && $invoice->siklus?->lembaga_id !== $sessionLembagaId) {
+            return response()->json(['message' => 'Invoice tidak ditemukan.'], 404);
+        }
+
+        $buktiId = $data['bukti_id'] ?? null;
+        if ($buktiId) {
+            $bukti = $invoice->buktiPembayaran()->where('id', $buktiId)->first();
+            if (! $bukti) {
+                return response()->json(['message' => 'Bukti pembayaran tidak ditemukan pada invoice ini.'], 404);
+            }
+            if ($bukti->status_verifikasi !== BuktiPembayaran::STATUS_DITERIMA) {
+                return response()->json([
+                    'message' => 'Jurnal bank masuk hanya bisa dibuat untuk pembayaran yang sudah diterima.',
+                ], 422);
+            }
+        }
+
+        $result = $this->svc->recordArBankMasuk(
+            invoice: $invoice,
+            bankCoaId: $data['bank_coa_id'] ?? null,
+            userId: $request->user()?->id,
+            buktiId: $buktiId,
+        );
+
+        $jurnalPayload = collect($result['created'])->map(fn (JurnalUmum $j) => $this->presentJurnal($j->load(['details.coa', 'kategori'])))->values();
+
+        if (! empty($result['errors']) && empty($result['created'])) {
+            return response()->json([
+                'message' => 'Jurnal bank masuk gagal dibuat: ' . ($result['errors'][0]['error'] ?? 'Unknown error'),
+                'data' => ['created' => [], 'errors' => $result['errors']],
+            ], 422);
+        }
+
+        // Sudah ada jurnalnya → bukan error. Satu kas masuk = satu jurnal,
+        // dan itu dijamin idempotency service + unique index (ref_type,
+        // ref_id). Response tetap 200 supaya UI bisa invalidate + menampilkan
+        // nomor jurnal yang sudah ada, bukan menampilkan "gagal".
+        $existing = null;
+        if ($jurnalPayload->isEmpty() && ! empty($result['skipped'])) {
+            $existing = $this->svc->existingJurnal(
+                SettlementJournalService::REF_PIUTANG_SETTLEMENT,
+                $result['skipped'][0],
+            );
+        }
+
+        return response()->json([
+            'data' => [
+                'created' => $jurnalPayload,
+                'created_count' => count($jurnalPayload),
+                'skipped_count' => count($result['skipped']),
+                'errors' => $result['errors'],
+                'jurnal' => $existing ? $this->presentJurnal($existing->load(['details.coa', 'kategori'])) : null,
+            ],
+            'message' => count($jurnalPayload) > 0
+                ? count($jurnalPayload) . ' jurnal bank masuk berhasil dibuat.'
+                : 'Jurnal bank masuk sudah ada untuk seluruh pembayaran pada invoice ini.',
+        ]);
+    }
+
+    /**
+     * POST /api/keuangan/settlement/bank-keluar
+     * Buat Jurnal Bank Keluar untuk pembayaran AP honor yang sudah dibayar.
+     *
+     * Body: { pembayaran_id }
+     *   - pembayaran_id : pembayaran honor yang statusnya sudah 'disetujui'
+     *
+     * Jurnal yang dihasilkan (prinsip double-entry):
+     *   Dr. Utang Honor (2107)
+     *   Cr. Kas/Bank (akun bank default lembaga)
+     *
+     * Idempotent — pembayaran yang sudah punya jurnal settlement dilewati,
+     * jadi tombol bisa diklik berulang tanpa dobel posted.
+     */
+    public function bankKeluar(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'pembayaran_id' => 'required|uuid',
+            'bank_coa_id' => 'nullable|uuid',
+        ]);
+
+        $pembayaran = PembayaranHonor::with('details.ledgerEntry.siklus')->find($data['pembayaran_id']);
+        if (! $pembayaran) {
+            return response()->json(['message' => 'Pembayaran tidak ditemukan.'], 404);
+        }
+
+        // Guard lemma: pembayaran hanya boleh di-journal dari session
+        // lembaga yang sama.
+        $sessionLembagaId = session('lembaga_id');
+        if ($sessionLembagaId !== null) {
+            $paymentLembagaId = $pembayaran->details->first()?->ledgerEntry?->siklus?->lembaga_id;
+            if ($paymentLembagaId !== $sessionLembagaId) {
+                return response()->json(['message' => 'Pembayaran tidak ditemukan.'], 404);
+            }
+        }
+
+        if ($pembayaran->status !== PembayaranHonor::STATUS_DISETUJUI) {
+            return response()->json([
+                'message' => 'Jurnal bank keluar hanya bisa dibuat untuk pembayaran yang sudah disetujui.',
+            ], 422);
+        }
+
+        $result = $this->svc->recordApBankKeluar(
+            pembayaran: $pembayaran,
+            bankCoaId: $data['bank_coa_id'] ?? null,
+            userId: $request->user()?->id,
+        );
+
+        $jurnalPayload = collect($result['created'])
+            ->map(fn (JurnalUmum $j) => $this->presentJurnal($j->load(['details.coa', 'kategori'])))
+            ->values();
+
+        if (! empty($result['errors']) && empty($result['created'])) {
+            return response()->json([
+                'message' => 'Jurnal bank keluar gagal dibuat: ' . ($result['errors'][0]['error'] ?? 'Unknown error'),
+                'data' => ['created' => [], 'errors' => $result['errors']],
+            ], 422);
+        }
+
+        // Sudah ada jurnal Bank Keluar untuk pembayaran ini → bukan error.
+        // Dobel posting sudah dicegah di level service (idempotency) dan
+        // unique index (ref_type, ref_id). Response tetap 200 supaya UI
+        // invalidate daftar dan menampilkan nomor jurnal yang sudah ada.
+        $existing = null;
+        if ($jurnalPayload->isEmpty() && ! empty($result['skipped'])) {
+            $existing = $this->svc->existingJurnal(
+                SettlementJournalService::REF_AP_HONOR_SETTLEMENT,
+                $pembayaran->id,
+            );
+        }
+
+        return response()->json([
+            'data' => [
+                'created' => $jurnalPayload,
+                'created_count' => count($jurnalPayload),
+                'skipped_count' => count($result['skipped']),
+                'errors' => $result['errors'],
+                'jurnal' => $existing ? $this->presentJurnal($existing->load(['details.coa', 'kategori'])) : null,
+            ],
+            'message' => count($jurnalPayload) > 0
+                ? 'Jurnal bank keluar berhasil dibuat.'
+                : 'Jurnal bank keluar sudah ada untuk pembayaran ini.',
+        ]);
+    }
+
+    /**
+     * POST /api/keuangan/settlement/bank-keluar-pajak
+     * Buat Jurnal Bank Keluar untuk hutang pajak PPh 21 yang sudah dibayar.
+     *
+     * Body: { hutang_pajak_id }
+     *   - hutang_pajak_id : id hutang pajak (harus status "dibayar")
+     *
+     * Jurnal yang dihasilkan (prinsip double-entry):
+     *   Dr. Utang PPh 21 (2102)
+     *   Cr. Kas/Bank (akun bank default lembaga)
+     *
+     * Idempotent — hutang yang sudah punya jurnal settlement dilewati, jadi
+     * tombol bisa diklik berulang tanpa dobel posted.
+     */
+    public function bankKeluarPajak(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'hutang_pajak_id' => 'required|uuid',
+            'bank_coa_id' => 'nullable|uuid',
+        ]);
+
+        $hutang = HutangPajak::with('pembayaranHonor')->find($data['hutang_pajak_id']);
+        if (! $hutang) {
+            return response()->json(['message' => 'Hutang pajak tidak ditemukan.'], 404);
+        }
+
+        // Guard lemma: hutang hanya boleh di-journal dari session lembaga
+        // yang sama.
+        $sessionLembagaId = session('lembaga_id');
+        if ($sessionLembagaId !== null) {
+            $hutangLembagaId = $this->svc->hutangLembagaId($hutang);
+            if ($hutangLembagaId !== null && $hutangLembagaId !== $sessionLembagaId) {
+                return response()->json(['message' => 'Hutang pajak tidak ditemukan.'], 404);
+            }
+        }
+
+        if ($hutang->status !== HutangPajak::STATUS_DIBAYAR) {
+            return response()->json([
+                'message' => 'Jurnal bank keluar hanya bisa dibuat untuk hutang pajak yang sudah dibayar.',
+            ], 422);
+        }
+
+        $result = $this->svc->recordApPajakBankKeluar(
+            hutang: $hutang,
+            bankCoaId: $data['bank_coa_id'] ?? null,
+            userId: $request->user()?->id,
+        );
+
+        $jurnalPayload = collect($result['created'])
+            ->map(fn (JurnalUmum $j) => $this->presentJurnal($j->load(['details.coa', 'kategori'])))
+            ->values();
+
+        if (! empty($result['errors']) && $jurnalPayload->isEmpty()) {
+            return response()->json([
+                'message' => 'Jurnal bank keluar gagal dibuat: ' . ($result['errors'][0]['error'] ?? 'Unknown error'),
+                'data' => ['created' => [], 'errors' => $result['errors']],
+            ], 422);
+        }
+
+        // Sudah ada jurnalnya → bukan error. Idempotency service + unique
+        // index (ref_type, ref_id) sudah mencegah dobel posting; response
+        // tetap 200 supaya UI invalidate daftar dan menampilkan nomor
+        // jurnal yang sudah ada.
+        $existing = null;
+        if ($jurnalPayload->isEmpty() && ! empty($result['skipped'])) {
+            $existing = $this->svc->existingJurnal(
+                SettlementJournalService::REF_AP_PAJAK_SETTLEMENT,
+                $hutang->id,
+            );
+        }
+
+        return response()->json([
+            'data' => [
+                'created' => $jurnalPayload,
+                'created_count' => count($jurnalPayload),
+                'skipped_count' => count($result['skipped']),
+                'errors' => $result['errors'],
+                'jurnal' => $existing ? $this->presentJurnal($existing->load(['details.coa', 'kategori'])) : null,
+            ],
+            'message' => count($jurnalPayload) > 0
+                ? 'Jurnal bank keluar berhasil dibuat.'
+                : 'Jurnal bank keluar sudah ada untuk hutang pajak ini.',
+        ]);
+    }
+
+    /**
      * GET /api/keuangan/settlement/settings
      * Ambil default bank COA Lembaga aktif.
      */
@@ -349,6 +610,7 @@ class SettlementJournalController extends Controller
             SettlementJournalService::REF_PIUTANG_SETTLEMENT => 'Pelunasan Piutang (AR)',
             SettlementJournalService::REF_AP_HONOR_SETTLEMENT => 'Pelunasan Hutang Honor (AP)',
             SettlementJournalService::REF_AP_PAJAK_SETTLEMENT => 'Pelunasan Hutang Pajak (AP)',
+            SettlementJournalService::REF_AP_HONOR_REVERSAL => 'Pembatalan Pelunasan Honor (AP)',
             default => $refType,
         };
     }

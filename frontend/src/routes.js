@@ -56,6 +56,13 @@ var routes = [
     hideInSidebar: true,
   },
   {
+    path: "/histori",
+    name: "Histori Pengajuan",
+    icon: NavIcon({ name: "log" }),
+    componentName: "FaskesHistori",
+    layout: "/faskes",
+  },
+  {
     path: "/ganti-password",
     name: "Ganti Password",
     icon: NavIcon({ name: "lock" }),
@@ -96,6 +103,14 @@ var routes = [
         name: "Verifikasi Pembayaran",
         icon: NavIcon({ name: "payment" }),
         componentName: "VerifikasiPembayaran",
+        layout: "/admin",
+        privilege: ["Kontrak & Invoicing", "Lihat"],
+      },
+      {
+        path: "/histori-pembayaran",
+        name: "Histori Pembayaran",
+        icon: NavIcon({ name: "log" }),
+        componentName: "HistoriPembayaran",
         layout: "/admin",
         privilege: ["Kontrak & Invoicing", "Lihat"],
       },
@@ -144,6 +159,15 @@ var routes = [
         componentName: "ApHonorList",
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
+      },
+      {
+        path: "/ap-honor/kas-keluar",
+        name: "Kas Keluar Honor",
+        icon: NavIcon({ name: "coins" }),
+        componentName: "ApHonorKasKeluar",
+        layout: "/admin",
+        privilege: ["Ledger/Keuangan", "Lihat"],
+        hideInSidebar: false,
       },
       {
         path: "/ap-honor/history",
@@ -210,11 +234,27 @@ var routes = [
         layout: "/admin",
         privilege: ["Ledger/Keuangan", "Lihat"],
       },
+    ],
+  },
+
+  // Menu Rekomendasi dipisah dari group Keuangan supaya portal Rekomendator
+  // (yang hanya punya privilege Rekomendasi) menampilkan satu menu saja.
+  {
+    group: "Rekomendasi",
+    items: [
       {
         path: "/rekomendasi",
         name: "Rekomendasi",
         icon: NavIcon({ name: "doc" }),
         componentName: "RekomendasiWorkspace",
+        layout: "/admin",
+        privilege: ["Rekomendasi", "Lihat"],
+      },
+      {
+        path: "/riwayat-siklus",
+        name: "Riwayat Siklus Validasi",
+        icon: NavIcon({ name: "log" }),
+        componentName: "RekomendasiHistory",
         layout: "/admin",
         privilege: ["Rekomendasi", "Lihat"],
       },

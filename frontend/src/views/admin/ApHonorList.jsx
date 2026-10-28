@@ -126,7 +126,7 @@ export default function ApHonorList() {
             <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Penerima</Label>
             <select className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={filterPenerima} onChange={e => setFilterPenerima(e.target.value)}>
               <option value="">Semua</option>
-              {(per_penerima || []).map(p => <option key={p.tenaga_ahli_id} value={p.tenaga_ahli_id}>{p.nama}</option>)}
+              {(per_penerima || []).map(p => <option key={p.penerima_key} value={p.penerima_key}>{p.nama}</option>)}
             </select>
           </div>
         </div>
@@ -196,7 +196,14 @@ export default function ApHonorList() {
                   </td>
                   <td className="px-3 py-2">
                     <div className="text-[13px] font-medium text-slate-700 dark:text-slate-300 dark:text-slate-500">{e.penerima?.nama || "—"}</div>
-                    <div className="text-[11px]" style={{ color: "#94A3B8" }}>{e.penerima?.nomor_induk_surveior}</div>
+                    <div className="text-[11px]" style={{ color: "#94A3B8" }}>
+                      {e.penerima?.nomor_induk_surveior || "—"}
+                    </div>
+                    {e.penerima?.no_rekening && (
+                      <div className="text-[11px]" style={{ color: "#0C4A6E" }}>
+                        {e.penerima.nama_bank} {e.penerima.no_rekening} · {e.penerima.atas_nama_rekening}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{PERAN_LABEL[e.tipe] || e.tipe}</td>
                   <td className="px-3 py-2 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500">{e.siklus?.faskes_nama || "—"}</td>

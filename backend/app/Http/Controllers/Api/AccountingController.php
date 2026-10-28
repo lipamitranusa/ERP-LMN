@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Keuangan\AccountingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 /**
  * AccountingController — REST API untuk modul Akuntansi / CA.
@@ -41,7 +42,13 @@ class AccountingController extends Controller
     public function coaStore(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'kode' => 'required|string|max:20|unique:coa,kode',
+            'kode' => [
+                'required', 'string', 'max:20',
+                // Kode akun unik per lembaga (bukan global).
+                Rule::unique('coa', 'kode')->where(
+                    fn ($q) => $q->where('lembaga_id', session('lembaga_id'))
+                ),
+            ],
             'nama' => 'required|string|max:200',
             'jenis' => 'required|in:aktiva_lancar,aktiva_tetap,kewajiban_lancar,kewajiban_jangka_panjang,modal,pendapatan,pendapatan_lain,beban,beban_lain',
             'kelompok' => 'required|in:debit,kredit,debit_kredit',
@@ -58,7 +65,12 @@ class AccountingController extends Controller
     public function coaUpdate(Request $request, string $id): JsonResponse
     {
         $data = $request->validate([
-            'kode' => 'sometimes|string|max:20|unique:coa,kode,' . $id,
+            'kode' => [
+                'sometimes', 'string', 'max:20',
+                Rule::unique('coa', 'kode')
+                    ->where(fn ($q) => $q->where('lembaga_id', session('lembaga_id')))
+                    ->ignore($id),
+            ],
             'nama' => 'sometimes|string|max:200',
             'jenis' => 'sometimes|in:aktiva_lancar,aktiva_tetap,kewajiban_lancar,kewajiban_jangka_panjang,modal,pendapatan,pendapatan_lain,beban,beban_lain',
             'kelompok' => 'sometimes|in:debit,kredit,debit_kredit',

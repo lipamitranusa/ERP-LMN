@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use App\Traits\ScopedToLembaga;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class VerifikasiItem extends Model
 {
-    use HasUuids;
+    use HasUuids, ScopedToLembaga;
+
+    protected static $lembagaScopeRelation = 'laporanVerifikasi.laporan.penugasan.siklus';
 
     protected $table = 'verifikasi_items';
 

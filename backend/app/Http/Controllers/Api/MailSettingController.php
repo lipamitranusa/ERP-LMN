@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MailSetting;
+use App\Services\MailConfigService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -118,45 +119,11 @@ class MailSettingController extends Controller
 
     /**
      * Terapkan konfigurasi mail dari database ke Laravel Mail config.
+     *
+     * @deprecated  Gunakan MailConfigService::apply() sebagai gantinya.
      */
     private function applyMailConfig(string $driver): void
     {
-        $driverConfig = MailSetting::where('kategori', $driver)->get()->pluck('nilai', 'kunci')->toArray();
-
-        if ($driver === 'smtp') {
-            config([
-                'mail.default' => 'smtp',
-                'mail.mailers.smtp.host' => $driverConfig['host'] ?? '',
-                'mail.mailers.smtp.port' => (int) ($driverConfig['port'] ?? 587),
-                'mail.mailers.smtp.encryption' => $driverConfig['encryption'] ?: null,
-                'mail.mailers.smtp.username' => $driverConfig['username'] ?? '',
-                'mail.mailers.smtp.password' => $driverConfig['password'] ?? '',
-                'mail.from.address' => $driverConfig['from_address'] ?: ($driverConfig['username'] ?: null),
-                'mail.from.name' => MailSetting::value('from_name') ?: 'ERP Akreditasi',
-            ]);
-        } elseif ($driver === 'mailgun') {
-            config([
-                'mail.default' => 'mailgun',
-                'mail.mailers.mailgun.domain' => $driverConfig['domain'] ?? '',
-                'mail.mailers.mailgun.secret' => $driverConfig['secret'] ?? '',
-                'mail.mailers.mailgun.endpoint' => 'api.mailgun.net',
-                'mail.from.address' => $driverConfig['from_address'] ?: null,
-                'mail.from.name' => MailSetting::value('from_name') ?: 'ERP Akreditasi',
-            ]);
-        } elseif ($driver === 'ses') {
-            config([
-                'mail.default' => 'ses',
-                'mail.mailers.ses.region' => 'ap-southeast-1',
-                'mail.from.address' => $driverConfig['from_address'] ?: null,
-                'mail.from.name' => MailSetting::value('from_name') ?: 'ERP Akreditasi',
-            ]);
-        } elseif ($driver === 'postmark') {
-            config([
-                'mail.default' => 'postmark',
-                'mail.mailers.postmark.token' => $driverConfig['secret'] ?? '',
-                'mail.from.address' => $driverConfig['from_address'] ?: null,
-                'mail.from.name' => MailSetting::value('from_name') ?: 'ERP Akreditasi',
-            ]);
-        }
+        MailConfigService::apply($driver);
     }
 }

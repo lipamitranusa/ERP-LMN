@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Lembaga;
 use App\Services\AttachmentService;
 use App\Services\AuditService;
+use App\Services\Keuangan\MasterAkuntansiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -19,7 +20,42 @@ class LembagaController extends Controller
     public function __construct(
         private AuditService $audit,
         private AttachmentService $attachments,
+        private MasterAkuntansiService $masterAkuntansi,
     ) {}
+
+    /**
+     * GET /api/lembaga-opsi
+     * Daftar lembaga yang boleh dipilih user aktif — dipakai untuk switcher
+     * lembaga di header.
+     *
+     * Tidak memakai privilege "Master Data,Lihat" supaya role seperti
+     * Rekomendator (hanya punya privilege Rekomendasi) tetap bisa melihat
+     * nama lembaga aktifnya.
+     */
+    public function opsi(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['message' => 'Tidak terautentikasi.'], 401);
+        }
+
+        $bolehSemua = $user->hasPrivilege('Master Data', 'Lihat');
+
+        if ($bolehSemua) {
+            $items = Lembaga::orderBy('nama')->get(['id', 'nama', 'nama_pt', 'logo_path']);
+        } else {
+            $ids = $user->lembagas()->pluck('lembaga.id')->all();
+            if ($user->lembaga_id && ! in_array($user->lembaga_id, $ids, true)) {
+                $ids[] = $user->lembaga_id;
+            }
+
+            $items = Lembaga::whereIn('id', $ids)
+                ->orderBy('nama')
+                ->get(['id', 'nama', 'nama_pt', 'logo_path']);
+        }
+
+        return response()->json(['data' => $items]);
+    }
 
     /**
      * GET /api/master/lembaga
@@ -74,6 +110,10 @@ class LembagaController extends Controller
             $lembaga->logo_path = $this->storeLogo($request->file('logo'), $lembaga->id);
             $lembaga->save();
         }
+
+        // Master akuntansi (COA + kategori jurnal) ter-scope per lembaga —
+        // salin dari lembaga sumber agar modul akuntansi langsung usable.
+        $this->masterAkuntansi->replicate($lembaga->id);
 
         $this->audit->log('lembaga.create', 'lembaga', $lembaga->id, [
             'nama' => $lembaga->nama,

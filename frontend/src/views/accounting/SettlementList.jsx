@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useApi, useMutate } from "@/hooks/useApi";
+import { withLembaga } from "@/lib/api";
 import { formatDate } from "../../utils/dateFormat";
 
 function formatRp(n) {
@@ -57,7 +58,7 @@ export default function SettlementList() {
     setSaveLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const r = await fetch("/api/keuangan/settlement/settings", {
+      const r = await fetch(withLembaga("/api/keuangan/settlement/settings"), {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

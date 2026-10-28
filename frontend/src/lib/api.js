@@ -50,4 +50,50 @@ async function api(path, options = {}) {
   return res;
 }
 
+/**
+ * Tambahkan `lembaga_id` aktif ke URL API.
+ *
+ * Backend memfilter data per lembaga memakai nilai ini, jadi request apa pun
+ * yang menyentuh data lemma harus memakainya — termasuk pemanggilan `fetch`
+ * langsung di luar `api()`.
+ */
+export function withLembaga(path) {
+  const lemmaId = localStorage.getItem('lembaga_id');
+  if (!lemmaId) return path;
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}lembaga_id=${encodeURIComponent(lemmaId)}`;
+}
+
 export { api };
+
+/**
+ * Fetch file biner (dokumen, PDF, dsb) dengan Authorization header.
+ *
+ * Endpoint di bawah auth:sanctum tidak bisa diakses lewat <a href> karena
+ * browser tidak mengirim Authorization header — hasilnya 401. Jadi file
+ * diambil sebagai blob lalu dipakai untuk preview atau diunduh.
+ */
+export async function fetchFile(path) {
+  const token = localStorage.getItem("token");
+  const res = await fetch(withLembaga(`${API_BASE}${path}`), {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    throw new Error(`Gagal memuat file (HTTP ${res.status}).`);
+  }
+  return res.blob();
+}
+
+/**
+ * Simpan blob ke disk dengan nama file yang diberikan.
+ */
+export function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename || "dokumen";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

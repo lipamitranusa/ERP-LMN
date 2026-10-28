@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { useParams, useHistory } from "react-router-dom";
-import { useApi } from "@/hooks/useApi";
+import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { useAuth } from "@/hooks/useAuth";
 import { formatDate } from "../../utils/dateFormat";
 import SettlementJournalPanel from "@/components/SettlementJournalPanel";
 import { Button } from "@/components/ui/button";
@@ -99,11 +100,43 @@ function ProgressBar({ received, total }) {
 export default function PiutangDetail() {
   const { id } = useParams();
   const history = useHistory();
+  const { can } = useAuth();
 
   const { data, isLoading } = useApi(["piutang-detail", id], "/piutang/" + id);
 
   const inv = data?.data;
   const error = data?.message && !inv ? data.message : "";
+
+  const [result, setResult] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [creatingBuktiId, setCreatingBuktiId] = useState(null);
+
+  const canPostJournal = can("Ledger/Keuangan", "Tambah");
+
+  const createMutation = useMutateKeys(
+    [["piutang-detail", id], ["settlement-source"]],
+    {
+      onSuccess: (res) => {
+        setResult(res);
+        setErrorMsg(null);
+        setCreatingBuktiId(null);
+      },
+      onError: (err) => {
+        setErrorMsg(err.message);
+        setCreatingBuktiId(null);
+      },
+    }
+  );
+
+  function buatBankMasuk(buktiId = null) {
+    setErrorMsg(null);
+    setCreatingBuktiId(buktiId);
+    createMutation.mutate({
+      path: "/keuangan/settlement/bank-masuk",
+      method: "POST",
+      body: buktiId ? { invoice_id: id, bukti_id: buktiId } : { invoice_id: id },
+    });
+  }
 
   if (isLoading) {
     return <div style={{ padding: "40px", textAlign: "center", color: "#94A3B8" }}>Memuat detail invoice...</div>;
@@ -139,11 +172,126 @@ export default function PiutangDetail() {
               {inv.nomor_invoice}
             </p>
           </div>
-          <div style={{ marginLeft: "auto" }}>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px" }}>
             <StatusBadge status={inv.status_display} />
+            {canPostJournal && (inv.jurnal_bank_masuk?.total_penerimaan || 0) > 0 && (
+              <Button
+                onClick={() => buatBankMasuk()}
+                disabled={createMutation.isPending || (inv.jurnal_bank_masuk?.belum_dijurnal || 0) === 0}
+                title={
+                  (inv.jurnal_bank_masuk?.belum_dijurnal || 0) === 0
+                    ? "Seluruh penerimaan kas pada invoice ini sudah memiliki jurnal bank masuk"
+                    : "Buat jurnal Bank Masuk: Debit Bank / Kredit Piutang Usaha"
+                }
+                style={{
+                  background: "#16A34A",
+                  color: "#FFFFFF",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  opacity: (inv.jurnal_bank_masuk?.belum_dijurnal || 0) === 0 ? 0.65 : 1,
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+                  <rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>
+                </svg>
+                {createMutation.isPending
+                  ? "Membuat jurnal..."
+                  : (inv.jurnal_bank_masuk?.belum_dijurnal || 0) === 0
+                    ? "Jurnal Bank Masuk Lengkap"
+                    : "Buat Jurnal Bank Masuk"}
+              </Button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Banner jurnal bank masuk */}
+      {canPostJournal && (inv.jurnal_bank_masuk?.total_penerimaan || 0) > 0 && (
+        <div
+          className="card"
+          style={{
+            padding: "14px 20px",
+            marginBottom: "20px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            flexWrap: "wrap",
+            background: (inv.jurnal_bank_masuk?.belum_dijurnal || 0) > 0 ? "#FFFBEB" : "#F0FDF4",
+            border: `1px solid ${(inv.jurnal_bank_masuk?.belum_dijurnal || 0) > 0 ? "#FDE047" : "#BBF7D0"}`,
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke={(inv.jurnal_bank_masuk?.belum_dijurnal || 0) > 0 ? "#D97706" : "#16A34A"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+            <rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>
+          </svg>
+          <div style={{ flex: 1, minWidth: "240px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 600, color: "#1E293B" }}>
+              {(inv.jurnal_bank_masuk?.belum_dijurnal || 0) > 0
+                ? `${inv.jurnal_bank_masuk.belum_dijurnal} penerimaan kas belum diposting ke buku besar`
+                : "Seluruh penerimaan kas sudah diposting ke buku besar"}
+            </div>
+            <div style={{ fontSize: "12px", color: "#64748B", marginTop: "2px" }}>
+              Jurnal Bank Masuk: <b>Debit</b> Kas/Bank &nbsp;·&nbsp; <b>Kredit</b> Piutang Usaha (1105) — satu jurnal per penerimaan kas.
+            </div>
+          </div>
+          {(inv.jurnal_bank_masuk?.belum_dijurnal || 0) > 0 && (
+            <Button
+              onClick={() => buatBankMasuk()}
+              disabled={createMutation.isPending}
+              style={{ background: "#16A34A", color: "#FFFFFF", fontSize: "12px", fontWeight: 600 }}
+            >
+              {createMutation.isPending ? "Membuat jurnal..." : "Buat Jurnal Bank Masuk"}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Hasil pembuatan jurnal */}
+      {errorMsg && (
+        <div
+          className="card"
+          style={{
+            padding: "12px 20px",
+            marginBottom: "20px",
+            background: "#FEF2F2",
+            border: "1px solid #FECACA",
+            fontSize: "12px",
+            color: "#991B1B",
+          }}
+        >
+          Gagal membuat jurnal bank masuk: {errorMsg}
+        </div>
+      )}
+      {result && (
+        <div
+          className="card"
+          style={{
+            padding: "14px 20px",
+            marginBottom: "20px",
+            background: result.data?.created_count > 0 ? "#F0FDF4" : "#F8FAFC",
+            border: `1px solid ${result.data?.created_count > 0 ? "#BBF7D0" : "#E2E8F0"}`,
+          }}
+        >
+          <div style={{ fontSize: "13px", fontWeight: 600, color: "#1E293B", marginBottom: "6px" }}>
+            {result.data?.created_count > 0 ? "Jurnal bank masuk berhasil dibuat" : "Tidak ada jurnal baru"}
+          </div>
+          {result.data?.created_count > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {result.data.created.map((j) => (
+                <div key={j.id} style={{ fontSize: "12px", color: "#334155" }}>
+                  <b style={{ fontFamily: "monospace" }}>{j.nomor}</b> — {j.tanggal} —{" "}
+                  {j.details?.map((d) => (
+                    <span key={d.coa?.kode} style={{ marginRight: "10px" }}>
+                      {d.debit > 0 ? `Dr ${d.coa?.kode} ${d.coa?.nama} ${formatRp(d.debit)}` : `Cr ${d.coa?.kode} ${d.coa?.nama} ${formatRp(d.kredit)}`}
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: "12px", color: "#64748B" }}>{result.message}</div>
+          )}
+        </div>
+      )}
 
       {/* Three-column grid: Invoice Info | Faskes | Siklus */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "20px" }}>
@@ -296,7 +444,14 @@ export default function PiutangDetail() {
                       </td>
                       <td><PaymentBadge status={b.status_verifikasi} /></td>
                       <td style={{ fontSize: "12px", color: "#64748B" }}>{b.diverifikasi_oleh_nama || "—"}</td>
-                      <td style={{ fontSize: "12px", color: "#64748B" }}>{b.keterangan || "—"}</td>
+                      <td style={{ fontSize: "12px", color: "#64748B" }}>
+                        {b.keterangan || "—"}
+                        {b.jurnal_nomor && (
+                          <div style={{ fontFamily: "monospace", fontSize: "11px", color: "#16A34A", marginTop: "2px" }}>
+                            {b.jurnal_nomor}
+                          </div>
+                        )}
+                      </td>
                     </tr>
                     {b.status_verifikasi === "diterima" && (
                       <tr>
@@ -305,6 +460,8 @@ export default function PiutangDetail() {
                             refType="settlement_piutang"
                             refId={b.id}
                             title="Jurnal Penerimaan Kas"
+                            onCreate={canPostJournal ? () => buatBankMasuk(b.id) : undefined}
+                            creating={createMutation.isPending && creatingBuktiId === b.id}
                           />
                         </td>
                       </tr>

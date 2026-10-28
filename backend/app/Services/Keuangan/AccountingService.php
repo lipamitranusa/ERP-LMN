@@ -8,6 +8,7 @@ use App\Models\KategoriJurnal;
 use App\Models\JurnalUmum;
 use App\Models\JurnalUmumDetail;
 use App\Models\LedgerEntry;
+use App\Services\LembagaResolver;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -159,7 +160,7 @@ class AccountingService
             return ['success' => false, 'error' => 'Sebagian akun tidak ditemukan atau tidak aktif.'];
         }
 
-        return DB::transaction(function () use ($data, $details, $totalDebit, $totalKredit) {
+        return DB::transaction(function () use ($data, $details, $totalDebit, $totalKredit, $coaIds) {
             $kategori = ! empty($data['kategori_id'])
                 ? KategoriJurnal::find($data['kategori_id'])
                 : null;
@@ -180,6 +181,7 @@ class AccountingService
                 'total_kredit' => round($totalKredit, 2),
                 'path_lampiran' => $data['path_lampiran'] ?? null,
                 'dibuat_oleh' => $data['userId'],
+                'lembaga_id' => DB::table('coa')->whereIn('id', $coaIds)->value('lembaga_id'),
             ]);
 
             foreach ($details as $d) {
@@ -690,6 +692,7 @@ class AccountingService
             'aksi' => $aksi,
             'target_type' => 'JurnalUmum',
             'target_id' => $j->id,
+            'lembaga_id' => app(LembagaResolver::class)->resolve($j->lembaga_id, $userId),
             'data_sebelum' => null,
             'data_sesudah' => array_merge([
                 'nomor' => $j->nomor,

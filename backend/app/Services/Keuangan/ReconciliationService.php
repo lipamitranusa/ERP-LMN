@@ -88,6 +88,9 @@ class ReconciliationService
                 $join->on('le_verifikator.siklus_id', '=', 'siklus_akreditasi.id')
                     ->where('le_verifikator.tipe', '=', LedgerEntry::TIPE_AP_HONOR_VERIFIKATOR);
             })
+            ->when($lembagaId = session('lembaga_id'), function ($q) use ($lembagaId) {
+                $q->where('siklus_akreditasi.lembaga_id', $lembagaId);
+            })
             ->when($tanggal, function ($q) use ($tanggal) {
                 $q->whereBetween('siklus_akreditasi.tanggal_pengajuan', [
                     $tanggal['dari']->toDateString(),

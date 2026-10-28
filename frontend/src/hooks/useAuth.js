@@ -67,7 +67,11 @@ export function useAuth() {
 
   async function fetchMe() {
     if (!token) return;
-    const res = await fetch(`${API_BASE}/auth/me`, {
+    // Kirim lemma aktif ke server supaya session server di-self-heal ke lemma
+    // yang sama — tanpa ini session bisa tertinggal di lemma lama.
+    const activeLembaga = localStorage.getItem('lembaga_id');
+    const qs = activeLembaga ? `?lembaga_id=${encodeURIComponent(activeLembaga)}` : '';
+    const res = await fetch(`${API_BASE}/auth/me${qs}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) { logout(); return; }
@@ -77,7 +81,9 @@ export function useAuth() {
     setMenuActions(data.menu_actions || []);
     localStorage.setItem('user', JSON.stringify(data.user));
     localStorage.setItem('menu_actions', JSON.stringify(data.menu_actions || []));
-    if (data.lembaga_id) {
+    // Ikuti server HANYA kalau server menolak lemma yang diminta (mis. akses
+    // dicabut). Tanpa ini, session server bisa menimpa pilihan lemma client.
+    if (data.lembaga_id && data.lembaga_id !== activeLembaga) {
       localStorage.setItem('lembaga_id', data.lembaga_id);
     }
   }

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useParams, useHistory } from "react-router-dom";
 import { formatDate } from "@/utils/dateFormat";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { withLembaga } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -58,7 +59,7 @@ function FilePreviewModal({ dokumen, onClose }) {
     setLoading(true); setError(null);
     const token = localStorage.getItem("token");
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    fetch(`/api/pendaftaran/dokumen/${dokumen.id}/serve`, { headers })
+    fetch(withLembaga(`/api/pendaftaran/dokumen/${dokumen.id}/serve`), { headers })
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}: Gagal memuat file`); return r.blob(); })
       .then(blob => { setBlobUrl(URL.createObjectURL(blob)); setLoading(false); })
       .catch(err => { setError(err.message); setLoading(false); });

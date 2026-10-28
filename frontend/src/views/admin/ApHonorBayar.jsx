@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import { formatDate } from "@/utils/dateFormat";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
@@ -14,7 +14,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
 function formatRp(n) { return `Rp ${Number(n || 0).toLocaleString("id-ID")}`; }
-const PERAN_LABEL = { ap_honor_surveior: "Surveior", ap_honor_verifikator: "Verifikator", ap_honor_rekomendator: "Rekomendator" };
+const PERAN_BY_NAMA = { surveior: "Surveior", verifikator: "Verifikator", rekomendator: "Rekomendator", kedua: "Surveior & Verifikator" };
 
 function getQueryParam(search, key) { return new URLSearchParams(search).get(key); }
 
@@ -27,28 +27,49 @@ const schema = z.object({
   catatan: z.string().default(""),
 });
 
+/** Bentuk data outstanding & detail pembayaran diseragamkan agar tabel line item sama. */
+function normalizeEntry(e) {
+  return {
+    id: e.id,
+    penerima_key: e.penerima_key || null,
+    nama: e.penerima?.nama || "—",
+    nomor_induk_surveior: e.penerima?.nomor_induk_surveior || null,
+    peran: e.penerima?.peran || e.peran || null,
+    nama_bank: e.penerima?.nama_bank || null,
+    no_rekening: e.penerima?.no_rekening || null,
+    atas_nama_rekening: e.penerima?.atas_nama_rekening || null,
+    faskes_nama: e.siklus?.faskes_nama || e.siklus_faskes_nama || null,
+    tanggal_honor: e.tanggal_honor || null,
+    nominal_bruto: e.nominal_bruto || 0,
+    dpp: e.dpp || 0,
+    potongan_pph: e.potongan_pph || 0,
+    nominal_neto: e.nominal_neto ?? e.nominal_dibayar ?? 0,
+  };
+}
+
 export default function ApHonorBayar() {
   const history = useHistory();
   const location = useLocation();
   const idsParam = getQueryParam(location.search, "ids") || "";
+  const editId = getQueryParam(location.search, "edit") || "";
+  const isEdit = !!editId;
   const [buktiFile, setBuktiFile] = useState(null);
 
   const { data: allEntriesData, isLoading } = useApi(
     ["ap-honor-outstanding", idsParam],
     "/keuangan/ap-honor/outstanding",
-    { enabled: !!idsParam }
+    { enabled: !!idsParam && !isEdit }
   );
 
-  const data = useMemo(() => {
-    if (!allEntriesData?.data?.entries) return null;
-    const allEntries = allEntriesData.data.entries;
-    const ids = new Set(idsParam.split(",").filter(Boolean));
-    const selected = allEntries.filter(e => ids.has(e.id));
-    if (selected.length === 0) return null;
-    return { entries: selected };
-  }, [allEntriesData, idsParam]);
+  const { data: paymentData, isLoading: paymentLoading } = useApi(
+    ["ap-honor-payment-detail", editId],
+    `/keuangan/ap-honor/payments/${editId}`,
+    { enabled: isEdit }
+  );
 
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
+  const payment = paymentData?.data;
+
+  const { register, handleSubmit, setValue, reset, watch, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
       tanggal_pembayaran: new Date().toISOString().slice(0, 10),
@@ -60,13 +81,40 @@ export default function ApHonorBayar() {
     },
   });
 
-  // Auto-fill bank info from single recipient
-  useMemo(() => {
-    if (!data) return;
+  // Isi form dari pembayaran yang sedang diedit — tanpa ini form tampil kosong.
+  useEffect(() => {
+    if (!payment) return;
+    reset({
+      tanggal_pembayaran: payment.tanggal_pembayaran || new Date().toISOString().slice(0, 10),
+      metode: payment.metode || "transfer_bank",
+      bank_pengirim: payment.bank_pengirim || "",
+      nomor_rekening_tujuan: payment.nomor_rekening_tujuan || "",
+      atas_nama: payment.atas_nama || "",
+      catatan: payment.catatan || "",
+    });
+  }, [payment, reset]);
+
+  const data = useMemo(() => {
+    if (isEdit) {
+      const details = payment?.details || [];
+      if (details.length === 0) return null;
+      return { entries: details.map(normalizeEntry) };
+    }
+    if (!allEntriesData?.data?.entries) return null;
+    const allEntries = allEntriesData.data.entries;
+    const ids = new Set(idsParam.split(",").filter(Boolean));
+    const selected = allEntries.filter(e => ids.has(e.id));
+    if (selected.length === 0) return null;
+    return { entries: selected.map(normalizeEntry) };
+  }, [allEntriesData, idsParam, isEdit, payment]);
+
+  // Auto-fill bank info dari single recipient
+  useEffect(() => {
+    if (!data || isEdit) return;
     const uniquePenerima = {};
     for (const e of data.entries) {
-      const taId = e.penerima?.tenaga_ahli_id;
-      if (taId && !uniquePenerima[taId]) uniquePenerima[taId] = e.penerima;
+      const key = e.penerima_key || e.nama + "|" + (e.nomor_induk_surveior || "");
+      if (!uniquePenerima[key]) uniquePenerima[key] = e;
     }
     const penerimaList = Object.values(uniquePenerima);
     if (penerimaList.length === 1) {
@@ -75,26 +123,63 @@ export default function ApHonorBayar() {
       if (p?.no_rekening) setValue("nomor_rekening_tujuan", p.no_rekening);
       if (p?.atas_nama_rekening) setValue("atas_nama", p.atas_nama_rekening);
     }
-  }, [data, setValue]);
+  }, [data, setValue, isEdit]);
 
   const watchedMetode = watch("metode");
-  const effectiveError = !idsParam ? "Tidak ada honor yang dipilih." : (!allEntriesData && !isLoading ? "Honor yang dipilih tidak ditemukan." : "");
+  const effectiveError = isEdit
+    ? (payment ? (data ? "" : "Pembayaran ini tidak memiliki line item honor.") : (paymentLoading ? "" : "Pembayaran tidak ditemukan."))
+    : (!idsParam ? "Tidak ada honor yang dipilih." : (!allEntriesData && !isLoading ? "Honor yang dipilih tidak ditemukan." : ""));
   const total = useMemo(() => data ? data.entries.reduce((s, e) => s + (e.nominal_neto || 0), 0) : 0, [data]);
   const groupedByPenerima = useMemo(() => {
     if (!data) return [];
     const groups = {};
     for (const e of data.entries) {
-      const key = e.penerima?.tenaga_ahli_id || e.penerima?.nomor_induk_surveior || "unknown";
-      if (!groups[key]) groups[key] = { penerima: e.penerima, entries: [], total: 0 };
+      const key = e.penerima_key || e.nama + "|" + (e.nomor_induk_surveior || "");
+      if (!groups[key]) groups[key] = { penerima: e, entries: [], total: 0 };
       groups[key].entries.push(e);
       groups[key].total += e.nominal_neto || 0;
     }
     return Object.values(groups);
   }, [data]);
 
-  const mutate = useMutateKeys(["ap-honor-outstanding"]);
+  const mutate = useMutateKeys(
+    isEdit
+      ? [["ap-honor-payment-detail", editId], ["ap-honor-history"], ["ap-honor-dashboard"], ["ap-honor-payments-recent"]]
+      : [["ap-honor-outstanding"], ["ap-honor-history"], ["ap-honor-dashboard"], ["ap-honor-payments-recent"]]
+  );
 
   const onSubmit = (formData) => {
+    const goToDetail = (res) => {
+      const id = res?.data?.id || editId;
+      // React Query v4 menjadwalkan notifikasi perubahan state mutasi lewat
+      // microtask. Kalau navigasi dilakukan sinkron di dalam onSuccess, komponen
+      // sudah unmount saat notifikasi itu tiba → React 17 memunculkan warning
+      // "state update on an unmounted component". Menunda navigasi satu macrotask
+      // membuat notifikasi sampai selagi komponen masih mounted.
+      setTimeout(() => {
+        history.push(id ? `/admin/ap-honor/payment/${id}` : "/admin/ap-honor/history");
+      }, 0);
+    };
+
+    if (isEdit) {
+      mutate.mutate(
+        {
+          path: `/keuangan/ap-honor/payments/${editId}`,
+          method: "PATCH",
+          body: {
+            tanggal_pembayaran: formData.tanggal_pembayaran,
+            metode: formData.metode,
+            bank_pengirim: formData.bank_pengirim || null,
+            nomor_rekening_tujuan: formData.nomor_rekening_tujuan || null,
+            atas_nama: formData.atas_nama || null,
+            catatan: formData.catatan || null,
+          },
+        },
+        { onSuccess: goToDetail }
+      );
+      return;
+    }
+
     const fd = new FormData();
     fd.append("tanggal_pembayaran", formData.tanggal_pembayaran);
     fd.append("metode", formData.metode);
@@ -104,21 +189,20 @@ export default function ApHonorBayar() {
     fd.append("catatan", formData.catatan || "");
     data.entries.forEach(e => fd.append("ledger_entry_ids[]", e.id));
     if (buktiFile) fd.append("bukti_transfer", buktiFile);
-    mutate.mutate({
-      path: "/keuangan/ap-honor/payments",
-      method: "POST",
-      body: fd,
-      onSuccess: (res) => history.push(res?.data?.id ? `/admin/ap-honor/payment/${res.data.id}` : "/admin/ap-honor"),
-      onError: (err) => { mutate.error = err; },
-    });
+    mutate.mutate(
+      { path: "/keuangan/ap-honor/payments", method: "POST", body: fd },
+      { onSuccess: goToDetail }
+    );
   };
 
-  if (isLoading) return <div className="p-10 text-center text-sm" style={{ color: "#94A3B8" }}>Memuat data honor...</div>;
+  if ((isLoading && !isEdit) || (isEdit && paymentLoading)) {
+    return <div className="p-10 text-center text-sm" style={{ color: "#94A3B8" }}>Memuat data honor...</div>;
+  }
   if (effectiveError && !data) {
     return (
       <div className="p-10 text-center">
         <div className="text-sm mb-4" style={{ color: "#DC2626" }}>{effectiveError}</div>
-        <Button onClick={() => history.push("/admin/ap-honor/list")}>← Kembali ke daftar honor</Button>
+        <Button onClick={() => history.push(isEdit ? `/admin/ap-honor/payment/${editId}` : "/admin/ap-honor/list")}>← Kembali</Button>
       </div>
     );
   }
@@ -127,13 +211,22 @@ export default function ApHonorBayar() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Buat Pembayaran Honor"
-        subtitle="Draft pembayaran dapat diedit/dibatalkan sebelum disetujui. Setelah disetujui, honor berubah status menjadi lunas."
-        actions={<Button variant="outline" onClick={() => history.push("/admin/ap-honor/list")}><ArrowLeft size={16} /> Kembali ke Daftar</Button>}
+        title={isEdit ? "Edit Pembayaran Honor" : "Buat Pembayaran Honor"}
+        subtitle={isEdit
+          ? "Hanya pembayaran berstatus draft yang dapat diedit. Line item honor tidak berubah saat edit."
+          : "Draft pembayaran dapat diedit/dibatalkan sebelum disetujui. Setelah disetujui, honor berubah status menjadi lunas."}
+        actions={<Button variant="outline" onClick={() => history.push(isEdit ? `/admin/ap-honor/payment/${editId}` : "/admin/ap-honor/list")}><ArrowLeft size={16} /> Kembali</Button>}
       />
 
       {mutate.error && (
         <div className="p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">{mutate.error.message}</div>
+      )}
+
+      {isEdit && payment?.konsisten === false && (
+        <div className="p-3 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          Total pembayaran ({formatRp(payment.total_nominal)}) tidak sesuai dengan jumlah line item ({formatRp(payment.total_detail)}).
+          Line item honor tidak bisa diubah saat edit — batalkan pembayaran ini lalu buat pembayaran baru.
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-5">
@@ -171,14 +264,16 @@ export default function ApHonorBayar() {
               <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Catatan</Label>
               <Textarea rows={2} {...register("catatan")} placeholder="Catatan internal (opsional)" />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Bukti Transfer</Label>
-              <Input type="file" accept="image/jpeg,image/png,application/pdf" onChange={e => setBuktiFile(e.target.files[0] || null)} className="file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-slate-50 dark:bg-slate-800/50 file:text-slate-700 dark:text-slate-300 dark:text-slate-500" />
-              {buktiFile && <div className="text-[12px] text-green-600 mt-1">{buktiFile.name} ({(buktiFile.size / 1024).toFixed(1)} KB)</div>}
-            </div>
+            {!isEdit && (
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Bukti Transfer</Label>
+                <Input type="file" accept="image/jpeg,image/png,application/pdf" onChange={e => setBuktiFile(e.target.files[0] || null)} className="file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-slate-50 dark:bg-slate-800/50 file:text-slate-700 dark:text-slate-300 dark:text-slate-500" />
+                {buktiFile && <div className="text-[12px] text-green-600 mt-1">{buktiFile.name} ({(buktiFile.size / 1024).toFixed(1)} KB)</div>}
+              </div>
+            )}
             <div className="flex gap-2 justify-end pt-2 border-t">
-              <Button type="button" variant="outline" onClick={() => history.push("/admin/ap-honor/list")} disabled={mutate.isLoading}>Batal</Button>
-              <Button type="submit" disabled={mutate.isLoading}>{mutate.isLoading ? "Menyimpan..." : "Simpan sebagai Draft"}</Button>
+              <Button type="button" variant="outline" onClick={() => history.push(isEdit ? `/admin/ap-honor/payment/${editId}` : "/admin/ap-honor/list")} disabled={mutate.isLoading}>Batal</Button>
+              <Button type="submit" disabled={mutate.isLoading}>{mutate.isLoading ? "Menyimpan..." : (isEdit ? "Simpan Perubahan" : "Simpan sebagai Draft")}</Button>
             </div>
           </form>
         </Card>
@@ -205,8 +300,10 @@ export default function ApHonorBayar() {
               {groupedByPenerima.map((g, idx) => (
                 <div key={idx} className="flex items-start justify-between p-2.5" style={{ borderBottom: idx < groupedByPenerima.length - 1 ? "1px solid #E2E8F0" : "none" }}>
                   <div>
-                    <div className="text-[13px] font-medium text-slate-700 dark:text-slate-300 dark:text-slate-500">{g.penerima?.nama || "—"}</div>
-                    <div className="text-[11px]" style={{ color: "#94A3B8" }}>{g.penerima?.nomor_induk_surveior} · {g.entries.length} honor</div>
+                    <div className="text-[13px] font-medium text-slate-700 dark:text-slate-300 dark:text-slate-500">{g.penerima.nama}</div>
+                    <div className="text-[11px]" style={{ color: "#94A3B8" }}>
+                      {g.penerima.nomor_induk_surveior ? `${g.penerima.nomor_induk_surveior} · ` : ""}{g.entries.length} honor
+                    </div>
                   </div>
                   <div className="text-[13px] font-semibold text-red-600">{formatRp(g.total)}</div>
                 </div>
@@ -238,11 +335,11 @@ export default function ApHonorBayar() {
               {data.entries.map(e => (
                 <tr key={e.id} className="hover:bg-slate-50/50">
                   <td className="px-4 py-2">
-                    <div className="text-[13px] font-medium">{e.penerima?.nama || "—"}</div>
-                    <div className="text-[11px]" style={{ color: "#94A3B8" }}>{e.penerima?.nomor_induk_surveior}</div>
+                    <div className="text-[13px] font-medium">{e.nama}</div>
+                    <div className="text-[11px]" style={{ color: "#94A3B8" }}>{e.nomor_induk_surveior || "—"}</div>
                   </td>
-                  <td className="px-4 py-2 text-[12px]">{PERAN_LABEL[e.tipe] || e.tipe}</td>
-                  <td className="px-4 py-2 text-[12px]">{e.siklus?.faskes_nama || "—"}</td>
+                  <td className="px-4 py-2 text-[12px]">{PERAN_BY_NAMA[e.peran] || e.peran || "—"}</td>
+                  <td className="px-4 py-2 text-[12px]">{e.faskes_nama || "—"}</td>
                   <td className="px-4 py-2 text-[12px]">{formatDate(e.tanggal_honor)}</td>
                   <td className="px-4 py-2 text-right text-[12px]">{formatRp(e.nominal_bruto)}</td>
                   <td className="px-4 py-2 text-right text-[12px]" style={{ color: "#64748B" }}>{formatRp(e.dpp)}</td>

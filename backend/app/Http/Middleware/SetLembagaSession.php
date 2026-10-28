@@ -56,9 +56,13 @@ class SetLembagaSession
 
             if ($hasFixedLembaga && $canonicalLembagaId !== null) {
                 $requested = $request->query('lembaga_id') ?? $request->header('X-Lembaga-Id');
-                if ($requested && $requested !== $canonicalLembagaId) {
-                    return response()->json(['message' => 'Scope lembaga tidak valid.'], 403);
-                }
+                // Request dengan lemma yang berbeda di-ABAIKAN, bukan ditolak.
+                // Frontend mengirim `?lembaga_id=` di setiap request, jadi localStorage
+                // yang basi (mis. setelah ganti lembaga atau tabel master berubah)
+                // akan membuat 403 di SELURUH endpoint — user tidak bisa pakai
+                // aplikasi sama sekali. Memaksa session ke lemma kanonik_master
+                // memberi perilaku yang sama dengan login (lihat AuthController::login)
+                // tanpa risiko application lock-out.
                 if (session('lembaga_id') !== $canonicalLembagaId) {
                     session(['lembaga_id' => $canonicalLembagaId]);
                 }
@@ -67,15 +71,35 @@ class SetLembagaSession
                 // (dikirim frontend via query param / X-Lembaga-Id) sebagai
                 // self-heal. Fallback ke canonical jika session masih null.
                 $requestedLembagaId = $request->query('lembaga_id') ?? $request->header('X-Lembaga-Id');
-                if (is_string($requestedLembagaId) && $requestedLembagaId !== session('lembaga_id')) {
-                    $allowed = $user->role?->nama_role === 'Administrator' || $user->lembaga_id === $requestedLembagaId || $user->lembagas()->whereKey($requestedLembagaId)->exists();
-                    if ($allowed) {
-                        session(['lembaga_id' => $requestedLembagaId]);
+
+                // Helper: apakah user ini berhak memakai lemma tersebut.
+                $isAllowed = function (?string $id) use ($user): bool {
+                    if (! is_string($id) || $id === '') {
+                        return false;
                     }
+                    return $user->role?->nama_role === 'Administrator'
+                        || $user->lembaga_id === $id
+                        || $user->lembagas()->whereKey($id)->exists();
+                };
+
+                // Prioritas: lemma yang diminta (kalau diizinkan) → session saat ini
+                // (kalau masih diizinkan) → lemma milik user sendiri.
+                //
+                // Penting: session TIDAK boleh dibiarkan menunjuk lemma yang
+                // aksesnya sudah dicabut, dan TIDAK boleh null — global scope
+                // dilewati saat session null, sehingga user tanpa scope akan
+                // melihat SELURUH data semua lemma.
+                $resolvedLembagaId = null;
+                if ($isAllowed($requestedLembagaId)) {
+                    $resolvedLembagaId = $requestedLembagaId;
+                } elseif ($isAllowed(session('lembaga_id'))) {
+                    $resolvedLembagaId = session('lembaga_id');
+                } elseif ($canonicalLembagaId !== null && $isAllowed($canonicalLembagaId)) {
+                    $resolvedLembagaId = $canonicalLembagaId;
                 }
 
-                if (session('lembaga_id') === null && $canonicalLembagaId !== null) {
-                    session(['lembaga_id' => $canonicalLembagaId]);
+                if ($resolvedLembagaId !== null && $resolvedLembagaId !== session('lembaga_id')) {
+                    session(['lembaga_id' => $resolvedLembagaId]);
                 }
             }
         }

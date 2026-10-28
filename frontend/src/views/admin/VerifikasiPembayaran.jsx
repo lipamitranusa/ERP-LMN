@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { withLembaga } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,7 +28,7 @@ function extFromPath(path) {
 }
 
 const verifySchema = z.object({
-  alasan: z.string().default(""),
+  alasan: z.string().trim().min(1, "Alasan penolakan wajib diisi."),
 });
 
 function BuktiPreviewModal({ bukti, onClose }) {
@@ -45,7 +46,7 @@ function BuktiPreviewModal({ bukti, onClose }) {
     setLoading(true);
     setLoadError("");
 
-    fetch(`/api/bukti/${bukti.id}/view`, {
+    fetch(withLembaga(`/api/bukti/${bukti.id}/view`), {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => {
@@ -166,11 +167,20 @@ function VerifikasiModal({ bukti, onClose, mutateVerify }) {
     defaultValues: { alasan: "" },
   });
 
-  const onSubmit = (data) => {
+  const onTolak = (data) => {
     mutateVerify.mutate({
       path: `/bukti/${bukti.id}/verifikasi`,
       method: "POST",
-      body: { status: "ditolak", alasan_penolakan: data.alasan || null },
+      body: { status: "ditolak", alasan_penolakan: data.alasan },
+    });
+    onClose();
+  };
+
+  const onTerima = () => {
+    mutateVerify.mutate({
+      path: `/bukti/${bukti.id}/verifikasi`,
+      method: "POST",
+      body: { status: "diterima", alasan_penolakan: null },
     });
     onClose();
   };
@@ -178,6 +188,7 @@ function VerifikasiModal({ bukti, onClose, mutateVerify }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "8px", maxWidth: "480px", width: "100%", padding: "24px" }}>
+        <form onSubmit={handleSubmit(onTolak)}>
         <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "600", color: "#1E293B" }}>Verifikasi Bukti Transfer</h3>
         <div style={{ marginTop: "16px", padding: "12px", background: "#F8FAFC", borderRadius: "6px", fontSize: "12px", color: "#475569" }}>
           <div>Faskes: <strong>{bukti.invoice?.siklus?.faskes?.nama || "—"}</strong></div>
@@ -186,16 +197,28 @@ function VerifikasiModal({ bukti, onClose, mutateVerify }) {
           <div>Dari: {bukti.dari_rekening || "—"}</div>
         </div>
 
+        <div style={{ marginTop: "12px", padding: "10px 12px", background: "#FFFBEB", border: "1px solid #FDE047", borderRadius: "6px", fontSize: "11px", color: "#854D0E" }}>
+          Setelah bukti <strong>diterima</strong>, penerimaan kas belum masuk buku besar. Buat jurnal Bank Masuk
+          (Debit Bank / Kredit Piutang Usaha) dari halaman <strong>Piutang → Detail Invoice</strong>.
+        </div>
+
         <div style={{ marginTop: "16px" }}>
-          <label className="form-label">Alasan penolakan</label>
+          <label className="form-label">Alasan penolakan *</label>
           <Textarea rows="3" {...register("alasan")} placeholder="Contoh: Nominal tidak sesuai dengan tagihan." />
+          {errors.alasan && (
+            <p style={{ marginTop: "4px", fontSize: "12px", color: "#DC2626" }}>{errors.alasan.message}</p>
+          )}
+          <div style={{ marginTop: "4px", fontSize: "11px", color: "#64748B" }}>
+            Alasan ini dikirim ke Faskes via WhatsApp/email agar mereka dapat mengunggah ulang bukti.
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: "8px", marginTop: "20px" }}>
-          <Button variant="outline" onClick={onClose} style={{ flex: 1 }}>Batal</Button>
-          <Button variant="destructive" onClick={onSubmit} disabled={mutateVerify.isPending} style={{ flex: 1 }}>Tolak</Button>
-          <Button onClick={() => { mutateVerify.mutate({ path: `/bukti/${bukti.id}/verifikasi`, method: "POST", body: { status: "diterima", alasan_penolakan: null } }); onClose(); }} disabled={mutateVerify.isPending} style={{ flex: 1 }}>Terima</Button>
+          <Button type="button" variant="outline" onClick={onClose} style={{ flex: 1 }}>Batal</Button>
+          <Button type="submit" variant="destructive" disabled={mutateVerify.isPending} style={{ flex: 1 }}>Tolak</Button>
+          <Button type="button" onClick={onTerima} disabled={mutateVerify.isPending} style={{ flex: 1 }}>Terima</Button>
         </div>
+        </form>
       </div>
     </div>
   );

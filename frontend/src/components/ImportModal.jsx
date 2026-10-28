@@ -1,5 +1,6 @@
 import React, { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { withLembaga } from "@/lib/api";
 
 /**
  * Reusable CSV Import Modal.
@@ -41,7 +42,7 @@ export default function ImportModal({
   if (!open) return null;
 
   function downloadTemplate() {
-    fetch(`/api${downloadUrl}`, {
+    fetch(withLembaga(`/api${downloadUrl}`), {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => {
@@ -107,7 +108,7 @@ export default function ImportModal({
     formData.append("file", selectedFile);
 
     try {
-      const res = await fetch(`/api${uploadUrl}`, {
+      const res = await fetch(withLembaga(`/api${uploadUrl}`), {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
