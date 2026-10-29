@@ -12,6 +12,7 @@ use App\Models\Penugasan;
 use App\Models\Pks;
 use App\Models\SiklusAkreditasi;
 use App\Services\LembagaResolver;
+use App\Services\Rekomendasi\DefaultReksaService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -49,6 +50,8 @@ class LedgerService
 
     public function __construct(
         private HonorCalculator $honorCalc,
+        private DefaultReksaService $reksa,
+        private AccrualJournalService $accrual,
     ) {}
 
     // ─────────────────────────────────────────────────────────────────────
@@ -293,10 +296,10 @@ class LedgerService
         // Notifikasi tunggal ke Keuangan.
         $notifikasi = null;
         if ($siklus && $verifikasiPenugasan) {
-            $rekomendatorTaId = \App\Models\KonfigurasiPenugasan::value('default_rekomendator_user_id');
-            $rekomendatorTa = $rekomendatorTaId
-                ? \App\Models\AkunPengguna::with('tenagaAhli')->find($rekomendatorTaId)?->tenagaAhli
-                : null;
+            // Reksa diambil dari lembaga siklus, bukan session — honor
+            // reksa harus milik lembaga yang menjalankan akreditasi.
+            $reksaAkun = $this->reksa->userFor($siklus->lembaga_id);
+            $rekomendatorTa = $reksaAkun?->tenagaAhliTanpaScope();
 
             $notifikasi = NotifikasiTagihan::create([
                 'id' => (string) Str::uuid(),
@@ -333,24 +336,23 @@ class LedgerService
      */
     private function catatHonorRekomendatorOtomatis(LaporanVerifikasi $lv): ?LedgerEntry
     {
-        $userId = \App\Models\KonfigurasiPenugasan::value('default_rekomendator_user_id');
-        if (! $userId) {
-            \Log::warning('rekomendator.default.not_set', [
-                'laporan_verifikasi_id' => $lv->id,
-            ]);
-            return null;
-        }
-
-        $akun = \App\Models\AkunPengguna::with('tenagaAhli')->find($userId);
-        if (! $akun) {
-            return null;
-        }
-        $ta = $akun->tenagaAhli;
-
         $siklus = $lv->verifikasiPenugasan?->siklus ?? $lv->laporan?->penugasan?->siklus;
         if (! $siklus) {
             return null;
         }
+
+        // Reksa default milik lembaga siklus ini — reksa lembaga lain
+        // tidak boleh dipakai, honor-nya akan masuk ke AP yang salah.
+        $akun = $this->reksa->userFor($siklus->lembaga_id);
+        if (! $akun) {
+            \Log::warning('rekomendator.default.not_set', [
+                'laporan_verifikasi_id' => $lv->id,
+                'siklus_id' => $siklus->id,
+                'lembaga_id' => $siklus->lembaga_id,
+            ]);
+            return null;
+        }
+        $ta = $akun->tenagaAhliTanpaScope();
 
         // Idempotent: cek apakah sudah pernah ada entry rekomendator untuk siklus ini + penerima ini
         $existing = LedgerEntry::where('siklus_id', $siklus->id)
@@ -445,6 +447,17 @@ class LedgerService
             $invoice->status = Invoice::STATUS_SUPERSEDED;
             $invoice->save();
 
+            // Jurnal akrual pendapatan dibalik supaya pendapatan yang sudah
+            // recognized tidak tetap tampil di laba rugi.
+            try {
+                $this->accrual->reversePendapatanInvoice($invoice);
+            } catch (\Throwable $e) {
+                Log::warning('akrual.pendapatan.reversal.failed', [
+                    'invoice_id' => $invoice->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
             // Catat Ledger Entry penyesuaian — tipe khusus dengan nilai
             // negatif untuk menandai reversal piutang
             $adjustment = LedgerEntry::create([
@@ -527,7 +540,7 @@ class LedgerService
             ? null
             : ($overrideTenagaAhliId ?? $penugasan->tenaga_ahli_id);
 
-        return DB::transaction(function () use ($penugasan, $tipe, $hitung, $konfigurasiPajakId, $laporanVerifikasi, $penerimaTaId, $detailTambahan) {
+        $entry = DB::transaction(function () use ($penugasan, $tipe, $hitung, $konfigurasiPajakId, $laporanVerifikasi, $penerimaTaId, $detailTambahan) {
             $entry = LedgerEntry::create([
                 'id' => (string) Str::uuid(),
                 'siklus_id' => $penugasan->siklus_id,
@@ -613,6 +626,21 @@ class LedgerService
 
             return $entry;
         });
+
+        // Jurnal akrual beban honor (Dr Beban Honor / Cr Utang Honor + Cr
+        // Utang PPh 21). Kegagalan jurnal tidak boleh membatalkan entry
+        // ledger — jurnal susulan bisa dibuat lewat
+        // `settlement:rebuild --scope=akrual`.
+        try {
+            $this->accrual->recordBebanHonor($entry);
+        } catch (\Throwable $e) {
+            Log::warning('akrual.beban_honor.failed', [
+                'ledger_entry_id' => $entry->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $entry;
     }
 
     /**

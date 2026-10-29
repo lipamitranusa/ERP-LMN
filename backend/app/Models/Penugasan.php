@@ -18,7 +18,6 @@ class Penugasan extends Model
     public $incrementing = false;
     protected $keyType = 'string';
     protected $table = 'penugasan';
-    public $timestamps = false;
 
     protected static function booted(): void
     {

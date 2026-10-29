@@ -29,10 +29,10 @@ class KategoriJurnal extends Model
         self::JENIS_PEMASUKAN       => 'Pemasukan',
         self::JENIS_PENGELUARAN     => 'Pengeluaran',
         self::JENIS_ADJUSTMENT      => 'Adjustment / Koreksi',
-        self::JENIS_BKM             => 'Bank Masuk (BKM)',
-        self::JENIS_BKK             => 'Bank Keluar (BKK)',
-        self::JENIS_KKM             => 'Kas Kecil Masuk (KKM)',
-        self::JENIS_KKK             => 'Kas Kecil Keluar (KKK)',
+        self::JENIS_BKM             => 'Bank Masuk',
+        self::JENIS_BKK             => 'Bank Keluar',
+        self::JENIS_KKM             => 'Kas Kecil Masuk',
+        self::JENIS_KKK             => 'Kas Kecil Keluar',
     ];
 
     public static array $JENIS_KATEGORI = [
@@ -41,10 +41,10 @@ class KategoriJurnal extends Model
         'pemasukan'   => 'Pemasukan Umum',
         'pengeluaran' => 'Pengeluaran Umum',
         // Spesifik
-        'bkm'         => 'Bank Masuk (BKM)',
-        'bkk'         => 'Bank Keluar (BKK)',
-        'kkm'         => 'Kas Kecil Masuk (KKM)',
-        'kkk'         => 'Kas Kecil Keluar (KKK)',
+        'bkm'         => 'Bank Masuk',
+        'bkk'         => 'Bank Keluar',
+        'kkm'         => 'Kas Kecil Masuk',
+        'kkk'         => 'Kas Kecil Keluar',
     ];
 
     protected $fillable = [

@@ -32,6 +32,7 @@ class Notifier
         private EmailChannel $email,
         private InvoicePdfGenerator $invoicePdf,
         private TagihanService $tagihanService,
+        private NotifikasiTemplateService $templates,
     ) {}
 
     /**
@@ -41,6 +42,13 @@ class Notifier
      * @param  array  $attachments  Lampiran untuk kanal email (mis. PDF invoice).
      * @param  string|null  $invoiceId  Id invoice terkait; dipakai agar retry
      *                                  bisa membuat ulang lampiran PDF.
+     * @param  array  $context  Nilai placeholder untuk template pesan
+     *                          (nama_variabel => nilai). Bila kosong, pesan
+     *                          memakai $subject/$message apa adanya.
+     * @param  bool  $whatsappEnabled  false berarti kanal WhatsApp dilewati
+     *                                  (sakelar admin dimatikan atau nomor
+     *                                  penerima tidak tersedia) — pesan
+     *                                  langsung dikirim via email.
      *
      * @return array{status: string, channel: string, notifikasi_id: string, error?: string}
      */
@@ -54,8 +62,46 @@ class Notifier
         ?string $penugasanId = null,
         array $attachments = [],
         ?string $invoiceId = null,
+        array $context = [],
+        bool $whatsappEnabled = true,
     ): array {
-        $phone = $this->whatsapp->send($recipientPhone, $subject, $message);
+        // Template pesan: subjek + isi pesan per kanal diambil dari
+        // pengaturan "Format Pesan". Bila kanal tidak punya template untuk
+        // jenis notifikasi ini, pesan bawaan (hard-coded) dipakai. Bila admin
+        // mematikan notifikasi ini di kanal tersebut, kanal itu dilewati.
+        $waStatus = $this->templates->status('whatsapp', $jenis);
+        $waTemplate = $waStatus === 'active'
+            ? $this->templates->compose('whatsapp', $jenis, $context, [
+                'subject' => $subject,
+                'body' => $message,
+            ])
+            : null;
+
+        $waSubject = $waTemplate['subject'] ?? $subject;
+        $waMessage = $waTemplate['body'] ?? $message;
+
+        $phone = false;
+        $whatsappError = null;
+
+        if (! $whatsappEnabled) {
+            // Sakelar admin dimatikan atau nomor penerima tidak tersedia —
+            // langsung ke email.
+            $whatsappError = 'Notifikasi WhatsApp dilewati: dimatikan di pengaturan atau nomor penerima tidak tersedia.';
+            Log::info('notifier.whatsapp.skipped', [
+                'siklus_id' => $siklusId,
+                'jenis' => $jenis,
+            ]);
+        } elseif ($waStatus === 'disabled') {
+            // Admin mematikan notifikasi ini di WhatsApp — langsung ke email.
+            $whatsappError = 'Notifikasi dimatikan pada pengaturan format pesan (WhatsApp).';
+            Log::info('notifier.whatsapp.disabled_by_settings', [
+                'siklus_id' => $siklusId,
+                'jenis' => $jenis,
+            ]);
+        } else {
+            $phone = $this->whatsapp->send($recipientPhone, $waSubject, $waMessage);
+        }
+
         if ($phone) {
             $notif = $this->persist([
                 'siklus_id' => $siklusId,
@@ -65,20 +111,60 @@ class Notifier
                 'recipient' => $recipientPhone,
                 'status' => NotifikasiTagihan::STATUS_TERKIRIM,
                 'dikirim_pada' => now(),
-                'payload' => ['subject' => $subject, 'message' => $message, 'invoice_id' => $invoiceId],
+                'payload' => ['subject' => $waSubject, 'message' => $waMessage, 'invoice_id' => $invoiceId],
             ]);
             return ['status' => 'terkirim', 'channel' => 'whatsapp', 'notifikasi_id' => $notif->id];
         }
 
-        $whatsappError = $this->whatsapp->getLastError();
+        $whatsappError = $whatsappError ?? $this->whatsapp->getLastError();
         Log::warning('notifier.whatsapp.fallback_email', [
             'siklus_id' => $siklusId,
             'jenis' => $jenis,
             'whatsapp_error' => $whatsappError,
         ]);
 
+        $emailStatus = $this->templates->status('email', $jenis);
+        $emailTemplate = $emailStatus === 'active'
+            ? $this->templates->compose('email', $jenis, $context, [
+                'subject' => $subject,
+                'body' => $message,
+            ])
+            : null;
+
+        $emailSubject = $emailTemplate['subject'] ?? $subject;
+        $emailMessage = $emailTemplate['body'] ?? $message;
+
+        if ($emailStatus === 'disabled') {
+            // Kedua kanal dimatikan — tidak ada yang dikirim, tapi tetap dicatat
+            // sebagai audit. attempt_count di-set ke maksimum supaya tidak
+            // pernah masuk antrean retry (dimatikan berarti memang tidak mau
+            // dikirim, bukan "gagal sementara").
+            $notif = $this->persist([
+                'siklus_id' => $siklusId,
+                'penugasan_id' => $penugasanId,
+                'jenis' => $jenis,
+                'channel' => 'none',
+                'recipient' => $recipientPhone,
+                'status' => NotifikasiTagihan::STATUS_GAGAL,
+                'error_message' => 'Notifikasi dimatikan pada pengaturan format pesan untuk seluruh kanal.',
+                'payload' => $this->retryPayload($subject, $message, $context, $invoiceId),
+            ]);
+
+            $notif->forceFill([
+                'attempt_count' => self::MAX_ATTEMPTS,
+                'next_retry_at' => null,
+            ])->save();
+
+            return [
+                'status' => 'gagal',
+                'channel' => 'none',
+                'notifikasi_id' => $notif->id,
+                'error' => 'Notifikasi dimatikan pada pengaturan.',
+            ];
+        }
+
         if ($recipientEmail) {
-            $emailOk = $this->email->send($recipientEmail, $subject, $message, null, $attachments);
+            $emailOk = $this->email->send($recipientEmail, $emailSubject, $emailMessage, null, $attachments);
             if ($emailOk) {
                 $notif = $this->persist([
                     'siklus_id' => $siklusId,
@@ -88,7 +174,7 @@ class Notifier
                     'recipient' => $recipientEmail,
                     'status' => NotifikasiTagihan::STATUS_TERKIRIM,
                     'dikirim_pada' => now(),
-                    'payload' => ['subject' => $subject, 'message' => $message, 'invoice_id' => $invoiceId, 'whatsapp_fallback_error' => $whatsappError],
+                    'payload' => ['subject' => $emailSubject, 'message' => $emailMessage, 'invoice_id' => $invoiceId, 'whatsapp_fallback_error' => $whatsappError],
                 ]);
                 return ['status' => 'terkirim', 'channel' => 'email', 'notifikasi_id' => $notif->id];
             }
@@ -101,7 +187,7 @@ class Notifier
                 'channel' => 'whatsapp',
                 'recipient' => $recipientPhone,
                 'error_message' => "WA: {$whatsappError}; Email: {$emailError}",
-                'payload' => ['subject' => $subject, 'message' => $message],
+                'payload' => $this->retryPayload($subject, $message, $context, $invoiceId),
             ]);
             return [
                 'status' => 'gagal',
@@ -119,13 +205,36 @@ class Notifier
             'channel' => 'whatsapp',
             'recipient' => $recipientPhone,
             'error_message' => "WhatsApp gagal dan tidak ada email fallback: {$whatsappError}",
-            'payload' => ['subject' => $subject, 'message' => $message],
+            'payload' => $this->retryPayload($subject, $message, $context, $invoiceId),
         ]);
         return [
             'status' => 'gagal',
             'channel' => 'none',
             'notifikasi_id' => $notif->id,
             'error' => $whatsappError,
+        ];
+    }
+
+    /**
+     * Payload untuk notifikasi yang gagal dan akan dicoba ulang.
+     *
+     * Menyimpan `context` (nilai placeholder) sehingga percobaan ulang
+     * merender ulang template dengan data yang sama — kalau tidak, placeholder
+     * akan ter-substitute dengan string kosong pada retry.
+     *
+     * @return array<string, mixed>
+     */
+    private function retryPayload(
+        string $subject,
+        string $message,
+        array $context,
+        ?string $invoiceId,
+    ): array {
+        return [
+            'subject' => $subject,
+            'message' => $message,
+            'context' => $context,
+            'invoice_id' => $invoiceId,
         ];
     }
 
@@ -141,6 +250,10 @@ class Notifier
         $message = $payload['message'] ?? '';
         $invoiceId = $payload['invoice_id'] ?? null;
 
+        // Nilai placeholder dari percobaan pertama — dipakai agar template
+        // dirender ulang dengan data yang sama.
+        $context = is_array($payload['context'] ?? null) ? $payload['context'] : [];
+
         $result = $this->sendWithFallback(
             recipientPhone: $notif->recipient,
             recipientEmail: $this->getFallbackEmailForSiklus($notif->siklus_id),
@@ -151,6 +264,7 @@ class Notifier
             penugasanId: $notif->penugasan_id,
             attachments: $this->buildInvoiceAttachments($invoiceId),
             invoiceId: $invoiceId,
+            context: $context,
         );
 
         return $result;

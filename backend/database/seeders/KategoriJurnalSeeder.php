@@ -56,7 +56,7 @@ class KategoriJurnalSeeder extends Seeder
 
 [
             'id' => '84a9f231-1fcb-4525-892a-ea9d5d7510e1',
-            'nama' => 'Bank Masuk (BKM)',
+            'nama' => 'Bank Masuk',
             'jenis' => 'bkm',
             'urutan' => 9,
             'is_aktif' => true,
@@ -67,7 +67,7 @@ class KategoriJurnalSeeder extends Seeder
 
 [
             'id' => 'c561e7f6-d749-4c91-b8b9-88fb4e6ca38a',
-            'nama' => 'Bank Keluar (BKK)',
+            'nama' => 'Bank Keluar',
             'jenis' => 'bkk',
             'urutan' => 10,
             'is_aktif' => true,
@@ -78,7 +78,7 @@ class KategoriJurnalSeeder extends Seeder
 
 [
             'id' => '09a8853e-b74e-4666-b24a-53b0f39abbe2',
-            'nama' => 'Kas Kecil Masuk (KKM)',
+            'nama' => 'Kas Kecil Masuk',
             'jenis' => 'kkm',
             'urutan' => 11,
             'is_aktif' => true,
@@ -89,7 +89,7 @@ class KategoriJurnalSeeder extends Seeder
 
 [
             'id' => '0a3ae24e-75ce-4f16-93ae-8ba097db8eed',
-            'nama' => 'Kas Kecil Keluar (KKK)',
+            'nama' => 'Kas Kecil Keluar',
             'jenis' => 'kkk',
             'urutan' => 12,
             'is_aktif' => true,

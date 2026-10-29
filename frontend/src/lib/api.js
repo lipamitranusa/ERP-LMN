@@ -45,7 +45,11 @@ async function api(path, options = {}) {
   // Support both JSON and non-JSON responses (e.g. CSV downloads)
   const contentType = res.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
-    return res.json();
+    // Backend bisa balas HTML/PHP warning (mis. "Fatal error" saat bootstrap)
+    // walau header-nya JSON — json() lalu melempar SyntaxError yang membingungkan.
+    return res.json().catch(() => {
+      throw new Error('Respons server bukan JSON yang valid (HTTP ' + res.status + ').');
+    });
   }
   return res;
 }

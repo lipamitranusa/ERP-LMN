@@ -11,6 +11,7 @@ use App\Models\Pks;
 use App\Models\SiklusAkreditasi;
 use App\Services\AttachmentService;
 use App\Services\AuditService;
+use App\Services\Keuangan\AccrualJournalService;
 use App\Services\Keuangan\LedgerService;
 use App\Services\Pks\PksDocxGenerator;
 use App\Services\Pks\PksPdfGenerator;
@@ -28,14 +29,22 @@ class PksController extends Controller
         private AuditService $audit,
         private LedgerService $ledger,
         private AttachmentService $attachment,
+        private AccrualJournalService $accrual,
     ) {}
 
     public function show(Pks $pks): JsonResponse
     {
         $this->ensureSameLembaga($pks);
-        $pks->load(['siklus.faskes', 'siklus.lembaga', 'invoice', 'dibuatOleh']);
+        $pks->load(['siklus.faskes', 'siklus.lembaga', 'invoice.buktiPembayaran', 'dibuatOleh']);
         $pks->estimasi_tagihan = $this->hitungEstimasiTagihan($pks);
         $pks->estimasi_rincian = $this->getRincianBiaya($pks);
+
+        // Kartu invoice di modal detail PKS memakai total_diterima & sisa_tagihan.
+        if ($pks->invoice) {
+            $pks->invoice->total_diterima = $pks->invoice->totalDiterima();
+            $pks->invoice->sisa_tagihan = $pks->invoice->sisaTagihan();
+        }
+
         return response()->json(['data' => $pks]);
     }
 
@@ -635,6 +644,18 @@ class PksController extends Controller
         }
 
         $invoice->update(['total_tagihan' => $totalTagihan]);
+
+        // Jurnal akrual pendapatan: Dr Piutang Usaha / Cr Pendapatan.
+        // Jurnal settlement (BKM) hanya ada saat kas benar-benar masuk,
+        // jadi tanpa jurnal ini laporan laba rugi selalu kosong.
+        try {
+            $this->accrual->recordPendapatanInvoice($invoice->fresh(), $pks->dibuat_oleh);
+        } catch (\Throwable $e) {
+            \Log::warning('akrual.pendapatan.failed', [
+                'invoice_id' => $invoice->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         $this->audit->log('invoice.issued', 'invoice', $invoice->id, [
             'nomor_invoice' => $nomorInvoice,

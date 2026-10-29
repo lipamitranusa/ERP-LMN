@@ -80,7 +80,7 @@ export default function SettlementList() {
   };
 
   const handleRebuild = async () => {
-    if (!window.confirm("Rebuild jurnal settlement untuk seluruh data historis? (aman dijalankan berulang)")) return;
+    if (!window.confirm("Rebuild jurnal settlement + jurnal akrual (pendapatan & beban) untuk seluruh data historis? (aman dijalankan berulang)")) return;
     setRebuildMsg("Memproses…");
     try {
       await rebuildMutate.mutateAsync({

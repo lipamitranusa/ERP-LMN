@@ -116,6 +116,54 @@ class AkunPengguna extends Model implements AuthenticatableContract
         }
     }
 
+    /**
+     * Apakah akun ini milik lembaga tertentu — lewat default `lembaga_id`
+     * atau lewat pivot multi-lembaga.
+     */
+    public function belongsToLembaga(?string $lembagaId): bool
+    {
+        if ($lembagaId === null) {
+            return true;
+        }
+        if ($this->lembaga_id === $lembagaId) {
+            return true;
+        }
+        return $this->lembagas()->where('lembaga.id', $lembagaId)->exists();
+    }
+
+    /**
+     * Apakah akun + tenaga ahlinya konsisten dengan satu lembaga.
+     *
+     * Reksa honor dibayar ke tenaga ahli reksa, jadi bila akun reksa
+     * menunjuk TA milik lembaga lain, honor-nya akan masuk ke lembaga
+     * yang salah. Kasus seperti itu dianggap tidak selaras.
+     */
+    public function selarasDenganLembaga(?string $lembagaId): bool
+    {
+        if (! $this->belongsToLembaga($lembagaId)) {
+            return false;
+        }
+        if ($lembagaId === null || ! $this->tenaga_ahli_id) {
+            return true;
+        }
+
+        $taLembagaId = $this->tenagaAhliTanpaScope()?->lembaga_id;
+        return $taLembagaId === null || $taLembagaId === $lembagaId;
+    }
+
+    /**
+     * Tenaga ahli milik akun ini, di luar global scope 'lembaga' — supaya
+     * pemeriksaan selaras tidak terpengaruh lembaga session saat ini.
+     */
+    public function tenagaAhliTanpaScope(): ?TenagaAhli
+    {
+        if (! $this->tenaga_ahli_id) {
+            return null;
+        }
+
+        return TenagaAhli::withoutGlobalScope('lembaga')->find($this->tenaga_ahli_id);
+    }
+
     public function canLogin(): bool
     {
         return $this->status_akun === 'Aktif' && ! $this->isLocked();

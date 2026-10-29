@@ -190,7 +190,27 @@ class InvoiceReminderService
             penugasanId: $penugasanId,
             attachments: $this->buildAttachments($invoice),
             invoiceId: $invoice->id,
+            context: $this->buildContext($invoice, $daysToDue),
         );
+    }
+
+    /**
+     * Nilai placeholder untuk template pesan.
+     *
+     * @return array<string, string>
+     */
+    private function buildContext(Invoice $invoice, int $daysToDue): array
+    {
+        $lembaga = $invoice->siklus?->lembaga?->nama ?? 'Lembaga Akreditasi';
+
+        return [
+            'nama_faskes' => $invoice->siklus?->faskes?->nama ?? '-',
+            'nomor_invoice' => $invoice->nomor_invoice,
+            'total_tagihan' => number_format((float) $invoice->total_tagihan, 0, ',', '.'),
+            'due_date' => Carbon::parse($invoice->due_date)->translatedFormat('d F Y'),
+            'hari_ke_jatuh_tempo' => (string) $daysToDue,
+            'nama_lembaga' => $lembaga,
+        ];
     }
 
     /**

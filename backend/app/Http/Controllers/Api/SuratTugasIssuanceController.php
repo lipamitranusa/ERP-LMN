@@ -8,7 +8,7 @@ use App\Models\Penugasan;
 use App\Models\SuratTugas;
 use App\Models\TenagaAhli;
 use App\Services\AuditService;
-use App\Services\Notification\Notifier;
+use App\Services\Notification\PenugasanNotifier;
 use App\Services\Penugasan\SuratTugasGatekeeper;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,7 +26,7 @@ class SuratTugasIssuanceController extends Controller
     public function __construct(
         private SuratTugasGatekeeper $gatekeeper,
         private AuditService $audit,
-        private Notifier $notifier,
+        private PenugasanNotifier $notifier,
     ) {}
 
     public function issue(Request $request): JsonResponse
@@ -66,7 +66,7 @@ class SuratTugasIssuanceController extends Controller
             ], 409);
         }
 
-        return DB::transaction(function () use ($siklus, $tenagaAhli, $data, $user) {
+        $result = DB::transaction(function () use ($siklus, $tenagaAhli, $data, $user) {
             $penugasan = Penugasan::create([
                 'siklus_id' => $siklus->id,
                 'tenaga_ahli_id' => $tenagaAhli->id,
@@ -98,32 +98,17 @@ class SuratTugasIssuanceController extends Controller
             ]);
 
             // NFR-1: notify Tenaga Ahli (Surveior / Verifikator) tentang Surat Tugas baru.
-            $taUser = $tenagaAhli->akunPengguna()->first();
-            if ($taUser) {
-                $faskesName = optional($siklus->faskes)->nama ?? 'Faskes';
-                $this->notifier->sendWithFallback(
-                    recipientPhone: $taUser->nama ?? '', // placeholder, no phone typically
-                    recipientEmail: $taUser->email,
-                    subject: "Surat Tugas {$nomor}",
-                    message: "Yth. {$taUser->nama},\n\n"
-                        . "Anda menerima Surat Tugas baru:\n"
-                        . "Nomor: {$nomor}\n"
-                        . "Faskes: {$faskesName}\n"
-                        . "Jenis: " . ucfirst($data['jenis']) . "\n\n"
-                        . "Silakan login ke sistem ERP Akreditasi untuk melihat detail dan mengkonfirmasi kesediaan.\n\n"
-                        . "Terima kasih,\nLIPA MITRA NUSA",
-                    siklusId: $siklus->id,
-                    jenis: \App\Models\NotifikasiTagihan::JENIS_PENUGASAN_BARU,
-                    penugasanId: $penugasan->id,
-                );
-            }
-
-            return response()->json([
-                'data' => [
-                    'penugasan' => $penugasan,
-                    'surat_tugas' => $surat,
-                ],
-            ], 201);
+            return [
+                'penugasan' => $penugasan,
+                'surat_tugas' => $surat,
+            ];
         });
+
+        // Notifikasi ke tenaga ahli (WhatsApp ke no_wa master / email fallback).
+        $this->notifier->kirim($result['penugasan']);
+
+        return response()->json([
+            'data' => $result,
+        ], 201);
     }
 }

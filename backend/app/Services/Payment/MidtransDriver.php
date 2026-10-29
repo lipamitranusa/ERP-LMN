@@ -183,6 +183,63 @@ class MidtransDriver implements PaymentGatewayInterface
         return 'pending';
     }
 
+    /**
+     * Ambil status transaksi langsung dari API Midtrans.
+     * Dipakai sebagai fallback ketika webhook tidak sampai (mis. URL publik
+     * tidak bisa dijangkau gateway).
+     */
+    public function fetchStatus(Invoice $invoice): ?array
+    {
+        if (! $invoice->payment_order_id) {
+            return null;
+        }
+
+        $body = $this->fetchStatusByOrderId($invoice->payment_order_id);
+
+        if ($body) {
+            Log::info('midtrans.status.fetch', [
+                'invoice_id' => $invoice->id,
+                'order_id' => $invoice->payment_order_id,
+                'transaction_status' => $body['transaction_status'] ?? null,
+            ]);
+        }
+
+        return $body;
+    }
+
+    /**
+     * Status transaksi berdasarkan order_id. Dipakai untuk memverifikasi
+     * notifikasi yang datang tanpa signature header.
+     */
+    public function fetchStatusByOrderId(string $orderId): ?array
+    {
+        $config = $this->resolveConfig();
+
+        if (! $config['server_key'] || $orderId === '') {
+            return null;
+        }
+
+        try {
+            $response = Http::withBasicAuth($config['server_key'], '')
+                ->withHeaders(['Accept' => 'application/json'])
+                ->timeout(15)
+                ->get($config['base_url'] . '/v2/' . $orderId . '/status');
+        } catch (Throwable $e) {
+            Log::error('midtrans.status.http_error', ['message' => $e->getMessage()]);
+            return null;
+        }
+
+        if (! $response->successful()) {
+            Log::warning('midtrans.status.api_error', [
+                'status' => $response->status(),
+                'body' => $response->json(),
+            ]);
+            return null;
+        }
+
+        return $response->json();
+    }
+
     public function verifyWebhookSignature(array $payload, string $signature): bool
     {
         $serverKey = PaymentSetting::value('server_key')

@@ -12,6 +12,8 @@ use App\Models\Pks;
 use App\Models\SiklusAkreditasi;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request as ClientRequest;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -37,12 +39,28 @@ class PaymentWebhookTest extends TestCase
             ['kategori' => 'gateway', 'kunci' => 'driver'],
             ['nilai' => 'midtrans', 'label' => 'Gateway Pembayaran', 'tipe' => 'select', 'options' => null]
         );
+
+        // Notifikasi tanpa signature header dikonfirmasi ke API status Midtrans.
+        Http::fake([
+            'api.sandbox.midtrans.com/v2/*/status' => function (ClientRequest $request) {
+                preg_match('#/v2/(.+)/status#', $request->url(), $m);
+
+                return Http::response([
+                    'order_id' => $m[1] ?? 'unknown',
+                    'status_code' => '200',
+                    'transaction_status' => 'settlement',
+                    'gross_amount' => '5000000.00',
+                    'va_numbers' => [['va_number' => 'FAKE-VA-1234567890']],
+                ]);
+            },
+        ]);
     }
 
     private function createInvoiceWithVa(): Invoice
     {
-        $lembaga = Lembaga::first();
-        $faskes = AkunPengguna::where('email', 'klinik-sejahtera@faskes.local')->first()->faskes;
+        $user = AkunPengguna::where('email', 'optima@gmail.com')->firstOrFail();
+        $faskes = $user->faskes;
+        $lembaga = Lembaga::where('id', $user->lembaga_id)->first() ?? Lembaga::first();
         $siklus = SiklusAkreditasi::create([
             'id' => (string) Str::uuid(),
             'faskes_id' => $faskes->id,
@@ -65,7 +83,7 @@ class PaymentWebhookTest extends TestCase
             'pks_id' => $pks->id,
             'siklus_id' => $siklus->id,
             'nomor_invoice' => 'INV/WEBHOOK/' . strtoupper(Str::random(4)),
-            'dibuat_oleh' => AkunPengguna::where('email', 'admin@erp.local')->first()->id,
+            'dibuat_oleh' => $user->id,
             'total_tagihan' => 5_000_000,
             'status' => Invoice::STATUS_BELUM_BAYAR,
             'metode_pembayaran' => BuktiPembayaran::METODE_VA,
@@ -79,7 +97,7 @@ class PaymentWebhookTest extends TestCase
     public function test_va_request_returns_reference(): void
     {
         $invoice = $this->createInvoiceWithVa();
-        $user = AkunPengguna::where('email', 'klinik-sejahtera@faskes.local')->firstOrFail();
+        $user = AkunPengguna::where('email', 'optima@gmail.com')->firstOrFail();
 
         $resp = $this->actingAs($user, 'sanctum')
             ->postJson("/api/invoice/{$invoice->id}/bayar-va");
@@ -129,6 +147,60 @@ class PaymentWebhookTest extends TestCase
         ], ['X-Midtrans-Signature' => 'wrong-signature-value']);
 
         $resp->assertStatus(401);
+    }
+
+    public function test_webhook_marks_lunas_when_order_id_has_timestamp_suffix(): void
+    {
+        // Order id yang dikirim ke Midtrans adalah nomor invoice tersanitasi +
+        // suffix timestamp, bukan UUID invoice. Lookup harus tetap ketemu.
+        $invoice = $this->createInvoiceWithVa();
+        $orderId = 'INV-2026-TESTVA-939890';
+        $invoice->update(['payment_order_id' => $orderId]);
+
+        $resp = $this->postJson('/api/invoice/webhook/notification', [
+            'order_id' => $orderId,
+            'status_code' => '200',
+            'transaction_status' => 'settlement',
+            'gross_amount' => '5000000.00',
+            'va_numbers' => [['va_number' => 'FAKE-VA-1234567890']],
+        ]);
+
+        $resp->assertOk();
+        $invoice->refresh();
+        $this->assertEquals(Invoice::STATUS_LUNAS, $invoice->status);
+    }
+
+    public function test_webhook_matches_invoice_by_va_number(): void
+    {
+        // order_id tidak dikenal (mis. charge lama tanpa payment_order_id),
+        // tapi nomor VA tersimpan di payment_reference.
+        $invoice = $this->createInvoiceWithVa();
+
+        $resp = $this->postJson('/api/invoice/webhook/notification', [
+            'order_id' => 'INV-2026-UNKNOWN-000000',
+            'status_code' => '200',
+            'transaction_status' => 'settlement',
+            'gross_amount' => '5000000.00',
+            'va_numbers' => [['va_number' => 'FAKE-VA-1234567890']],
+        ]);
+
+        $resp->assertOk();
+        $invoice->refresh();
+        $this->assertEquals(Invoice::STATUS_LUNAS, $invoice->status);
+    }
+
+    public function test_cek_status_marks_lunas_when_webhook_never_arrived(): void
+    {
+        $invoice = $this->createInvoiceWithVa();
+        $invoice->update(['payment_order_id' => 'INV-2026-TESTVA-111111']);
+        $user = AkunPengguna::where('email', 'optima@gmail.com')->firstOrFail();
+
+        $resp = $this->actingAs($user, 'sanctum')
+            ->postJson("/api/invoice/{$invoice->id}/cek-status");
+
+        $resp->assertOk();
+        $invoice->refresh();
+        $this->assertEquals(Invoice::STATUS_LUNAS, $invoice->status);
     }
 
     public function test_webhook_unknown_invoice_returns_200(): void

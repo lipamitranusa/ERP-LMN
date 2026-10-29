@@ -9,6 +9,7 @@ use App\Services\Invoice\InvoicePdfGenerator;
 use App\Services\Invoice\TagihanService;
 use App\Services\LembagaHeaderService;
 use App\Services\Notification\EmailChannel;
+use App\Services\Notification\NotifikasiTemplateService;
 use App\Services\Notification\WhatsAppChannel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,6 +34,7 @@ class TagihanNotificationController extends Controller
         private LembagaHeaderService $lembaga,
         private InvoicePdfGenerator $invoicePdf,
         private TagihanService $tagihanService,
+        private NotifikasiTemplateService $templates,
     ) {}
 
     /**
@@ -80,6 +82,24 @@ class TagihanNotificationController extends Controller
         $faskes = $invoice->siklus->faskes;
         $results = [];
 
+        // Template pesan (tab "Format Pesan" di Pengaturan).
+        $context = $this->buildContext($tagihan);
+        $waAktif = $this->templates->status('whatsapp', 'tagihan_invoice') !== 'disabled';
+        $emailAktif = $this->templates->status('email', 'tagihan_invoice') !== 'disabled';
+
+        $waTemplate = $waAktif
+            ? $this->templates->compose('whatsapp', 'tagihan_invoice', $context, [
+                'subject' => $subject,
+                'body' => $this->buildWhatsAppMessage($tagihan),
+            ])
+            : null;
+        $emailTemplate = $emailAktif
+            ? $this->templates->compose('email', 'tagihan_invoice', $context, [
+                'subject' => $subject,
+                'body' => $plainSlip,
+            ])
+            : null;
+
         if (! $faskes->email) {
             $results[] = [
                 'channel' => 'email',
@@ -100,19 +120,38 @@ class TagihanNotificationController extends Controller
 
         if ($channel === 'whatsapp' || $channel === 'both') {
             $phone = $faskes->telepon ?: $faskes->telepon_pimpinana;
-            if ($phone) {
-                $sent = $this->wa->send($phone, $subject, $this->buildWhatsAppMessage($tagihan));
+            if (! $waAktif) {
+                $results[] = [
+                    'channel' => 'whatsapp',
+                    'recipient' => $phone,
+                    'status' => 'gagal',
+                    'error' => 'Notifikasi WhatsApp dimatikan pada pengaturan Format Pesan.',
+                ];
+            } elseif ($phone) {
+                $sent = $this->wa->send(
+                    $phone,
+                    $waTemplate['subject'] ?? $subject,
+                    $waTemplate['body'] ?? $this->buildWhatsAppMessage($tagihan),
+                );
                 $results[] = [
                     'channel' => 'whatsapp',
                     'recipient' => $phone,
                     'status' => $sent ? 'terkirim' : 'gagal',
                     'error' => $sent ? null : $this->wa->getLastError(),
+                    'subject' => $waTemplate['subject'] ?? $subject,
                 ];
             }
         }
 
         if ($channel === 'email' || $channel === 'both') {
-            if ($faskes->email) {
+            if (! $emailAktif) {
+                $results[] = [
+                    'channel' => 'email',
+                    'recipient' => $faskes->email,
+                    'status' => 'gagal',
+                    'error' => 'Notifikasi email dimatikan pada pengaturan Format Pesan.',
+                ];
+            } elseif ($faskes->email) {
                 $attachments = [];
                 $warning = null;
 
@@ -131,18 +170,27 @@ class TagihanNotificationController extends Controller
                     $warning = 'Lampiran PDF gagal dibuat, email dikirim tanpa lampiran.';
                 }
 
-                $plainBody = $plainSlip;
+                // Isi email tetap dokumen invoice (HTML + PDF); template hanya
+                // customizing subjek (body_templateable = false).
+                $plainBody = $emailTemplate['body'] ?? $plainSlip;
                 if (count($attachments) > 0) {
                     $plainBody .= "\n\nLampiran: ".implode(', ', array_column($attachments, 'name'));
                 }
 
-                $sent = $this->email->send($faskes->email, $subject, $plainBody, $htmlSlip, $attachments);
+                $sent = $this->email->send(
+                    $faskes->email,
+                    $emailTemplate['subject'] ?? $subject,
+                    $plainBody,
+                    $htmlSlip,
+                    $attachments,
+                );
                 $results[] = [
                     'channel' => 'email',
                     'recipient' => $faskes->email,
                     'status' => $sent ? 'terkirim' : 'gagal',
                     'error' => $sent ? null : $this->email->getLastError(),
                     'warning' => $warning,
+                    'subject' => $emailTemplate['subject'] ?? $subject,
                     'attachments' => count($attachments) > 0 ? [array_column($attachments, 'name')] : [],
                 ];
             }
@@ -161,7 +209,7 @@ class TagihanNotificationController extends Controller
                     'payload' => [
                         'invoice_id' => $invoice->id,
                         'nomor_invoice' => $invoice->nomor_invoice,
-                        'subject' => $subject,
+                        'subject' => $r['subject'] ?? $subject,
                         'message_preview' => mb_substr($plainSlip, 0, 200),
                     ],
                 ]);
@@ -186,6 +234,72 @@ class TagihanNotificationController extends Controller
     }
 
     // ─── WhatsApp Message ───────────────────────────────────────────────
+
+    /**
+     * Nilai placeholder untuk template pesan notifikasi invoice.
+     *
+     * @return array<string, string>
+     */
+    private function buildContext(array $tagihan): array
+    {
+        $faskes = $tagihan['faskes'];
+        $statusEmoji = $tagihan['status'] === 'lunas' ? '✅' : '⏳';
+        $hari = $tagihan['hari_due'];
+
+        // Blok kondisional — ikut disisipkan sebagai placeholder agar admin
+        // bebas mengatur ulang tata letak pesan.
+        $blokSisa = '';
+        $blokJatuhTempo = '';
+        $blokVa = '';
+
+        if ($tagihan['status'] !== 'lunas') {
+            if ($tagihan['sisa_tagihan'] > 0) {
+                $blokSisa = "Sisa Tagihan  : Rp ".number_format($tagihan['sisa_tagihan'], 0, ',', '.')."\n";
+            }
+            if ($hari > 0) {
+                $blokJatuhTempo = "⏰ Jatuh tempo dalam *{$hari} hari*\n";
+            } elseif ($hari === 0) {
+                $blokJatuhTempo = "⚠️ *JATUH TEMPO HARI INI*\n";
+            } else {
+                $blokJatuhTempo = "🚨 *SUDAH LEWAT JATUH TEMPO* (".abs($hari)." hari)\n";
+            }
+            if ($tagihan['va_number']) {
+                $blokVa = "🏦 *Virtual Account*: {$tagihan['va_number']}\n";
+                if ($tagihan['va_bank']) {
+                    $blokVa .= "   Bank: {$tagihan['va_bank']}\n";
+                }
+            }
+        }
+
+        return [
+            'nama_faskes' => $faskes['nama'],
+            'jenis_faskes' => $faskes['jenis'] ?? '-',
+            'alamat' => $faskes['alamat'] ?? '-',
+            'kota' => $faskes['kota'] ?? '-',
+            'provinsi' => $faskes['provinsi'] ?? '-',
+            'telepon' => $faskes['telepon'] ?? '-',
+            'email' => $faskes['email'] ?? '-',
+            'nama_pimpinana' => $faskes['nama_pimpinana'] ?? '-',
+            'nomor_invoice' => $tagihan['nomor_invoice'],
+            'nomor_pks' => $tagihan['nomor_pks'] ?? '-',
+            'tanggal_terbit' => $tagihan['tanggal_terbit'],
+            'due_date' => $tagihan['due_date'],
+            'status_label' => $tagihan['status_label'],
+            'status_emoji' => $statusEmoji,
+            'total_tagihan' => number_format($tagihan['total_tagihan'], 0, ',', '.'),
+            'sisa_tagihan' => number_format($tagihan['sisa_tagihan'], 0, ',', '.'),
+            'metode_pembayaran' => $tagihan['metode_pembayaran'],
+            'va_number' => $tagihan['va_number'] ?? '-',
+            'va_bank' => $tagihan['va_bank'] ?? '-',
+            'va_expired' => $tagihan['va_expired'] ?? '-',
+            'nama_lembaga' => $tagihan['lembaga']['nama'] ?? config('app.name', 'Lembaga Akreditasi Kesehatan'),
+            'siklus_nama' => $tagihan['siklus']['nama'] ?? '-',
+            'tanggal_cetak' => $tagihan['tanggal_cetak'],
+            'blok_sisa' => $blokSisa,
+            'blok_jatuh_tempo' => $blokJatuhTempo,
+            'blok_va' => $blokVa,
+        ];
+    }
 
     private function buildWhatsAppMessage(array $tagihan): string
     {

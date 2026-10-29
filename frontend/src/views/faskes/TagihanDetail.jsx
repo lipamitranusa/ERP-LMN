@@ -200,6 +200,16 @@ export default function TagihanDetail() {
     onError: (err) => { setFileError(err.message); },
   });
 
+  const cekStatusMutation = useMutateKeys([["invoice", id], ["invoices"], ["invoice-bukti", id]], {
+    onSuccess: (data) => {
+      refetchInvoice();
+      if (data?.data?.status === "lunas") {
+        alert("Pembayaran terverifikasi. Invoice sudah lunas.");
+      }
+    },
+    onError: (err) => { setFileError(err.message); },
+  });
+
   const buktiMutation = useMutateKeys([["invoice", id], ["invoices"], ["invoice-bukti", id]], {
     onSuccess: () => {
       setShowMethodPicker(false);
@@ -342,8 +352,8 @@ export default function TagihanDetail() {
 
           <VaInstructions method={isQris ? "qris" : "va"} vaNumber={vaData.reference} gateway={invoice} selectedBank={vaData.bank} />
 
-          <Button variant="ghost" size="sm" onClick={refetchInvoice} disabled={isFetching} className="w-full mt-3 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500" >
-            {isFetching ? "Memuat..." : "Cek Status Pembayaran"}
+          <Button variant="ghost" size="sm" onClick={() => cekStatusMutation.mutate({ path: `/invoice/${id}/cek-status`, method: "POST", body: {} })} disabled={isFetching || cekStatusMutation.isPending} className="w-full mt-3 text-[12px] text-slate-500 dark:text-slate-400 dark:text-slate-500" >
+            {cekStatusMutation.isPending ? "Mengecek..." : isFetching ? "Memuat..." : "Cek Status Pembayaran"}
           </Button>
           <Button variant="outline" size="sm" onClick={() => handleGatewayPayment(true)} className="w-full mt-2 text-[12px]">
             Dapatkan Nomor VA Baru

@@ -275,8 +275,18 @@ export default function PenugasanSaya() {
                 </div>
 
                 <div className="border-t border-slate-100 pt-3 space-y-1 text-xs text-slate-600 dark:text-slate-300 dark:text-slate-500">
-                  <div>Tanggal Selesai Survei: <strong className="text-slate-800 dark:text-slate-200">{p.tanggal_selesai_survei ? formatDate(p.tanggal_selesai_survei, { long: true }) : "—"}</strong></div>
-                  <div>Tanggal Selesai Verifikasi: <strong className="text-slate-800 dark:text-slate-200">{p.tanggal_selesai ? formatDate(p.tanggal_selesai, { long: true }) : "—"}</strong></div>
+                  {p.jenis === "verifikasi" ? (
+                    <>
+                      <div>Tanggal Kirim Laporan Survei: <strong className="text-slate-800 dark:text-slate-200">{formatDate(p.tanggal_kirim_laporan_survei, { long: true })}</strong></div>
+                      <div>Tanggal Kirim Laporan Verifikasi: <strong className="text-slate-800 dark:text-slate-200">{formatDate(p.tanggal_kirim_laporan_verifikasi, { long: true })}</strong></div>
+                    </>
+                  ) : (
+                    <>
+                      <div>Tanggal Mulai Survei: <strong className="text-slate-800 dark:text-slate-200">{formatDate(p.tanggal_mulai_survei, { long: true })}</strong></div>
+                      <div>Tanggal Selesai Survei: <strong className="text-slate-800 dark:text-slate-200">{formatDate(p.tanggal_selesai_survei, { long: true })}</strong></div>
+                      <div>Tanggal Kirim Laporan Survei: <strong className="text-slate-800 dark:text-slate-200">{formatDate(p.tanggal_kirim_laporan_survei, { long: true })}</strong></div>
+                    </>
+                  )}
                 </div>
 
                 {(p.surat_tugas ?? siblingSuratMap[`${p.siklus_id}|${p.jenis}`]) && (() => {

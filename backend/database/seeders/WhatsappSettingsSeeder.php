@@ -258,6 +258,19 @@ class WhatsappSettingsSeeder extends Seeder
         ],
 
 [
+            'id' => '01a157fe-ac0e-732c-9d57-26c2f246c480',
+            'kategori' => 'notifikasi',
+            'kunci' => 'notify_penugasan_baru',
+            'nilai' => '1',
+            'label' => 'Penugasan baru tenaga ahli',
+            'deskripsi' => 'Kirim notifikasi WhatsApp ke tenaga ahli saat admin menugaskan tenaga ahli untuk survei/verifikasi.',
+            'tipe' => 'boolean',
+            'options' => null,
+            'created_at' => '2026-10-20 13:27:50',
+            'updated_at' => '2026-10-20 13:27:50',
+        ],
+
+[
             'id' => '01a157fe-ac0c-73af-b892-8f012954c803',
             'kategori' => 'notifikasi',
             'kunci' => 'notify_pembayaran_terkonfirmasi',

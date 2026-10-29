@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import NotifikasiTemplatePanel from "@/components/NotifikasiTemplatePanel";
 import { Eye, EyeOff } from "lucide-react";
 
 function formatRp(n) { return `Rp ${Number(n || 0).toLocaleString("id-ID")}`; }
@@ -54,6 +55,7 @@ const TABS = [
   { id: "smtp", label: "SMTP" },
   { id: "mailgun", label: "Mailgun" },
   { id: "notifikasi", label: "Notifikasi" },
+  { id: "format_pesan", label: "Format Pesan" },
 ];
 
 function ToggleField({ label, value, onChange, children }) {
@@ -292,6 +294,10 @@ export default function PengaturanMail() {
           <p className="text-[12px] text-slate-400 dark:text-slate-500 mb-4">Atur kapan sistem mengirim email notifikasi kepada pihak terkait.</p>
           <div className="flex flex-col gap-4">{renderGroup("notifikasi")}</div>
         </Card>
+      )}
+
+      {activeTab === "format_pesan" && (
+        <NotifikasiTemplatePanel channel="email" />
       )}
 
       {toastMsg && <Toast message={toastMsg} type={toastType} />}

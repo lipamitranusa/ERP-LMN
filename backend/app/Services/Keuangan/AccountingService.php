@@ -26,6 +26,9 @@ use Illuminate\Support\Str;
  */
 class AccountingService
 {
+    /** Kode akun kas & bank (1101 Kas, 1102-1104 Bank). */
+    public const KODE_KAS_BANK = ['1101', '1102', '1103', '1104'];
+
     // ═══════════════════════════════════════════════════════════════════════
     // COA
     // ═══════════════════════════════════════════════════════════════════════
@@ -510,65 +513,97 @@ class AccountingService
     // Dashboard
     // ═══════════════════════════════════════════════════════════════════════
 
-    public function dashboard(): array
+    /**
+     * Dashboard akuntansi untuk satu periode.
+     *
+     * Filter `tahun` + `bulan` (opsional).
+     *   - Tanpa filter sama sekali → bulan berjalan (perilaku lama).
+     *   - `tahun` saja            → satu tahun penuh.
+     *   - `tahun` + `bulan`       → satu bulan.
+     */
+    public function dashboard(array $filters = []): array
     {
         $now = now();
-        $startMonth = $now->copy()->startOfMonth();
-        $endMonth = $now->copy()->endOfMonth();
 
-        // Total debit & kredit bulan ini dari jurnal umum
-        $bulanIni = JurnalUmumDetail::whereHas('jurnal', fn ($j) => $j
-            ->whereBetween('tanggal', [$startMonth->toDateString(), $endMonth->toDateString()])
-        );
+        $pakaiFilter = array_key_exists('tahun', $filters) || array_key_exists('bulan', $filters);
+        $tahun = $pakaiFilter ? (int) (($filters['tahun'] ?? null) ?: $now->year) : $now->year;
 
-        $totalDebitBulan = (float) $bulanIni->clone()->sum('debit');
-        $totalKreditBulan = (float) $bulanIni->clone()->sum('kredit');
+        // Bulan di luar rentang 1-12 dianggap "tanpa bulan" → satu tahun penuh.
+        $bulan = $pakaiFilter ? ($filters['bulan'] ?? null) : $now->month;
+        $bulan = ($bulan && (int) $bulan >= 1 && (int) $bulan <= 12) ? (int) $bulan : null;
 
-        // Jumlah jurnal bulan ini
-        $jumlahJurnalBulan = JurnalUmum::whereBetween('tanggal', [
-            $startMonth->toDateString(), $endMonth->toDateString(),
-        ])->count();
+        $dari = $bulan
+            ? Carbon::create($tahun, (int) $bulan, 1)->startOfMonth()
+            : Carbon::create($tahun, 1, 1)->startOfYear();
 
-        // Saldo kas & bank (aktiva lancar)
-        $kasBank = Coa::query()->aktif()
-            ->whereIn('jenis', [Coa::JENIS_AKTIVA_LANCAR])
-            ->get();
-        $saldoKasBank = 0.0;
-        foreach ($kasBank as $coa) {
-            $saldoKasBank += $this->saldoAkhir($coa, $endMonth);
+        $sampai = $bulan
+            ? Carbon::create($tahun, (int) $bulan, 1)->endOfMonth()
+            : Carbon::create($tahun, 12, 31)->endOfYear();
+
+        $dariStr = $dari->toDateString();
+        $sampaiStr = $sampai->toDateString();
+
+        // Baris jurnal periode terpilih — dihitung dari jurnal yang sama persis
+        // dengan yang ditampilkan di halaman Jurnal Umum.
+        $baris = JurnalUmumDetail::query()
+            ->with('coa:id,kode,nama,jenis,kelompok')
+            ->whereHas('jurnal', fn ($j) => $j->whereBetween('tanggal', [$dariStr, $sampaiStr]))
+            ->get(['id', 'coa_id', 'debit', 'kredit']);
+
+        $totalDebit = '0';
+        $totalKredit = '0';
+        $totalPendapatan = '0'; // net: kredit - debit
+        $totalBeban = '0';      // net: debit - kredit
+
+        foreach ($baris as $b) {
+            $debit = (string) $b->debit;
+            $kredit = (string) $b->kredit;
+
+            $totalDebit = bcadd($totalDebit, $debit, 2);
+            $totalKredit = bcadd($totalKredit, $kredit, 2);
+
+            $jenis = $b->coa?->jenis;
+            if (in_array($jenis, [Coa::JENIS_PENDAPATAN, Coa::JENIS_PENDAPATAN_LAIN], true)) {
+                $totalPendapatan = bcadd($totalPendapatan, bcsub($kredit, $debit, 2), 2);
+            } elseif (in_array($jenis, [Coa::JENIS_BEBAN, Coa::JENIS_BEBAN_LAIN], true)) {
+                $totalBeban = bcadd($totalBeban, bcsub($debit, $kredit, 2), 2);
+            }
         }
 
-        // Pendapatan bulan ini
-        $pendapatan = Coa::query()->aktif()
-            ->whereIn('jenis', [Coa::JENIS_PENDAPATAN, Coa::JENIS_PENDAPATAN_LAIN])
-            ->get();
-        $totalPendapatanBulan = 0.0;
-        foreach ($pendapatan as $coa) {
-            $totalPendapatanBulan += (float) $this->mutasiPeriode($coa, $startMonth, $endMonth)['kredit'];
+        $jumlahJurnal = JurnalUmum::whereBetween('tanggal', [$dariStr, $sampaiStr])->count();
+
+        // Saldo kas & bank — akumulasi seluruh jurnal s.d. akhir periode.
+        // Hanya akun kas & bank, bukan seluruh aktiva lancar (piutang/
+        // persediaan tidak boleh ikut dihitung sebagai kas).
+        // Untuk periode berjalan, batasnya "hari ini" supaya jurnal bertanggal
+        // masa depan di bulan yang sama tidak ikut terhitung.
+        $sampaiHitung = $sampai->copy()->min($now);
+        $saldoKasBank = '0';
+        foreach ($this->akunKasBank() as $coa) {
+            $saldoKasBank = bcadd($saldoKasBank, $this->saldoAkhir($coa, $sampaiHitung), 2);
         }
 
-        // Beban bulan ini
-        $beban = Coa::query()->aktif()
-            ->whereIn('jenis', [Coa::JENIS_BEBAN, Coa::JENIS_BEBAN_LAIN])
-            ->get();
-        $totalBebanBulan = 0.0;
-        foreach ($beban as $coa) {
-            $totalBebanBulan += (float) $this->mutasiPeriode($coa, $startMonth, $endMonth)['debit'];
-        }
+        $labaRugi = bcsub($totalPendapatan, $totalBeban, 2);
 
         return [
-            'bulan_ini' => [
-                'total_debit' => $totalDebitBulan,
-                'total_kredit' => $totalKreditBulan,
-                'jumlah_jurnal' => $jumlahJurnalBulan,
-                'saldo_kas_bank' => $saldoKasBank,
-                'total_pendapatan' => $totalPendapatanBulan,
-                'total_beban' => $totalBebanBulan,
-                'laba_rugi_bulan' => $totalPendapatanBulan - $totalBebanBulan,
+            'periode' => [
+                'tahun' => $tahun,
+                'bulan' => $bulan ? (int) $bulan : null,
+                'dari' => $dariStr,
+                'sampai' => $sampaiStr,
+            ],
+            'ringkasan' => [
+                'total_debit' => (float) $totalDebit,
+                'total_kredit' => (float) $totalKredit,
+                'jumlah_jurnal' => $jumlahJurnal,
+                'saldo_kas_bank' => (float) $saldoKasBank,
+                'total_pendapatan' => (float) $totalPendapatan,
+                'total_beban' => (float) $totalBeban,
+                'laba_rugi' => (float) $labaRugi,
             ],
             'jumlah_coa' => Coa::query()->aktif()->count(),
             'jumlah_kategori' => KategoriJurnal::where('is_aktif', true)->count(),
-            'tanggal_snapshot' => $now->toDateString(),
+            'tanggal_snapshot' => $sampaiHitung->toDateString(),
         ];
     }
 
@@ -611,16 +646,49 @@ class AccountingService
         ];
     }
 
+    /**
+     * Saldo akhir satu akun s.d. tanggal (inklusif).
+     *
+     * Akumulasi langsung seluruh jurnal — bukan "saldo awal + mutasi
+     * periode", karena saldo awal sudah memuat mutasi periode tersebut
+     * sehingga hasilnya dobel hitung.
+     */
     private function saldoAkhir(Coa $coa, Carbon $tanggal): string
     {
-        $saldoAwal = $this->saldoAwal($coa, $tanggal->copy()->addDay());
-        $mutasi = $this->mutasiPeriode($coa, $tanggal->copy()->startOfMonth(), $tanggal);
-        $debit = bcadd($saldoAwal, $mutasi['debit'], 2);
-        $kredit = bcadd($mutasi['kredit'], 0, 2);
-        if ($coa->isDebitNormal()) {
-            return bcsub($debit, $kredit, 2);
+        $details = JurnalUmumDetail::where('coa_id', $coa->id)
+            ->whereHas('jurnal', fn ($j) => $j->where('tanggal', '<=', $tanggal->toDateString()))
+            ->get(['debit', 'kredit']);
+
+        $totalDebit = '0';
+        $totalKredit = '0';
+        foreach ($details as $d) {
+            $totalDebit = bcadd($totalDebit, (string) $d->debit, 2);
+            $totalKredit = bcadd($totalKredit, (string) $d->kredit, 2);
         }
-        return bcsub($kredit, $debit, 2);
+
+        if ($coa->isDebitNormal()) {
+            return bcsub($totalDebit, $totalKredit, 2);
+        }
+        return bcsub($totalKredit, $totalDebit, 2);
+    }
+
+    /**
+     * Akun kas & bank yang dipakai modul keuangan.
+     *
+     * Konvensi COA: 1101 Kas, 1102-1104 Bank (sama dengan pilihan akun
+     * kas/bank pada jurnal settlement). Akun non-aktif tetap dihitung
+     * karena saldonya masih ada di buku besar.
+     */
+    private function akunKasBank(): Collection
+    {
+        return Coa::query()
+            ->where('jenis', Coa::JENIS_AKTIVA_LANCAR)
+            ->where(function ($q) {
+                $q->whereIn('kode', self::KODE_KAS_BANK)
+                    ->orWhereRaw('LOWER(nama) LIKE ?', ['kas%'])
+                    ->orWhereRaw('LOWER(nama) LIKE ?', ['%bank%']);
+            })
+            ->get();
     }
 
     private function generateNomorJurnal(Carbon $tanggal, ?string $kategoriJenis = null): string

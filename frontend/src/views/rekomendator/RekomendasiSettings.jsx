@@ -43,7 +43,7 @@ export default function RekomendasiSettings() {
 
   const current = defaultData?.data || null;
   const candidates = Array.isArray(candidatesData?.data) ? candidatesData.data : [];
-  const lemmaAktif = candidatesData?.lembaga || null;
+  const lembagaAktif = candidatesData?.lembaga || null;
 
   const setDefaultMutate = useMutate({
     onSuccess: (d) => {
@@ -104,8 +104,15 @@ export default function RekomendasiSettings() {
         </h2>
         <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748B" }}>
           Tunjuk satu pengguna dengan role Rekomendator yang akan menerima hasil verifikasi
-          untuk disetujui atau ditolak. Setelah verifikator finalize, laporan otomatis
-          muncul di menu Rekomendasi untuk pengguna ini.
+          untuk disetujui atau ditolak. Setiap lembaga memiliki 1 rekomendator sendiri
+          {lembagaAktif ? (
+            <>
+              {" "}— pengaturan di bawah hanya berlaku untuk{" "}
+              <strong>{lembagaAktif.nama}</strong>.
+            </>
+          ) : null}
+          {" "}Setelah verifikator finalize, laporan otomatis muncul di menu Rekomendasi
+          untuk pengguna ini.
         </p>
       </div>
 
@@ -131,6 +138,11 @@ export default function RekomendasiSettings() {
                   <div style={{ fontSize: "11px", color: "#64748B", marginTop: "2px" }}>
                     Role: {current.role} {current.tenaga_ahli && `· TA: ${current.tenaga_ahli.nomor_induk_surveior}`}
                   </div>
+                  {lembagaAktif && (
+                    <div style={{ fontSize: "11px", color: "#64748B", marginTop: "2px" }}>
+                      Lembaga: {lembagaAktif.nama}
+                    </div>
+                  )}
                   {current.tenaga_ahli?.no_rekening && (
                     <div style={{ fontSize: "11px", color: "#64748B", marginTop: "2px" }}>
                       Rekening: {current.tenaga_ahli.no_rekening} ({current.tenaga_ahli.nama_bank}) — {current.tenaga_ahli.atas_nama_rekening}

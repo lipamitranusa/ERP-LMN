@@ -3,7 +3,7 @@ import KasBankForm from "./KasBankForm";
 
 const CONF = {
   type: "kkk",
-  title: "Kas Kecil Keluar (KKK)",
+  title: "Kas Kecil Keluar",
   subtitle: "Bukti Kas Kecil Keluar — mencatat pengeluaran dari dana kas kecil.",
   color: { bg: "#FFF7F7", border: "#FED7D7", badge: "#FEE2E2", badgeText: "#991B1B", accent: "#DC2626" },
   icon: "💰",

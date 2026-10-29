@@ -241,16 +241,20 @@ class SiklusAkreditasi extends Model
     public function getTahapanAttribute(): int
     {
         // If DB has explicit value, use it (overrides everything)
-        if ($this->attributes['tahapan'] !== null) {
+        if (($this->attributes['tahapan'] ?? null) !== null) {
             return (int) $this->attributes['tahapan'];
         }
 
         // Otherwise derive from status + relationships
         $status = $this->status;
         $kelengkapan = $this->status_kelengkapan;
-        $pks = $this->pks ?? ($this->relationLoaded('pks') ? $this->pks : null);
-        $invoice = $this->invoice ?? ($this->relationLoaded('invoice') ? $this->invoice : null);
-        $suratTugas = $this->suratTugas ?? ($this->relationLoaded('suratTugas') ? $this->suratTugas : null);
+        // Relasi hanya boleh dibaca bila SUDAH di-eager load. Mengakses
+        // relasi yang belum loaded di dalam accessor akan memicu lazy load
+        // → LazyLoadingViolationException saat model diserialisasi jadi JSON
+        // (kolom `tahapan` NULL = accessor ini ikut jalan).
+        $pks = $this->relationLoaded('pks') ? $this->getRelation('pks') : null;
+        $invoice = $this->relationLoaded('invoice') ? $this->getRelation('invoice') : null;
+        $suratTugas = $this->relationLoaded('suratTugas') ? $this->getRelation('suratTugas') : null;
 
         // Stage 7: Selesai
         if ($status === 'selesai' || $status === 'terakreditasi') {

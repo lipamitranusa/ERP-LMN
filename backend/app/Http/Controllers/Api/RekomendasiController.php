@@ -4,12 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AkunPengguna;
-use App\Models\KonfigurasiPenugasan;
 use App\Models\LaporanVerifikasi;
 use App\Models\Penugasan;
 use App\Models\TenagaAhli;
 use App\Services\AuditService;
 use App\Services\Keuangan\LedgerService;
+use App\Services\Rekomendasi\DefaultReksaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -32,11 +32,12 @@ use Illuminate\Support\Str;
  */
 class RekomendasiController extends Controller
 {
-    public const KUNCI_DEFAULT_REKOMENDATOR = 'default_rekomendator_user_id';
+    public const KUNCI_DEFAULT_REKOMENDATOR = DefaultReksaService::KUNCI;
 
     public function __construct(
         private AuditService $audit,
         private LedgerService $ledger,
+        private DefaultReksaService $reksa,
     ) {}
 
     /**
@@ -236,25 +237,11 @@ class RekomendasiController extends Controller
      */
     public function getCandidates(Request $request): JsonResponse
     {
-        $roleId = \App\Models\Role::where('nama_role', 'Rekomendator')->value('id');
-        $query = AkunPengguna::withoutGlobalScope('lembaga')
-            ->with(['tenagaAhli' => fn ($q) => $q->withoutGlobalScope('lembaga')])
-            ->where('role_id', $roleId)
-            ->where('status_akun', 'Aktif');
-
-        // Filter per-lembaga: kandidat rekomendator milik lembaga aktif —
-        // baik sebagai lembaga default akun maupun via pivot multi-lembaga.
         $sessionLembagaId = session('lembaga_id');
-        if ($sessionLembagaId !== null) {
-            $query->where(function ($q) use ($sessionLembagaId) {
-                $q->where('lembaga_id', $sessionLembagaId)
-                  ->orWhereHas('lembagas', fn ($sq) => $sq->where('lembaga.id', $sessionLembagaId));
-            });
-        }
 
-        $users = $query
-            ->orderBy('nama')
-            ->get()
+        // Kandidat hanya milik lembaga aktif — akun dan tenaga ahlinya
+        // harus satu lembaga, kalau tidak honor reksa masuk ke lembaga lain.
+        $users = $this->reksa->kandidatUntuk($sessionLembagaId)
             ->map(fn ($u) => [
                 'user_id' => $u->id,
                 'nama' => $u->nama,
@@ -298,29 +285,25 @@ class RekomendasiController extends Controller
         ]);
 
         $target = AkunPengguna::withoutGlobalScope('lembaga')->with('role')->findOrFail($data['user_id']);
-        if ($target->role?->nama_role !== 'Rekomendator') {
+        if ($target->role?->nama_role !== DefaultReksaService::ROLE_REKSA) {
             return response()->json([
                 'message' => 'User yang dipilih harus memiliki role Rekomendator.',
             ], 422);
         }
 
-        // Verifikasi user Rekomendator harus milik lembaga yang sama dengan session
-        // (default akun atau pivot multi-lembaga)
+        // Reksa milik satu lembaga: akunnya harus terdaftar di lemma
+        // session dan tenaga ahlinya (bila ada) juga milik lemma itu.
         $sessionLembagaId = session('lembaga_id');
-        $belongsToLembaga = $target->lembaga_id === $sessionLembagaId
-            || ($sessionLembagaId !== null
-                && $target->lembagas()->where('lembaga.id', $sessionLembagaId)->exists());
-        if ($sessionLembagaId !== null && ! $belongsToLembaga) {
+        if ($sessionLembagaId !== null && ! $this->reksa->selaras($target, $sessionLembagaId)) {
             return response()->json([
                 'message' => 'User Rekomendator yang dipilih bukan milik lembaga Anda saat ini.',
             ], 422);
         }
 
         // Upsert per-lembaga: setiap lembaga punya 1 default rekomendator sendiri
-        KonfigurasiPenugasan::set(
-            self::KUNCI_DEFAULT_REKOMENDATOR,
-            $data['user_id'],
+        $this->reksa->setFor(
             $sessionLembagaId,
+            $target->id,
             "Default rekomendator untuk lembaga aktif (auto-muncul di menu Rekomendasi setelah verifikator finalize)."
         );
 
@@ -353,7 +336,7 @@ class RekomendasiController extends Controller
 
         // Otorisasi: hanya default rekomendator untuk LEMBAGA AKTIF SESSION
         // (tiap lembaga punya rekomendator sendiri, lookup via session lembaga_id)
-        $defaultUserId = KonfigurasiPenugasan::value(self::KUNCI_DEFAULT_REKOMENDATOR);
+        $defaultUserId = $this->reksa->userIdFor(session('lembaga_id'));
         if (! $defaultUserId || $user->id !== $defaultUserId) {
             $lembagaName = session('lembaga_id') ? (\App\Models\Lembaga::find(session('lembaga_id'))?->nama ?? 'lembaga ini') : 'lembaga ini';
             return response()->json([
@@ -422,7 +405,7 @@ class RekomendasiController extends Controller
 
         $this->guardLembaga($lv);
 
-        $defaultUserId = KonfigurasiPenugasan::value(self::KUNCI_DEFAULT_REKOMENDATOR);
+        $defaultUserId = $this->reksa->userIdFor(session('lembaga_id'));
         if (! $defaultUserId || $user->id !== $defaultUserId) {
             $lembagaName = session('lembaga_id') ? (\App\Models\Lembaga::find(session('lembaga_id'))?->nama ?? 'lembaga ini') : 'lembaga ini';
             return response()->json([
@@ -489,28 +472,23 @@ class RekomendasiController extends Controller
 
     /**
      * Ambil profil default rekomendator untuk lembaga aktif session.
-     * Lookup KonfigurasiPenugasan otomatis memfilter by session lembaga
-     * (tiap lembaga punya rekomendator sendiri). Return null jika belum
-     * disetel untuk lembaga tersebut.
+     * Hanya berlaku bila user yang terpointer masih milik lembaga aktif.
+     * Return null jika belum disetel (atau tidak selaras) untuk lemma itu.
      */
     private function getDefaultRekomendator(): ?array
     {
-        $userId = KonfigurasiPenugasan::value(self::KUNCI_DEFAULT_REKOMENDATOR);
-        if (! $userId) {
-            return null;
-        }
-        $u = AkunPengguna::withoutGlobalScope('lembaga')
-            ->with(['role', 'tenagaAhli' => fn ($q) => $q->withoutGlobalScope('lembaga')])
-            ->find($userId);
+        $u = $this->reksa->userFor(session('lembaga_id'));
         if (! $u) {
             return null;
         }
+        $u->loadMissing(['role', 'tenagaAhli' => fn ($q) => $q->withoutGlobalScope('lembaga')]);
         return [
             'user_id' => $u->id,
             'nama' => $u->nama,
             'email' => $u->email,
             'role' => $u->role?->nama_role,
             'tenaga_ahli_id' => $u->tenaga_ahli_id,
+            'lembaga_id' => $u->lembaga_id,
             'tenaga_ahli' => $u->tenagaAhli ? [
                 'id' => $u->tenagaAhli->id,
                 'nama' => $u->tenagaAhli->nama,

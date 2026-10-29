@@ -24,9 +24,9 @@ export function PageHeader({ title, subtitle, icon, actions, className }) {
             {title}
           </h1>
           {subtitle && (
-            <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5 leading-snug">
+            <div className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5 leading-snug">
               {subtitle}
-            </p>
+            </div>
           )}
         </div>
       </div>

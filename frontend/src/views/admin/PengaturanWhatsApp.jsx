@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import NotifikasiTemplatePanel from "@/components/NotifikasiTemplatePanel";
 import { Eye, EyeOff, CheckCircle, XCircle, Copy } from "lucide-react";
 
 function formatRp(n) { return `Rp ${Number(n || 0).toLocaleString("id-ID")}`; }
@@ -83,6 +84,7 @@ const TABS = [
   { id: "whatsapp_cloud", label: "WhatsApp Cloud API" },
   { id: "fonnte", label: "Fonnte" },
   { id: "notifikasi", label: "Notifikasi" },
+  { id: "format_pesan", label: "Format Pesan" },
 ];
 
 function WhatsAppIcon() {
@@ -418,13 +420,17 @@ export default function PengaturanWhatsApp() {
       {activeTab === "notifikasi" && (
         <Card className="p-5">
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Pengaturan Notifikasi WhatsApp</h3>
-          <p className="text-[12px] text-slate-400 dark:text-slate-500 mb-4">Aktifkan atau nonaktifkan jenis notifikasi WhatsApp yang dikirim ke faskes dan admin.</p>
+          <p className="text-[12px] text-slate-400 dark:text-slate-500 mb-4">Aktifkan atau nonaktifkan jenis notifikasi WhatsApp yang dikirim ke faskes, admin, dan tenaga ahli.</p>
           <div className="flex items-center gap-2 px-3 py-2 rounded-md text-[12px] mb-4"
             style={{ background: isEnabled ? "#DCFCE7" : "#F1F5F9", border: `1px solid ${isEnabled ? "#BBF7D0" : "#E2E8F0"}`, color: isEnabled ? "#166534" : "#94A3B8" }}>
             Notifikasi WhatsApp hanya akan dikirim jika WhatsApp Business API dalam keadaan <strong>{isEnabled ? "AKTIF" : "NONAKTIF"}</strong> dan koneksi berhasil diuji.
           </div>
           <div className="flex flex-col gap-4">{renderGroup("notifikasi")}</div>
         </Card>
+      )}
+
+      {activeTab === "format_pesan" && (
+        <NotifikasiTemplatePanel channel="whatsapp" />
       )}
 
       {toastMsg && <Toast message={toastMsg} type={toastType} />}

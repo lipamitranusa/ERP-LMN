@@ -22,9 +22,14 @@ class AccountingController extends Controller
 
     // ─── Dashboard ────────────────────────────────────────────────────────
 
-    public function dashboard(): JsonResponse
+    public function dashboard(Request $request): JsonResponse
     {
-        return response()->json(['data' => $this->svc->dashboard()]);
+        $filters = array_filter([
+            'tahun' => $request->integer('tahun') ?: null,
+            'bulan' => $request->integer('bulan') ?: null,
+        ], fn ($v) => $v !== null && $v !== '');
+
+        return response()->json(['data' => $this->svc->dashboard($filters)]);
     }
 
     // ─── COA ─────────────────────────────────────────────────────────────

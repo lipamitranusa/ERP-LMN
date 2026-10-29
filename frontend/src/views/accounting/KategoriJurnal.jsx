@@ -17,8 +17,8 @@ import {
 
 const JENIS_LABEL = {
   adjustment: "Adjustment", pemasukan: "Pemasukan", pengeluaran: "Pengeluaran",
-  bkm: "Bank Masuk (BKM)", bkk: "Bank Keluar (BKK)",
-  kkm: "Kas Kecil Masuk (KKM)", kkk: "Kas Kecil Keluar (KKK)",
+  bkm: "Bank Masuk", bkk: "Bank Keluar",
+  kkm: "Kas Kecil Masuk", kkk: "Kas Kecil Keluar",
 };
 const JENIS_COLOR = {
   adjustment:  { bg: "#EFF6FF", color: "#1D4ED8" },

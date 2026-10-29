@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class InvoiceController extends Controller
 {
@@ -60,6 +61,7 @@ class InvoiceController extends Controller
             $invoice->update([
                 'metode_pembayaran' => BuktiPembayaran::METODE_VA,
                 'payment_reference' => $result['reference'],
+                'payment_order_id' => $result['order_id'] ?? null,
                 'payment_expired_at' => $result['expired_at'],
                 'va_bank' => $result['bank'] ?? null,
             ]);
@@ -94,6 +96,8 @@ class InvoiceController extends Controller
             $invoice->update([
                 'metode_pembayaran' => BuktiPembayaran::METODE_QRIS,
                 'payment_reference' => $result['reference'],
+                'payment_order_id' => $result['order_id'] ?? null,
+                'payment_qr_url' => $result['qr_string'] ?? null,
                 'payment_expired_at' => $result['expired_at'],
             ]);
         }
@@ -105,9 +109,41 @@ class InvoiceController extends Controller
         return response()->json([
             'data' => [
                 'reference' => $invoice->payment_reference,
-                'qr_string' => "FAKE-QR-{$invoice->id}",
+                'qr_string' => $invoice->payment_qr_url,
                 'expired_at' => $invoice->payment_expired_at,
                 'total' => (float) $invoice->total_tagihan,
+            ],
+        ]);
+    }
+
+    /**
+     * Fallback when the webhook never arrives: ask the gateway directly
+     * and apply the same settlement logic.
+     */
+    public function cekStatus(Request $request, Invoice $invoice): JsonResponse
+    {
+        $this->ensureSameLembaga($invoice);
+
+        if ($invoice->isLunas()) {
+            return response()->json(['data' => ['status' => $invoice->status, 'gateway_status' => 'settlement']]);
+        }
+
+        $driver = $this->gateways->driver();
+        $payload = $driver->fetchStatus($invoice);
+
+        if (! $payload) {
+            return response()->json([
+                'message' => 'Status pembayaran belum dapat dicek dari gateway.',
+            ], 422);
+        }
+
+        $this->processWebhook($payload, $driver->name());
+        $invoice->refresh();
+
+        return response()->json([
+            'data' => [
+                'status' => $invoice->status,
+                'gateway_status' => $payload['transaction_status'] ?? null,
             ],
         ]);
     }
@@ -179,6 +215,14 @@ class InvoiceController extends Controller
         $gateway = $request->input('gateway') ?? $this->gateways->currentDriverName();
         $signature = $this->resolveSignature($request, $gateway);
 
+        if ($signature === '' && $gateway === 'midtrans') {
+            $confirmed = $this->confirmUnsignedPayload($payload, $gateway);
+            if (! $confirmed) {
+                return response()->json(['message' => 'Unverified notification ignored.'], 200);
+            }
+            $payload = $confirmed;
+        }
+
         $driver = $this->gateways->driver($gateway);
         if (! $driver->verifyWebhookSignature($payload, $signature)) {
             // Debug: catat input aktual agar bisa dibandingkan
@@ -219,6 +263,14 @@ class InvoiceController extends Controller
         // (BUKAN X-Signature)
         $signature = $request->header('X-Midtrans-Signature', '');
 
+        if ($signature === '') {
+            $confirmed = $this->confirmUnsignedPayload($payload, 'midtrans');
+            if (! $confirmed) {
+                return response()->json(['message' => 'Unverified notification ignored.'], 200);
+            }
+            $payload = $confirmed;
+        }
+
         $driver = $this->gateways->driver('midtrans');
         if (! $driver->verifyWebhookSignature($payload, $signature)) {
             Log::warning('invoice.webhook.invalid_signature', [
@@ -244,6 +296,36 @@ class InvoiceController extends Controller
         }
     }
 
+    /**
+     * Notifikasi yang datang tanpa signature header tidak boleh dipercaya
+     * langsung. Konfirmasi dulu ke API gateway memakai order_id, lalu pakai
+     * payload hasil konfirmasi.
+     */
+    private function confirmUnsignedPayload(array $payload, string $gateway): ?array
+    {
+        $driver = $this->gateways->driver($gateway);
+        if (! method_exists($driver, 'fetchStatusByOrderId')) {
+            return null;
+        }
+
+        $orderId = (string) ($payload['order_id'] ?? '');
+        if ($orderId === '') {
+            return null;
+        }
+
+        $confirmed = $driver->fetchStatusByOrderId($orderId);
+        if (! $confirmed) {
+            Log::warning('invoice.webhook.unconfirmed', [
+                'gateway' => $gateway,
+                'order_id' => $orderId,
+                'note' => 'Notifikasi tanpa signature tidak bisa dikonfirmasi ke gateway — diabaikan',
+            ]);
+            return null;
+        }
+
+        return $confirmed;
+    }
+
     private function resolveSignature(Request $request, string $gateway): string
     {
         return match ($gateway) {
@@ -251,6 +333,75 @@ class InvoiceController extends Controller
             'xendit' => $request->header('x-callback-token', ''),
             default => $request->header('X-Signature', ''),
         };
+    }
+
+    /**
+     * Cari invoice untuk notifikasi gateway.
+     *
+     * Urutan lookup:
+     * 1. payment_order_id — disimpan saat charge dibuat (paling eksak)
+     * 2. payment_reference — nomor VA (VA) atau transaction id (QRIS)
+     * 3. nomor_invoice persis
+     * 4. order_id format lama (nomor_invoice tersanitasi + suffix timestamp)
+     * 5. id invoice — hanya bila formatnya UUID valid, karena find() dengan
+     *    string non-UUID melempar QueryException di PostgreSQL.
+     */
+    private function findInvoiceForWebhook(array $payload, ?string $invoiceId): ?Invoice
+    {
+        // Builder baru tiap percobaan — first() menambah kondisi pada builder
+        // yang sama, sehingga percobaan berikutnya menumpuk filter lama.
+        $base = fn () => Invoice::withoutGlobalScope('lembaga');
+
+        if ($invoiceId) {
+            $invoice = $base()->where('payment_order_id', $invoiceId)->first();
+            if ($invoice) {
+                return $invoice;
+            }
+        }
+
+        $references = array_filter([
+            $payload['va_numbers'][0]['va_number'] ?? null,
+            $payload['transaction_id'] ?? null,
+        ]);
+
+        foreach ($references as $reference) {
+            $invoice = $base()->where('payment_reference', $reference)->first();
+            if ($invoice) {
+                return $invoice;
+            }
+        }
+
+        if (! $invoiceId) {
+            return null;
+        }
+
+        $invoice = $base()->where('nomor_invoice', $invoiceId)->first();
+        if ($invoice) {
+            return $invoice;
+        }
+
+        $orderBase = preg_replace('/-\d{6}$/', '', $invoiceId);
+        if ($orderBase !== $invoiceId) {
+            $invoice = $base()->whereNotNull('payment_reference')->get()
+                ->first(fn (Invoice $inv) => $this->sanitizeOrderId($inv->nomor_invoice ?? '') === $orderBase);
+            if ($invoice) {
+                return $invoice;
+            }
+        }
+
+        if (Str::isUuid($invoiceId)) {
+            return $base()->find($invoiceId);
+        }
+
+        return null;
+    }
+
+    /**
+     * Sama dengan normalisasi order_id di MidtransDriver::buildOrderId.
+     */
+    private function sanitizeOrderId(string $value): string
+    {
+        return preg_replace('/[^A-Za-z0-9\-_]/', '-', $value);
     }
 
     private function processWebhook(array $payload, string $gateway): JsonResponse
@@ -273,16 +424,7 @@ class InvoiceController extends Controller
             return response()->json(['message' => 'Missing order identifier.'], 422);
         }
 
-        $invoice = Invoice::where('nomor_invoice', $invoiceId)->first();
-        if (! $invoice) {
-            $invoice = Invoice::find($invoiceId);
-        }
-        // Midtrans VA: order_id kita tambahkan suffix timestamp agar unik,
-        // jadi lookup lewat VA number (payment_reference) lebih reliable
-        if (! $invoice && ! empty($payload['va_numbers'][0]['va_number'])) {
-            $vaNumber = $payload['va_numbers'][0]['va_number'];
-            $invoice = Invoice::where('payment_reference', $vaNumber)->first();
-        }
+        $invoice = $this->findInvoiceForWebhook($payload, $invoiceId);
         if (! $invoice) {
             Log::info('invoice.webhook.unknown_invoice', [
                 'gateway' => $gateway,
@@ -306,15 +448,24 @@ class InvoiceController extends Controller
         $paidStatuses = ['settlement', 'capture', 'SUCCESS', 'PAID'];
         if (in_array($status, $paidStatuses) && $grossAmount > 0) {
             DB::transaction(function () use ($invoice, $grossAmount, $status) {
-                BuktiPembayaran::create([
-                    'invoice_id' => $invoice->id,
-                    'nominal' => $grossAmount,
-                    'metode' => $invoice->metode_pembayaran ?? BuktiPembayaran::METODE_VA,
-                    'status_verifikasi' => BuktiPembayaran::STATUS_DITERIMA,
-                    'sumber' => BuktiPembayaran::SUMBER_GATEWAY,
-                    'tanggal_submit' => now(),
-                    'tanggal_verifikasi' => now(),
-                ]);
+                // Midtrans mengirim ulang notifikasi yang sama bila respons tidak
+                // diterima — jangan buat bukti pembayaran ganda.
+                $sudahAda = BuktiPembayaran::where('invoice_id', $invoice->id)
+                    ->where('sumber', BuktiPembayaran::SUMBER_GATEWAY)
+                    ->where('nominal', $grossAmount)
+                    ->exists();
+
+                if (! $sudahAda) {
+                    BuktiPembayaran::create([
+                        'invoice_id' => $invoice->id,
+                        'nominal' => $grossAmount,
+                        'metode' => $invoice->metode_pembayaran ?? BuktiPembayaran::METODE_VA,
+                        'status_verifikasi' => BuktiPembayaran::STATUS_DITERIMA,
+                        'sumber' => BuktiPembayaran::SUMBER_GATEWAY,
+                        'tanggal_submit' => now(),
+                        'tanggal_verifikasi' => now(),
+                    ]);
+                }
 
                 app(\App\Services\Payment\InvoicePaidCalculator::class)->recalculate($invoice);
             });

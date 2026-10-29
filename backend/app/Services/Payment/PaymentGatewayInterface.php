@@ -29,6 +29,12 @@ interface PaymentGatewayInterface
     public function checkStatus(Invoice $invoice): string;
 
     /**
+     * Ambil payload status mentah dari gateway (null bila gateway tidak mendukung).
+     * Dipakai sebagai fallback saat webhook tidak sampai.
+     */
+    public function fetchStatus(Invoice $invoice): ?array;
+
+    /**
      * Verify the webhook signature.
      */
     public function verifyWebhookSignature(array $payload, string $signature): bool;

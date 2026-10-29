@@ -164,6 +164,10 @@ class SiklusAkreditasiController extends Controller
             'dfo_data' => $data['dfo_data'] ?? null,
             'status' => 'menunggu_dokumen',
             'status_kelengkapan' => 'menunggu',
+            // Tahapan selalu diisi sejak dibuat. Kalau NULL, accessor
+            // getTahapanAttribute() akan mencoba membaca relasi `pks` saat
+            // serialisasi → lazy loading violation → HTTP 500.
+            'tahapan' => 1,
             'created_at' => now(),
         ]);
 

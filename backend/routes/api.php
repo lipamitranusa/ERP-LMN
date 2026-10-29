@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\LembagaController;
 use App\Http\Controllers\Api\MailSettingController;
 use App\Http\Controllers\Api\MasterTenagaAhliController;
 use App\Http\Controllers\Api\MenuActionController;
+use App\Http\Controllers\Api\NotifikasiTemplateController;
 use App\Http\Controllers\Api\PaymentSettingController;
 use App\Http\Controllers\Api\PenugasanController;
 use App\Http\Controllers\Api\PksController;
@@ -414,6 +415,8 @@ Route::prefix('invoice')->group(function () {
             ->post('/{invoice}/bayar-va', [InvoiceController::class, 'bayarVa']);
         Route::middleware('privilege:Kontrak & Invoicing,Ubah')
             ->post('/{invoice}/bayar-qris', [InvoiceController::class, 'bayarQris']);
+        Route::middleware('privilege:Kontrak & Invoicing,Ubah')
+            ->post('/{invoice}/cek-status', [InvoiceController::class, 'cekStatus']);
         Route::middleware('privilege:Kontrak & Invoicing,Tambah')
             ->post('/{invoice}/bukti-manual', [InvoiceController::class, 'uploadBuktiManual']);
 
@@ -468,6 +471,19 @@ Route::prefix('whatsapp-settings')->group(function () {
     // Webhook — public (verified by token)
     Route::post('/webhook', [WhatsAppSettingController::class, 'webhook']);
     Route::get('/webhook', [WhatsAppSettingController::class, 'webhook']);
+});
+
+Route::prefix('notifikasi-template')->middleware(['auth:sanctum', 'lembaga'])->group(function () {
+    Route::middleware('privilege:Pengaturan Hak Akses,Ubah')
+        ->get('/', [NotifikasiTemplateController::class, 'index']);
+    Route::middleware('privilege:Pengaturan Hak Akses,Ubah')
+        ->get('/{channel}', [NotifikasiTemplateController::class, 'byChannel']);
+    Route::middleware('privilege:Pengaturan Hak Akses,Ubah')
+        ->put('/', [NotifikasiTemplateController::class, 'update']);
+    Route::middleware('privilege:Pengaturan Hak Akses,Ubah')
+        ->post('/preview', [NotifikasiTemplateController::class, 'preview']);
+    Route::middleware('privilege:Pengaturan Hak Akses,Ubah')
+        ->post('/reset', [NotifikasiTemplateController::class, 'reset']);
 });
 
 Route::prefix('bukti')->middleware(['auth:sanctum', 'lembaga'])->group(function () {

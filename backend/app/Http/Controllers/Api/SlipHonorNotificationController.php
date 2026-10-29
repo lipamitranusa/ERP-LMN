@@ -8,6 +8,7 @@ use App\Models\PembayaranHonor;
 use App\Models\TenagaAhli;
 use App\Services\LembagaHeaderService;
 use App\Services\Notification\EmailChannel;
+use App\Services\Notification\NotifikasiTemplateService;
 use App\Services\Notification\WhatsAppChannel;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -30,6 +31,7 @@ class SlipHonorNotificationController extends Controller
         private WhatsAppChannel $wa,
         private EmailChannel $email,
         private LembagaHeaderService $lembaga,
+        private NotifikasiTemplateService $templates,
     ) {}
 
     /**
@@ -123,13 +125,36 @@ class SlipHonorNotificationController extends Controller
         // Collect recipients from all tenaga ahli in this payment
         $recipients = $this->collectRecipients($p);
 
+        // Template pesan (tab "Format Pesan" di Pengaturan).
+        $waAktif = $this->templates->status('whatsapp', 'slip_honor') !== 'disabled';
+        $emailAktif = $this->templates->status('email', 'slip_honor') !== 'disabled';
+
         if ($channel === 'whatsapp' || $channel === 'both') {
             foreach ($recipients as $recipient) {
+                if (! $waAktif) {
+                    $results[] = [
+                        'channel' => 'whatsapp',
+                        'recipient' => $recipient['no_hp'] ?? null,
+                        'nama' => $recipient['nama'],
+                        'status' => 'gagal',
+                        'error' => 'Notifikasi WhatsApp dimatikan pada pengaturan Format Pesan.',
+                    ];
+                    continue;
+                }
+
                 if (! empty($recipient['no_hp'])) {
+                    // Template dirender per penerima — satu pembayaran honor bisa
+                    // untuk beberapa tenaga ahli, jadi {{nama_tenaga_ahli}} harus
+                    // mengikuti penerima masing-masing.
+                    $waTemplate = $this->templates->compose('whatsapp', 'slip_honor', $this->buildContext($slip, $recipient['nama']), [
+                        'subject' => $subject,
+                        'body' => $this->buildWhatsAppMessage($slip, $recipient),
+                    ]);
+
                     $sent = $this->wa->send(
                         $recipient['no_hp'],
-                        $subject,
-                        $this->buildWhatsAppMessage($slip, $recipient),
+                        $waTemplate['subject'] ?? $subject,
+                        $waTemplate['body'] ?? $this->buildWhatsAppMessage($slip, $recipient),
                     );
                     $results[] = [
                         'channel' => 'whatsapp',
@@ -144,10 +169,27 @@ class SlipHonorNotificationController extends Controller
 
         if ($channel === 'email' || $channel === 'both') {
             foreach ($recipients as $recipient) {
+                if (! $emailAktif) {
+                    $results[] = [
+                        'channel' => 'email',
+                        'recipient' => $recipient['email'] ?? null,
+                        'nama' => $recipient['nama'],
+                        'status' => 'gagal',
+                        'error' => 'Notifikasi email dimatikan pada pengaturan Format Pesan.',
+                    ];
+                    continue;
+                }
+
                 if (! empty($recipient['email'])) {
+                    // Isi email tetap dokumen slip honor; template customizing subjek.
+                    $emailTemplate = $this->templates->compose('email', 'slip_honor', $this->buildContext($slip, $recipient['nama']), [
+                        'subject' => $subject,
+                        'body' => $plainSlip,
+                    ]);
+
                     $sent = $this->email->send(
                         $recipient['email'],
-                        $subject,
+                        $emailTemplate['subject'] ?? $subject,
                         $plainSlip,
                     );
                     $results[] = [
@@ -288,12 +330,37 @@ class SlipHonorNotificationController extends Controller
                 'tenaga_ahli_id' => $ta->id,
                 'nama' => $ta->nama,
                 'email' => $akun?->email ?? null,
-                // no_hp: perlu ditambahkan field di AkunPengguna / TenagaAhli jika ingin kirim WA
-                'no_hp' => null,
+                'no_hp' => $ta->no_wa,
             ];
         }
 
         return $recipients;
+    }
+
+    /**
+     * Nilai placeholder untuk template pesan slip honor.
+     *
+     * @return array<string, string>
+     */
+    private function buildContext(array $slip, ?string $namaPenerima = null): array
+    {
+        $ta = $slip['tenaga_ahli'];
+        $total = $slip['total'];
+
+        return [
+            'nama_tenaga_ahli' => $namaPenerima ?? ($ta['nama'] ?? '-'),
+            'nomor_pembayaran' => $slip['nomor_pembayaran'],
+            'tanggal_pembayaran' => $slip['tanggal_pembayaran'],
+            'metode' => $slip['metode'],
+            'total_bruto' => number_format($total['bruto'], 0, ',', '.'),
+            'total_ppn' => number_format($total['ppn'], 0, ',', '.'),
+            'total_pph' => number_format($total['pph'], 0, ',', '.'),
+            'total_neto' => number_format($total['neto'], 0, ',', '.'),
+            'blok_ac7' => $total['ac7_valid']
+                ? "✅ AC-7: VALID\n"
+                : "⚠️ AC-7: SELISIH ".number_format($total['selisih'], 2)."\n",
+            'nama_lembaga' => $this->lembaga->getHeader()['nama'] ?? config('app.name', 'Lembaga Akreditasi Kesehatan'),
+        ];
     }
 
     private function buildWhatsAppMessage(array $slip, array $recipient): string

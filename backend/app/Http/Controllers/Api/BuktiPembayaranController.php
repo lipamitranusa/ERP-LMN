@@ -339,6 +339,9 @@ class BuktiPembayaranController extends Controller
                         . "Terima kasih,\nLIPA MITRA NUSA",
                     siklusId: $invoice->siklus_id,
                     jenis: 'bukti_ditolak',
+                    context: $this->buildContext($invoice, [
+                        'alasan_penolakan' => $data['alasan_penolakan'],
+                    ]),
                 );
             } elseif ($newInvoiceStatus === Invoice::STATUS_LUNAS) {
                 $faskes = $invoice->siklus->faskes;
@@ -352,6 +355,7 @@ class BuktiPembayaranController extends Controller
                         . "Terima kasih,\nLIPA MITRA NUSA",
                     siklusId: $invoice->siklus_id,
                     jenis: 'invoice_lunas',
+                    context: $this->buildContext($invoice),
                 );
             }
 
@@ -360,6 +364,24 @@ class BuktiPembayaranController extends Controller
                 'invoice_status' => $newInvoiceStatus,
             ]);
         });
+    }
+
+    /**
+     * Nilai placeholder untuk template pesan notifikasi.
+     *
+     * @param  array  $extra  nilai tambahan per jenis notifikasi
+     * @return array<string, string>
+     */
+    private function buildContext(Invoice $invoice, array $extra = []): array
+    {
+        $faskes = $invoice->siklus?->faskes;
+
+        return array_merge([
+            'nama_faskes' => $faskes?->nama ?? '-',
+            'nomor_invoice' => $invoice->nomor_invoice,
+            'total_tagihan' => number_format((float) $invoice->total_tagihan, 0, ',', '.'),
+            'nama_lembaga' => $invoice->siklus?->lembaga?->nama ?? 'Lembaga Akreditasi',
+        ], $extra);
     }
 
     /**

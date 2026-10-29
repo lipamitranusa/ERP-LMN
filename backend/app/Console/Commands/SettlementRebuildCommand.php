@@ -4,7 +4,10 @@ namespace App\Console\Commands;
 
 use App\Models\BuktiPembayaran;
 use App\Models\HutangPajak;
+use App\Models\Invoice;
+use App\Models\LedgerEntry;
 use App\Models\PembayaranHonor;
+use App\Services\Keuangan\AccrualJournalService;
 use App\Services\Keuangan\SettlementJournalService;
 use Illuminate\Console\Command;
 
@@ -18,13 +21,15 @@ use Illuminate\Console\Command;
 class SettlementRebuildCommand extends Command
 {
     protected $signature = 'settlement:rebuild
-                            {--scope=all : all|ar|ap_honor|ap_pajak}
+                            {--scope=all : all|ar|ap_honor|ap_pajak|akrual}
                             {--dry-run : Tampilkan rencana tanpa membuat jurnal}';
 
-    protected $description = 'Backfill jurnal settlement AP/AR yang hilang (idempotent)';
+    protected $description = 'Backfill jurnal settlement AP/AR dan jurnal akrual yang hilang (idempotent)';
 
-    public function handle(SettlementJournalService $svc): int
-    {
+    public function handle(
+        SettlementJournalService $svc,
+        AccrualJournalService $accrual,
+    ): int {
         $scope = $this->option('scope');
         $dryRun = (bool) $this->option('dry-run');
 
@@ -101,9 +106,100 @@ class SettlementRebuildCommand extends Command
             }
         }
 
+        if ($scope === 'all' || $scope === 'akrual') {
+            $this->rebuildAkrual($accrual, $dryRun, $created, $skipped, $errors);
+        }
+
         $this->newLine();
         $this->info("Ringkasan: {$created} jurnal baru, {$skipped} dilewati (sudah ada), {$errors} error.");
 
         return $errors > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * Backfill jurnal akrual: pengakuan pendapatan (invoice terbit) dan
+     * beban honor (ledger entry honor), plus pembalik pendapatan untuk
+     * invoice yang di-supersede.
+     */
+    private function rebuildAkrual(
+        AccrualJournalService $accrual,
+        bool $dryRun,
+        int &$created,
+        int &$skipped,
+        int &$errors,
+    ): void {
+        $invoiceList = Invoice::where('total_tagihan', '>', 0)
+            ->where('status', '!=', Invoice::STATUS_SUPERSEDED)
+            ->get();
+        $this->info("[Akrual] {$invoiceList->count()} invoice aktif ditemukan.");
+
+        foreach ($invoiceList as $invoice) {
+            if ($accrual->sudahAdaJurnalPendapatan($invoice)) {
+                $skipped++;
+                continue;
+            }
+            if ($dryRun) {
+                $this->line("  [dry-run] akan buat jurnal pendapatan untuk invoice {$invoice->nomor_invoice} (total: {$invoice->total_tagihan})");
+                continue;
+            }
+            try {
+                $accrual->recordPendapatanInvoice($invoice);
+                $created++;
+                $this->line("  ✓ Invoice {$invoice->nomor_invoice} → jurnal pendapatan dibuat");
+            } catch (\Throwable $e) {
+                $errors++;
+                $this->error("  ✗ Invoice {$invoice->nomor_invoice}: {$e->getMessage()}");
+            }
+        }
+
+        $entryList = LedgerEntry::whereIn('tipe', [
+            LedgerEntry::TIPE_AP_HONOR_SURVEIOR,
+            LedgerEntry::TIPE_AP_HONOR_VERIFIKATOR,
+            LedgerEntry::TIPE_AP_HONOR_REKOMENDATOR,
+        ])->get();
+        $this->info("[Akrual] {$entryList->count()} entry honor ditemukan.");
+
+        foreach ($entryList as $entry) {
+            if ($accrual->sudahAdaJurnalBebanHonor($entry)) {
+                $skipped++;
+                continue;
+            }
+            if ($dryRun) {
+                $this->line("  [dry-run] akan buat jurnal beban honor untuk entry {$entry->id} (bruto: {$entry->nominal_bruto})");
+                continue;
+            }
+            try {
+                $accrual->recordBebanHonor($entry);
+                $created++;
+                $this->line("  ✓ Entry honor {$entry->id} → jurnal beban dibuat");
+            } catch (\Throwable $e) {
+                $errors++;
+                $this->error("  ✗ Entry honor {$entry->id}: {$e->getMessage()}");
+            }
+        }
+
+        // Invoice superseded → pembalik pengakuan pendapatan.
+        $superseded = Invoice::where('status', Invoice::STATUS_SUPERSEDED)->get();
+        foreach ($superseded as $invoice) {
+            if (! $accrual->sudahAdaJurnalPendapatan($invoice)) {
+                continue;
+            }
+            if ($accrual->sudahAdaJurnalPembalikPendapatan($invoice)) {
+                $skipped++;
+                continue;
+            }
+            if ($dryRun) {
+                $this->line("  [dry-run] akan buat jurnal pembalik pendapatan untuk invoice {$invoice->nomor_invoice}");
+                continue;
+            }
+            try {
+                $accrual->reversePendapatanInvoice($invoice);
+                $created++;
+                $this->line("  ✓ Invoice {$invoice->nomor_invoice} → jurnal pembalik pendapatan dibuat");
+            } catch (\Throwable $e) {
+                $errors++;
+                $this->error("  ✗ Invoice {$invoice->nomor_invoice}: {$e->getMessage()}");
+            }
+        }
     }
 }

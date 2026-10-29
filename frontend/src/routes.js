@@ -274,7 +274,7 @@ var routes = [
       },
       {
         path: "/accounting/bank-masuk",
-        name: "Bank Masuk (BKM)",
+        name: "Bank Masuk",
         icon: NavIcon({ name: "money" }),
         componentName: "BankReceipt",
         layout: "/admin",
@@ -282,7 +282,7 @@ var routes = [
       },
       {
         path: "/accounting/bank-keluar",
-        name: "Bank Keluar (BKK)",
+        name: "Bank Keluar",
         icon: NavIcon({ name: "money" }),
         componentName: "BankDisbursement",
         layout: "/admin",
@@ -290,7 +290,7 @@ var routes = [
       },
       {
         path: "/accounting/kas-kecil-masuk",
-        name: "Kas Kecil Masuk (KKM)",
+        name: "Kas Kecil Masuk",
         icon: NavIcon({ name: "coins" }),
         componentName: "CashReceipt",
         layout: "/admin",
@@ -298,7 +298,7 @@ var routes = [
       },
       {
         path: "/accounting/kas-kecil-keluar",
-        name: "Kas Kecil Keluar (KKK)",
+        name: "Kas Kecil Keluar",
         icon: NavIcon({ name: "coins" }),
         componentName: "CashDisbursement",
         layout: "/admin",

@@ -34,6 +34,12 @@ const JENIS_COLOR = {
   kkk:         "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400",
 };
 
+const JENIS_LABEL = {
+  adjustment: "Adjustment", pemasukan: "Pemasukan", pengeluaran: "Pengeluaran",
+  bkm: "Bank Masuk", bkk: "Bank Keluar",
+  kkm: "Kas Kecil Masuk", kkk: "Kas Kecil Keluar",
+};
+
 const EMPTY_FORM = { tanggal: new Date().toISOString().split("T")[0], kategori_id: "", keterangan: "" };
 
 const schema = z.object({
@@ -244,8 +250,8 @@ export default function AccountingJurnal() {
                 <td>
                   <div style={{ fontFamily: "ui-monospace", fontSize: "12px", fontWeight: "700", color: "hsl(var(--foreground))" }}>{j.nomor}</div>
                   {j.kategori?.jenis && (
-                    <span className={`inline-block mt-0.5 px-2 py-px rounded-full text-[10px] font-bold uppercase tracking-wider ${JENIS_COLOR[j.kategori?.jenis] || "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:text-slate-500"}`}>
-                      {j.kategori.jenis.toUpperCase()}
+                    <span className={`inline-block mt-0.5 px-2 py-px rounded-full text-[10px] font-bold ${JENIS_COLOR[j.kategori?.jenis] || "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:text-slate-500"}`}>
+                      {JENIS_LABEL[j.kategori.jenis] || j.kategori.jenis}
                     </span>
                   )}
                 </td>

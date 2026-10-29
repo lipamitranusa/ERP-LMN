@@ -63,6 +63,11 @@ class FakeGateway implements PaymentGatewayInterface
         return 'pending';
     }
 
+    public function fetchStatus(Invoice $invoice): ?array
+    {
+        return null;
+    }
+
     public function verifyWebhookSignature(array $payload, string $signature): bool
     {
         return $signature === 'fake-signature-' . ($payload['order_id'] ?? '');

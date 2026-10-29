@@ -9,7 +9,9 @@ use App\Models\HutangPajak;
 use App\Models\Invoice;
 use App\Models\JurnalUmum;
 use App\Models\Lembaga;
+use App\Models\LedgerEntry;
 use App\Models\PembayaranHonor;
+use App\Services\Keuangan\AccrualJournalService;
 use App\Services\Keuangan\SettlementJournalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,7 +29,10 @@ use Illuminate\Http\Request;
  */
 class SettlementJournalController extends Controller
 {
-    public function __construct(private SettlementJournalService $svc) {}
+    public function __construct(
+        private SettlementJournalService $svc,
+        private AccrualJournalService $accrual,
+    ) {}
 
     /**
      * GET /api/keuangan/settlement
@@ -158,12 +163,6 @@ class SettlementJournalController extends Controller
             if (! empty($result['error'])) $errors[] = $result;
         } elseif ($scope === 'all' || ! $scope) {
             // Rebuild AR — bukti_pembayaran diterima
-            $buktiList = BuktiPembayaran::where('status_verifikasi', BuktiPembayaran::STATUS_DITERIMA)
-                ->whereNull('tanggal_verifikasi')
-                ->orWhereNotNull('tanggal_verifikasi')
-                ->get();
-            // (whereNull+orWhereNotNull adalah no-op; di bawah kita filter
-            // via existingJurnal check.)
             $buktiList = BuktiPembayaran::where('status_verifikasi', BuktiPembayaran::STATUS_DITERIMA)->get();
 
             foreach ($buktiList as $bukti) {
@@ -190,6 +189,17 @@ class SettlementJournalController extends Controller
                 elseif ($r['success']) $skipped++;
                 else $errors[] = $r;
             }
+
+            // Rebuild jurnal akrual — pengakuan pendapatan & beban honor
+            $r = $this->rebuildAkrual();
+            $created += $r['created'];
+            $skipped += $r['skipped'];
+            $errors = array_merge($errors, $r['errors']);
+        } elseif ($scope === 'akrual') {
+            $r = $this->rebuildAkrual();
+            $created += $r['created'];
+            $skipped += $r['skipped'];
+            $errors = array_merge($errors, $r['errors']);
         } else {
             return response()->json(['message' => 'Berikan ref_type + ref_id, atau scope=all.'], 422);
         }
@@ -521,6 +531,85 @@ class SettlementJournalController extends Controller
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────
+
+    /**
+     * Rebuild jurnal akrual untuk dokumen yang sudah ada: pengakuan
+     * pendapatan (invoice terbit), beban honor (ledger entry honor), dan
+     * pembalik pendapatan untuk invoice superseded.
+     *
+     * Idempotent — dokumen yang sudah punya jurnal dilewati.
+     *
+     * @return array{created: int, skipped: int, errors: array<int, array>}
+     */
+    private function rebuildAkrual(): array
+    {
+        $created = 0;
+        $skipped = 0;
+        $errors = [];
+
+        $invoiceList = Invoice::where('total_tagihan', '>', 0)
+            ->where('status', '!=', Invoice::STATUS_SUPERSEDED)
+            ->get();
+        foreach ($invoiceList as $invoice) {
+            if ($this->accrual->sudahAdaJurnalPendapatan($invoice)) {
+                $skipped++;
+                continue;
+            }
+            try {
+                $jurnal = $this->accrual->recordPendapatanInvoice($invoice);
+                if ($jurnal) {
+                    $created++;
+                } else {
+                    $errors[] = ['invoice_id' => $invoice->id, 'error' => 'COA piutang usaha atau pendapatan tidak tersedia.'];
+                }
+            } catch (\Throwable $e) {
+                $errors[] = ['invoice_id' => $invoice->id, 'error' => $e->getMessage()];
+            }
+        }
+
+        $entryList = LedgerEntry::whereIn('tipe', [
+            LedgerEntry::TIPE_AP_HONOR_SURVEIOR,
+            LedgerEntry::TIPE_AP_HONOR_VERIFIKATOR,
+            LedgerEntry::TIPE_AP_HONOR_REKOMENDATOR,
+        ])->get();
+        foreach ($entryList as $entry) {
+            if ($this->accrual->sudahAdaJurnalBebanHonor($entry)) {
+                $skipped++;
+                continue;
+            }
+            try {
+                $jurnal = $this->accrual->recordBebanHonor($entry);
+                if ($jurnal) {
+                    $created++;
+                } else {
+                    $errors[] = ['ledger_entry_id' => $entry->id, 'error' => 'COA beban honor atau utang honor tidak tersedia.'];
+                }
+            } catch (\Throwable $e) {
+                $errors[] = ['ledger_entry_id' => $entry->id, 'error' => $e->getMessage()];
+            }
+        }
+
+        $superseded = Invoice::where('status', Invoice::STATUS_SUPERSEDED)->get();
+        foreach ($superseded as $invoice) {
+            if (! $this->accrual->sudahAdaJurnalPendapatan($invoice)) {
+                continue;
+            }
+            if ($this->accrual->sudahAdaJurnalPembalikPendapatan($invoice)) {
+                $skipped++;
+                continue;
+            }
+            try {
+                $jurnal = $this->accrual->reversePendapatanInvoice($invoice);
+                if ($jurnal) {
+                    $created++;
+                }
+            } catch (\Throwable $e) {
+                $errors[] = ['invoice_id' => $invoice->id, 'error' => $e->getMessage()];
+            }
+        }
+
+        return ['created' => $created, 'skipped' => $skipped, 'errors' => $errors];
+    }
 
     private function rebuildOne(string $refType, string $refId, ?string $userId): array
     {

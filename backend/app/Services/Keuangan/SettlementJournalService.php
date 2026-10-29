@@ -436,8 +436,10 @@ class SettlementJournalService
      * Buat Jurnal Umum balanced (Dr = Cr) dengan multiple detail baris.
      * Idempotent berdasarkan ref_type + ref_id: kalau sudah ada, kembalikan
      * yang existing tanpa membuat duplikat.
+     *
+     * Dipakai juga oleh AccrualJournalService untuk jurnal akrual.
      */
-    private function createBalancedJurnal(
+    public function createBalancedJurnal(
         Carbon $tanggal,
         string $kategoriJenis,
         string $keterangan,
@@ -581,7 +583,7 @@ class SettlementJournalService
      * Lookup COA berdasarkan kode akuntansi (mis. '1105' = Piutang Usaha).
      * Prioritas: COA dengan lembaga_id yang match → fallback ke lembaga_id NULL.
      */
-    private function getCoaByKode(string $kode, ?string $lembagaId): ?Coa
+    public function getCoaByKode(string $kode, ?string $lembagaId): ?Coa
     {
         $q = Coa::query()->where('kode', $kode)->where('is_aktif', true);
         if ($lembagaId) {

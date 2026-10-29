@@ -13,6 +13,7 @@ use App\Models\TenagaAhli;
 use App\Services\AttachmentService;
 use App\Services\AuditService;
 use App\Services\Keuangan\LedgerService;
+use App\Services\Notification\PenugasanNotifier;
 use App\Services\Verifikasi\RekomendasiQueueService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -165,7 +166,7 @@ class PenugasanController extends Controller
      * Admin mengganti surveyor/verifikator tertentu dengan yang lain.
      * TA pengganti harus: peran sama, jenis sama (TKPP→TKPP atau TKSDU→TKSDU), tidak sedang bertugas.
      */
-    public function replace(Request $request, Penugasan $penugasan, AuditService $audit): JsonResponse
+    public function replace(Request $request, Penugasan $penugasan, AuditService $audit, PenugasanNotifier $notifier): JsonResponse
     {
         if (! in_array($penugasan->status, [
             Penugasan::STATUS_MENUNGGU,
@@ -281,6 +282,9 @@ class PenugasanController extends Controller
 
         $newPenugasan->load(['tenagaAhli', 'siklus.faskes']);
 
+        // NFR-1: kabari tenaga ahli pengganti.
+        $notifier->kirim($newPenugasan);
+
         return response()->json([
             'data' => $newPenugasan,
             'message' => "Tenaga ahli {$taLama->nama} diganti dengan {$taBaru->nama}.",
@@ -335,17 +339,47 @@ class PenugasanController extends Controller
         }
 
         $penugasan = $query
-            ->orderBy('id', 'desc')
-            ->get();
+            ->get()
+            // Penugasan terbaru tampil paling depan.
+            ->sortByDesc(fn ($p) => $p->created_at ? $p->created_at->getTimestamp() : 0)
+            ->values();
+
+        // Laporan pengerjaan (dikirim tenaga ahli) — eager load tanpa global scope
+        // supaya relasi penugasan tidak null. Batasi ke siklus milik user ini.
+        $siklusIds = $penugasan->pluck('siklus_id')->unique();
+
+        $laporan = LaporanPengerjaan::withoutGlobalScope('lembaga')
+            ->with(['penugasan' => fn ($q) => $q->withoutGlobalScope('lembaga')])
+            ->whereHas('penugasan', fn ($q) => $q->withoutGlobalScope('lembaga')->whereIn('siklus_id', $siklusIds))
+            ->get()
+            ->filter(fn ($lp) => $lp->penugasan);
+
+        // Tanggal kirim laporan per penugasan (pemilik laporan).
+        $tanggalLaporanSendiri = $laporan
+            ->filter(fn ($lp) => $lp->penugasan->jenis === Penugasan::JENIS_SURVEI)
+            ->mapWithKeys(fn ($lp) => [
+                $lp->penugasan->siklus_id => $lp->created_at,
+            ]);
 
         // Cek apakah setiap siklus+jenis sudah punya laporan (dari surveyor lain)
-        $siklusJenisDenganLaporan = LaporanPengerjaan::whereHas('penugasan', function ($q) use ($user) {
-            $q->where('tenaga_ahli_id', '!=', $user->tenaga_ahli_id);
-        })->get()->map(fn($lp) => $lp->penugasan->siklus_id . '|' . $lp->penugasan->jenis)->values()->toArray();
+        $siklusJenisDenganLaporan = $laporan
+            ->filter(fn ($lp) => $lp->penugasan->tenaga_ahli_id !== $user->tenaga_ahli_id)
+            ->map(fn ($lp) => $lp->penugasan->siklus_id . '|' . $lp->penugasan->jenis)
+            ->unique()
+            ->values()
+            ->toArray();
 
-        $data = $penugasan->map(function ($p) use ($siklusJenisDenganLaporan) {
+        $data = $penugasan->map(function ($p) use ($siklusJenisDenganLaporan, $tanggalLaporanSendiri, $laporan) {
             $key = $p->siklus_id . '|' . $p->jenis;
             $p->sudah_ada_laporan = in_array($key, $siklusJenisDenganLaporan, true);
+
+            // Tanggal kirim laporan survei di siklus ini (untuk kartu verifikator).
+            $p->tanggal_kirim_laporan_survei = $tanggalLaporanSendiri[$p->siklus_id] ?? null;
+
+            // Tanggal kirim laporan verifikasi milik penugasan ini.
+            $laporanVerifikasi = $laporan->firstWhere('penugasan_id', $p->id);
+            $p->tanggal_kirim_laporan_verifikasi = $laporanVerifikasi?->created_at ?? $p->tanggal_selesai;
+
             return $p;
         });
 
@@ -381,7 +415,7 @@ class PenugasanController extends Controller
      * FR-3.3: alur penggantian round-robin.
      * FR-3.5: jika ditolak, otomatis tawarkan ke kandidat berikutnya.
      */
-    public function store(Request $request, AuditService $audit): JsonResponse
+    public function store(Request $request, AuditService $audit, PenugasanNotifier $notifier): JsonResponse
     {
         $data = $request->validate([
             'siklus_id' => 'required|uuid|exists:siklus_akreditasi,id',
@@ -476,6 +510,9 @@ class PenugasanController extends Controller
 
         $penugasan->load(['tenagaAhli', 'siklus.faskes']);
 
+        // NFR-1: kabari tenaga ahli (WhatsApp ke no_wa master / email fallback).
+        $notifier->kirim($penugasan);
+
         return response()->json([
             'data' => $penugasan,
             'message' => "Penugasan {$data['jenis']} ditawarkan ke {$kandidat->nama}.",
@@ -495,7 +532,7 @@ class PenugasanController extends Controller
      *
      * Field surat_tugas (file PDF, opsional) digunakan untuk SEMUA penugasan yang dibuat.
      */
-    public function appoint(Request $request, AttachmentService $attachment, AuditService $audit): JsonResponse
+    public function appoint(Request $request, AttachmentService $attachment, AuditService $audit, PenugasanNotifier $notifier): JsonResponse
     {
         \Log::debug('appoint', [
             'ta_ids' => $request->input('tenaga_ahli_ids'),
@@ -724,6 +761,9 @@ class PenugasanController extends Controller
             if ($ta && $ta->status_penugasan_saat_ini !== TenagaAhli::STATUS_SEDANG_BERTUGAS) {
                 $ta->forceFill(['status_penugasan_saat_ini' => 'menunggu'])->save();
             }
+
+            // NFR-1: kabari tenaga ahli yang baru ditugaskan.
+            $notifier->kirim($p);
         }
 
         $penugasanIds = collect($penugasanList)->pluck('id')->toArray();

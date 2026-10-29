@@ -31,6 +31,8 @@ class Invoice extends Model
         'keterangan',
         'metode_pembayaran',
         'payment_reference',
+        'payment_order_id',
+        'payment_qr_url',
         'payment_expired_at',
         'tanggal_lunas',
         'va_bank',

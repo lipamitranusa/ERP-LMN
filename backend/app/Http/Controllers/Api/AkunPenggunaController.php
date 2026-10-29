@@ -88,6 +88,7 @@ class AkunPenggunaController extends Controller
 
         // lembaga_id (default) = lembaga pertama dari array lembaga_ids
         $lembagaIds = $this->resolveLembagaIds($data);
+        $lembagaIds = $this->selaraskanLembagaDenganTenagaAhli($lembagaIds, $data);
         $defaultLembagaId = $lembagaIds[0] ?? null;
 
         $akun = AkunPengguna::create([
@@ -174,6 +175,7 @@ class AkunPenggunaController extends Controller
 
         // lembaga_id (default) = lembaga pertama dari array lembaga_ids
         $lembagaIds = $this->resolveLembagaIds($data);
+        $lembagaIds = $this->selaraskanLembagaDenganTenagaAhli($lembagaIds, $data);
         $defaultLembagaId = $lembagaIds[0] ?? null;
 
         $updateFields = [
@@ -316,8 +318,7 @@ class AkunPenggunaController extends Controller
             return;
         }
 
-        $hasAccess = $akun->lembaga_id === $sessionLembagaId
-            || $akun->lembagas()->where('lembaga.id', $sessionLembagaId)->exists();
+        $hasAccess = $akun->belongsToLembaga($sessionLembagaId);
 
         if (! $hasAccess) {
             abort(response()->json([
@@ -374,6 +375,44 @@ class AkunPenggunaController extends Controller
             return [$data['lembaga_id']];
         }
         return [];
+    }
+
+    /**
+     * Selaraskan lembaga akun reksa dengan lembaga tenaga ahlinya.
+     *
+     * Reksa honor dibayar ke tenaga ahli reksa, jadi akun reksa dan
+     * TA-nya harus satu lembaga. Bila TA reksa sudah punya lembaga,
+     * lembaga itu ditambahkan (dan dijadikan default) daftar lembaga
+     * akun —(account) reksa tidak boleh menunjuk TA lembaga lain.
+     */
+    private function selaraskanLembagaDenganTenagaAhli(array $lembagaIds, array $data): array
+    {
+        $roleId = $data['role_id'] ?? null;
+        $tenagaAhliId = $data['tenaga_ahli_id'] ?? null;
+
+        if (! $roleId || ! $tenagaAhliId) {
+            return $lembagaIds;
+        }
+
+        $role = Role::find($roleId);
+        if ($role?->nama_role !== 'Rekomendator') {
+            return $lembagaIds;
+        }
+
+        $ta = TenagaAhli::withoutGlobalScope('lembaga')->find($tenagaAhliId);
+        if (! $ta || ! $ta->lembaga_id) {
+            return $lembagaIds;
+        }
+
+        if (! in_array($ta->lembaga_id, $lembagaIds, true)) {
+            // TA reksa milik lembaga lain → samakan dengan TA, dan jadikan
+            // default supaya session user mengarah ke lembaga yang benar.
+            array_unshift($lembagaIds, $ta->lembaga_id);
+        } elseif ($lembagaIds[0] !== $ta->lembaga_id) {
+            $lembagaIds = array_values(array_unique(array_merge([$ta->lembaga_id], $lembagaIds)));
+        }
+
+        return $lembagaIds;
     }
 
     /**

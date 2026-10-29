@@ -134,6 +134,11 @@ class XenditDriver implements PaymentGatewayInterface
         return 'pending';
     }
 
+    public function fetchStatus(Invoice $invoice): ?array
+    {
+        return null;
+    }
+
     public function verifyWebhookSignature(array $payload, string $signature): bool
     {
         $token = PaymentSetting::value('callback_token');
