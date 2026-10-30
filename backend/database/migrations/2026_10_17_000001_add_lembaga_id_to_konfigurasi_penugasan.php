@@ -8,13 +8,13 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Konfigurasi per-lembaga: tambah kolom lemma_id (nullable) ke
+     * Konfigurasi per-lembaga: tambah kolom lembaga_id (nullable) ke
      * konfigurasi_penugasan. NULL = pengaturan global (seperti
      * batas_periode_aktif). Terisi = pengaturan per-lembaga
      * (seperti default_rekomendator_user_id).
      *
-     * Unique constraint berubah dari `kunci` menjadi `(kunci, lemma_id)`.
-     * Untuk row dengan lemma_id NULL, PostgreSQL memperlakukan tiap
+     * Unique constraint berubah dari `kunci` menjadi `(kunci, lembaga_id)`.
+     * Untuk row dengan lembaga_id NULL, PostgreSQL memperlakukan tiap
      * NULL sebagai distinct dalam unique index — oleh karena itu kita
      * tambahkan unique partial index untuk memastikan hanya 1 row global
      * per kunci.
@@ -37,9 +37,9 @@ return new class extends Migration
         });
 
         if ($this->isMysql()) {
-            // Functional index: NULL lemma_id dinormalisasi menjadi satu
+            // Functional index: NULL lembaga_id dinormalisasi menjadi satu
             // nilai sentinel, sehingga "1 row global per kunci" DAN
-            // "1 row per (kunci, lemma_id)" sama-sama dijamin.
+            // "1 row per (kunci, lembaga_id)" sama-sama dijamin.
             DB::statement(
                 'CREATE UNIQUE INDEX konfigurasi_penugasan_kunci_global_unique
                  ON konfigurasi_penugasan (kunci, (IFNULL(lembaga_id, \'00000000-0000-0000-0000-000000000000\')))'
@@ -47,11 +47,11 @@ return new class extends Migration
         } else {
             DB::statement(
                 'CREATE UNIQUE INDEX konfigurasi_penugasan_kunci_global_unique
-                 ON konfigurasi_penugasan (kunci) WHERE lemma_id IS NULL'
+                 ON konfigurasi_penugasan (kunci) WHERE lembaga_id IS NULL'
             );
             DB::statement(
                 'CREATE UNIQUE INDEX konfigurasi_penugasan_kunci_lembaga_unique
-                 ON konfigurasi_penugasan (kunci, lemma_id) WHERE lemma_id IS NOT NULL'
+                 ON konfigurasi_penugasan (kunci, lembaga_id) WHERE lembaga_id IS NOT NULL'
             );
         }
 
