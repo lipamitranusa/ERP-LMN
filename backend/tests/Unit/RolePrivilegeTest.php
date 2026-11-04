@@ -103,11 +103,11 @@ class RolePrivilegeTest extends TestCase
         $this->assertEquals(count($expectedRoles), $count);
     }
 
-    public function test_menu_actions_count_is_56(): void
+    public function test_menu_actions_count_is_70(): void
     {
-        // 9 modules x 7 actions = 63
+        // 10 modules x 7 actions = 70
         $count = MenuAction::count();
-        $this->assertEquals(63, $count);
+        $this->assertEquals(70, $count);
     }
 
     public function test_role_privilege_can_be_created_via_relationship(): void

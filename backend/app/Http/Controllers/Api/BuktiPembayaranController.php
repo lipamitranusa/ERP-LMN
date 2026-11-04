@@ -188,12 +188,16 @@ class BuktiPembayaranController extends Controller
         }
         if ($request->filled('q')) {
             $term = trim($request->string('q')->toString());
-            $query->where(function ($w) use ($term) {
-                $w->where('nomor_referensi', 'ilike', "%{$term}%")
-                    ->orWhere('dari_rekening', 'ilike', "%{$term}%")
-                    ->orWhere('alasan_penolakan', 'ilike', "%{$term}%")
-                    ->orWhereHas('invoice', fn ($r) => $r->where('nomor_invoice', 'ilike', "%{$term}%"))
-                    ->orWhereHas('invoice.siklus.faskes', fn ($r) => $r->where('nama', 'ilike', "%{$term}%"));
+            $like = "%{$term}%";
+            // whereLike (bukan operator 'ilike' mentah) supaya query tetap jalan
+            // di PostgreSQL (ILIKE) maupun MySQL (LIKE) — shared hosting
+            // Hostinger tidak menyediakan pdo_pgsql.
+            $query->where(function ($w) use ($like) {
+                $w->whereLike('nomor_referensi', $like)
+                    ->orWhereLike('dari_rekening', $like)
+                    ->orWhereLike('alasan_penolakan', $like)
+                    ->orWhereHas('invoice', fn ($r) => $r->whereLike('nomor_invoice', $like))
+                    ->orWhereHas('invoice.siklus.faskes', fn ($r) => $r->whereLike('nama', $like));
             });
         }
 

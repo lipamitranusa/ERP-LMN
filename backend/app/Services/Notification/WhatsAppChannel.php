@@ -67,9 +67,9 @@ class WhatsAppChannel implements NotificationChannelInterface
             return false;
         }
 
-        $apiUrl = env('WHATSAPP_API_URL');
-        $phoneId = env('WHATSAPP_PHONE_NUMBER_ID');
-        $token = env('WHATSAPP_ACCESS_TOKEN');
+        $apiUrl = config('services.whatsapp.api_url');
+        $phoneId = config('services.whatsapp.phone_number_id');
+        $token = config('services.whatsapp.access_token');
 
         // Fallback mode: no credentials → log only.
         if (! $apiUrl || ! $phoneId || ! $token) {

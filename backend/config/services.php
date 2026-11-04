@@ -35,4 +35,41 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | WhatsApp Business Cloud API (Meta)
+    |--------------------------------------------------------------------------
+    |
+    | Dibaca lewat config(), bukan env() langsung di kode aplikasi — setelah
+    | `config:cache` dipanggil, env() selalu bernilai null.
+    |
+    */
+
+    'whatsapp' => [
+        'api_url' => env('WHATSAPP_API_URL'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'business_account_id' => env('WHATSAPP_BUSINESS_ACCOUNT_ID'),
+        'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
+        'webhook_verify_token' => env('WHATSAPP_WEBHOOK_VERIFY_TOKEN'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Payment Gateway
+    |--------------------------------------------------------------------------
+    |
+    | Nilai dari tabel `payment_settings` selalu menang; config ini hanya
+    | fallback saat tabel belum diisi.
+    |
+    */
+
+    'payment_gateway' => [
+        'driver' => env('PAYMENT_GATEWAY_DRIVER', 'fake'),
+        'mode' => env('PAYMENT_GATEWAY_MODE', env('PAYMENT_GATEWAY_ENV', 'sandbox')),
+        'server_key' => env('MIDTRANS_SERVER_KEY', env('PAYMENT_GATEWAY_SERVER_KEY', '')),
+        'client_key' => env('PAYMENT_GATEWAY_CLIENT_KEY', ''),
+        'merchant_id' => env('PAYMENT_GATEWAY_MERCHANT_ID', ''),
+        'webhook_secret' => env('PAYMENT_GATEWAY_WEBHOOK_SECRET', ''),
+    ],
+
 ];

@@ -105,8 +105,8 @@ class AttachmentService
      */
     public function publicUrl(string $path): string
     {
-        $baseUrl = env('CLOUDFLARE_R2_URL', 'https://pub.r2.dev');
-        $bucket = env('CLOUDFLARE_R2_BUCKET', '');
+        $baseUrl = config('filesystems.disks.r2.url') ?: 'https://pub.r2.dev';
+        $bucket = config('filesystems.disks.r2.bucket') ?: '';
         return rtrim($baseUrl, '/') . '/' . ltrim($bucket . '/' . $path, '/');
     }
 

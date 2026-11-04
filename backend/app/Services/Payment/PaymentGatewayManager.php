@@ -24,9 +24,9 @@ class PaymentGatewayManager
             if (! PaymentSetting::isGatewayEnabled()) {
                 return 'fake';
             }
-            return PaymentSetting::value('driver') ?? env('PAYMENT_GATEWAY_DRIVER', 'fake');
+            return PaymentSetting::value('driver') ?? config('services.payment_gateway.driver', 'fake');
         } catch (\Throwable) {
-            return env('PAYMENT_GATEWAY_DRIVER', 'fake');
+            return config('services.payment_gateway.driver', 'fake');
         }
     }
 

@@ -243,7 +243,7 @@ class MidtransDriver implements PaymentGatewayInterface
     public function verifyWebhookSignature(array $payload, string $signature): bool
     {
         $serverKey = PaymentSetting::value('server_key')
-            ?? config('services.payment_gateway.server_key', env('MIDTRANS_SERVER_KEY', ''));
+            ?? config('services.payment_gateway.server_key', '');
 
         // Jika signature kosong (misal: Midtrans Dashboard Test Notification),
         // skip verifikasi. Test notification hanya untuk cek konektivitas.
@@ -332,8 +332,8 @@ class MidtransDriver implements PaymentGatewayInterface
     private function resolveConfig(): array
     {
         $serverKey = PaymentSetting::value('server_key')
-            ?? config('services.payment_gateway.server_key', env('MIDTRANS_SERVER_KEY', ''));
-        $mode = PaymentSetting::value('mode') ?? env('PAYMENT_GATEWAY_MODE', 'sandbox');
+            ?? config('services.payment_gateway.server_key', '');
+        $mode = PaymentSetting::value('mode') ?? config('services.payment_gateway.mode', 'sandbox');
 
         $baseUrl = $mode === 'production'
             ? 'https://api.midtrans.com'

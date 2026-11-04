@@ -1,0 +1,20 @@
+# Normalisasi line ending.
+#
+# File di repo disimpan dengan LF. Di checkout, file ini TIDAK boleh diubah
+# menjadi CRLF — bash di server Linux gagal menjalankan skrip yang berakhiran
+# CRLF ("/bin/bash^M: bad interpreter").
+
+# Skrip shell & konfigurasi yang dijalankan/dibaca di server
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Template env dan dokumentasi — dibaca manusia, aman LF
+*.env.example text eol=lf
+*.example text eol=lf
+*.md text eol=lf
+
+# Script PowerShell dijalankan di Windows — CRLF yang dipakai Windows
+*.ps1 text eol=crlf
+
+# Aturan ini sendiri harus LF supaya Git bisa membacanya dengan benar
+.gitattributes text eol=lf

@@ -8,6 +8,7 @@
 .env
 .env.local
 .env.*.local
+.env.production
 *.key
 *.pem
 
@@ -45,6 +46,9 @@ LPT1
 /backend/public/storage
 /backend/public/hot
 /backend/public/build
+# Hasil build SPA React yang disalin ke folder public saat deploy
+/backend/public/assets
+/backend/public/index.html
 
 # Frontend leftovers
 /frontend/dist
