@@ -34,9 +34,9 @@ pasangan `.sh` (Git Bash / Unix) dan `.ps1` (PowerShell).
 
 ```powershell
 .\scripts\deploy-hostinger.ps1 `
-    -Server u123456789@erp.lipa.co.id `
-    -AppDir /home/u123456789/domains/erp.lipa.co.id/app `
-    -WebRoot /home/u123456789/domains/erp.lipa.co.id/public_html
+    -Server u123456789@lipamitranusa.com `
+    -AppDir /home/u123456789/domains/lipamitranusa.com/app `
+    -WebRoot /home/u123456789/domains/lipamitranusa.com/public_html
 ```
 
 Panduan lengkap (hPanel, SSL, database, cron, troubleshooting):

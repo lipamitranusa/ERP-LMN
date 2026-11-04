@@ -12,7 +12,7 @@
     Branch yang di-deploy. Default: main
 
 .PARAMETER Server
-    Target SSH, format user@host (contoh: u123456789@erp.lipa.co.id).
+    Target SSH, format user@host (contoh: u123456789@lipamitranusa.com).
     Kosongkan bila ingin push saja dan melakukan pull manual di server.
 
 .PARAMETER AppDir
@@ -34,7 +34,7 @@
     Push ke GitHub tapi jangan jalankan skrip deploy di server.
 
 .EXAMPLE
-    .\scripts\deploy-hostinger.ps1 -Server u123456789@erp.lipa.co.id
+    .\scripts\deploy-hostinger.ps1 -Server u123456789@lipamitranusa.com
 #>
 param(
     [string]$Branch = 'main',
@@ -118,7 +118,7 @@ if (-not $Server) {
 }
 
 if (-not $AppDir) {
-    Write-Err "Parameter -AppDir wajib diisi bila -Server dipakai (contoh: /home/u123/domains/erp.lipa.co.id/app)"
+    Write-Err "Parameter -AppDir wajib diisi bila -Server dipakai (contoh: /home/u123/domains/lipamitranusa.com/app)"
 }
 
 Write-Step "Menjalankan deploy di server $Server"

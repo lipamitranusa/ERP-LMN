@@ -26,7 +26,7 @@ Frontend dan API harus berada di **host yang sama** — frontend memakai
     └── assets/               ← hasil build React (hash filename)
 ```
 
-`public_html` tidak bisadipindah ke `app/backend/public` karena hPanel shared
+`public_html` tidak bisa dipindah ke `app/backend/public` karena hPanel shared
 tidak menyediakan pengaturan document root. Karena itu `public_html/index.php`
 hanya bridge 1 baris:
 
@@ -69,13 +69,13 @@ Shared hosting Hostinger **tidak menyediakan** PostgreSQL secara native, dan
 SSH tersedia mulai paket **Premium Web** ke atas.
 
 ```sh
-ssh u123456789@erp.lipa.co.id
+ssh u123456789@lipamitranusa.com
 ```
 
 ### 3.1 Clone repository
 
 ```sh
-cd ~/domains/erp.lipa.co.id
+cd ~/domains/lipamitranusa.com
 git clone https://github.com/lipamitranusa/ERP-LMN.git app
 cd app
 ```
@@ -110,7 +110,7 @@ export PATH="$HOME/bin:$PATH"
 ### 3.3 Buat `.env`
 
 ```sh
-cd ~/domains/erp.lipa.co.id/app/backend
+cd ~/domains/lipamitranusa.com/app/backend
 cp .env.production.example .env
 nano .env      # isi APP_URL, APP_KEY (kosong dulu), DB_*, R2, WhatsApp, dll
 php artisan key:generate
@@ -122,9 +122,9 @@ dan `APP_ENV=production`.
 ### 3.4 Jalankan skrip deploy
 
 ```sh
-cd ~/domains/erp.lipa.co.id/app
-APP_DIR=$HOME/domains/erp.lipa.co.id/app \
-WEB_ROOT=$HOME/domains/erp.lipa.co.id/public_html \
+cd ~/domains/lipamitranusa.com/app
+APP_DIR=$HOME/domains/lipamitranusa.com/app \
+WEB_ROOT=$HOME/domains/lipamitranusa.com/public_html \
 bash scripts/deploy-hostinger.sh
 ```
 
@@ -140,11 +140,11 @@ izin folder.
 ### 3.5 Verifikasi
 
 ```sh
-curl -sS -o /dev/null -w '%{http_code}\n' https://erp.lipa.co.id/up      # harus 200
-curl -sS https://erp.lipa.co.id/api/auth/login                           # harus JSON 405/422, bukan HTML
+curl -sS -o /dev/null -w '%{http_code}\n' https://lipamitranusa.com/up      # harus 200
+curl -sS https://lipamitranusa.com/api/auth/login                           # harus JSON 405/422, bukan HTML
 ```
 
-Buka `https://erp.lipa.co.id` di browser — harus muncul halaman login.
+Buka `https://lipamitranusa.com` di browser — harus muncul halaman login.
 Refresh di deep link (mis. `/kontrak/abc`) harus tetap membuka SPA, bukan 404.
 
 ---
@@ -194,9 +194,9 @@ Lalu jalankan `php artisan migrate --force` untuk membuat skema di MySQL.
 Di komputer lokal:
 
 ```powershell
-.\scripts\deploy-hostinger.ps1 -Server u123456789@erp.lipa.co.id `
-    -AppDir /home/u123456789/domains/erp.lipa.co.id/app `
-    -WebRoot /home/u123456789/domains/erp.lipa.co.id/public_html
+.\scripts\deploy-hostinger.ps1 -Server u123456789@lipamitranusa.com `
+    -AppDir /home/u123456789/domains/lipamitranusa.com/app `
+    -WebRoot /home/u123456789/domains/lipamitranusa.com/public_html
 ```
 
 Skrip PowerShell: build frontend → (opsional) commit → `git push` → menjalankan
@@ -210,9 +210,9 @@ cd frontend && npm run build && cd ..
 git add -A && git commit -m "deploy" && git push origin main
 
 # server
-cd ~/domains/erp.lipa.co.id/app && git pull origin main
-APP_DIR=$HOME/domains/erp.lipa.co.id/app \
-WEB_ROOT=$HOME/domains/erp.lipa.co.id/public_html \
+cd ~/domains/lipamitranusa.com/app && git pull origin main
+APP_DIR=$HOME/domains/lipamitranusa.com/app \
+WEB_ROOT=$HOME/domains/lipamitranusa.com/public_html \
 bash scripts/deploy-hostinger.sh
 ```
 
@@ -228,7 +228,7 @@ Aplikasi menjalankan `notifikasi:tagihan:harian` setiap pukul 08:00 WIB.
 **Advanced → Cron Jobs → New Cron Job**, command:
 
 ```sh
-cd /home/u123456789/domains/erp.lipa.co.id/app/backend && /usr/bin/php8.3 artisan schedule:run >> /dev/null 2>&1
+cd /home/u123456789/domains/lipamitranusa.com/app/backend && /usr/bin/php8.3 artisan schedule:run >> /dev/null 2>&1
 ```
 
 Jalankan tiap menit — Laravel scheduler yang menentukan job mana yang Due.
@@ -277,7 +277,7 @@ token login — tapi harus tetap berada di domain HTTPS yang sama dengan aplikas
 - **Rollback kode**:
 
 ```sh
-cd ~/domains/erp.lipa.co.id/app
+cd ~/domains/lipamitranusa.com/app
 git log --oneline -5
 git checkout <commit-sebelumnya> && git pull --ff-only
 # lalu jalankan ulang skrip deploy (tanpa git pull di dalamnya —
@@ -292,7 +292,7 @@ migrate secara manual.
 
 ## 9. Checklist sebelum trafik nyata
 
-- [ ] SSL aktif, `https://erp.lipa.co.id` terbuka tanpa peringatan
+- [ ] SSL aktif, `https://lipamitranusa.com` terbuka tanpa peringatan
 - [ ] `APP_ENV=production`, `APP_DEBUG=false`, `APP_KEY` terisi
 - [ ] `php artisan db:show` berhasil dari server
 - [ ] `php artisan migrate:status` → semua migration "Ran"

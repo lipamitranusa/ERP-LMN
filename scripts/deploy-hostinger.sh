@@ -15,14 +15,14 @@
 #   SKIP_FRONTEND_BUILD=1  lewati build frontend (pakai dist yang sudah ada)
 #
 # Contoh:
-#   APP_DIR=$HOME/domains/erp.lipa.co.id/app \
-#   WEB_ROOT=$HOME/domains/erp.lipa.co.id/public_html \
+#   APP_DIR=$HOME/domains/lipamitranusa.com/app \
+#   WEB_ROOT=$HOME/domains/lipamitranusa.com/public_html \
 #   bash scripts/deploy-hostinger.sh
 #
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-${1:-$HOME/domains/erp.lipa.co.id/app}}"
-WEB_ROOT="${WEB_ROOT:-${2:-$HOME/domains/erp.lipa.co.id/public_html}}"
+APP_DIR="${APP_DIR:-${1:-$HOME/domains/lipamitranusa.com/app}}"
+WEB_ROOT="${WEB_ROOT:-${2:-$HOME/domains/lipamitranusa.com/public_html}}"
 BRANCH="${BRANCH:-main}"
 PHP_BIN="${PHP_BIN:-php}"
 COMPOSER_BIN="${COMPOSER_BIN:-composer}"
