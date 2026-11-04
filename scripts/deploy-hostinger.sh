@@ -109,6 +109,14 @@ fi
 
 # --- 4. Salin hasil build ke document root ---------------------------------
 log "Menyalin hasil build frontend ke document root"
+
+# Backup landing page lama (mis. halaman "Segera hadir") sebelum ditimpa,
+# supaya bisa dikembalikan kalau deploy ini dibatalkan.
+if [ -f "$WEB_ROOT/index.html" ] && ! grep -q 'id="root"' "$WEB_ROOT/index.html" 2>/dev/null; then
+    BACKUP="$WEB_ROOT/index.html.bak.$(date +%Y%m%d%H%M%S)"
+    cp "$WEB_ROOT/index.html" "$BACKUP"
+    log "Landing page lama di-backup: $BACKUP"
+fi
 rm -rf "$WEB_ROOT/assets"
 mkdir -p "$WEB_ROOT/assets"
 cp -R "$DIST/assets/." "$WEB_ROOT/assets/"
