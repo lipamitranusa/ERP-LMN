@@ -62,6 +62,34 @@ Shared hosting Hostinger **tidak menyediakan** PostgreSQL secara native, dan
 > **Penting:** database **dev** tetap PostgreSQL/Supabase. Jangan pernah menjalankan
 > `migrate:fresh` terhadap database dev — isinya berisi data master operasional.
 
+### 2.2 Batasan PHP 8.3 (penting untuk Supabase)
+
+Di Hostinger shared hosting, `pdo_pgsql` **hanya tersedia pada PHP 8.3**.
+PHP 8.4 dan 8.5 di server yang sama terpasang tanpa `pdo_pgsql`, jadi memilih
+versi web 8.4+ akan membuat aplikasi kehilangan koneksi ke Supabase.
+
+Konsekuensinya, `backend/composer.lock` **harus tetap bisa di-resolve di PHP 8.3**.
+`composer.json` sudah mengunci ini:
+
+```json
+"config": {
+    "platform": { "php": "8.3.36" }
+}
+```
+
+Tanpa pin tersebut, Composer meng-resolve ke versi terbaru (mis. Symfony 8.1)
+yang mensyaratkan PHP ≥ 8.4.1, dan `composer install` di server akan gagal.
+
+Kalau lock di-resolve ulang, selalu regenerate dengan platform pin aktif:
+
+```sh
+cd backend
+composer update --no-dev --with-all-dependencies
+```
+
+Setelahnya, pastikan `composer.lock` masih ter-commit dan tidak pernah
+di-resolve tanpa pin.
+
 ---
 
 ## 3. Deploy pertama (lewat SSH)
@@ -184,17 +212,23 @@ Refresh di deep link (mis. `/kontrak/abc`) harus tetap membuka SPA, bukan 404.
 
 ### 4.1 Jalur A — Supabase (PostgreSQL)
 
+> Catatan kondisi aktual (2026-11-04): shared hosting yang dipakai **tidak punya**
+> `pdo_pgsql` pada PHP 8.4/8.5, tapi **memilikinya pada PHP 8.3**. Supabase bisa
+> dipakai selama versi web & CLI di-set ke PHP 8.3 (lihat 2.2).
+
 1. Buat project baru di Supabase (produksi) dan jalankan migrasi dengan cara
    yang aman: `php artisan migrate --force` dari server, atau dump SQL dari
    project dev lalu restore lewat `psql`.
 2. Di **Project Settings → Database**, ambil *Connection string*.
-3. Gunakan **Session pooler** (port `5432`) atau **Transaction pooler**
-   (port `6543`). Hosting shared sering diblokir firewall Supabase, jadi
-   **pooler** lebih aman:
+3. Koneksi **direct** (`db.<ref>.supabase.co:5432`) hanya Parce IPv6 — jalankan
+   server shared hosting dengan IPv6 global (Hostinger menyediakannya), lalu
+   **IP direct** adalah pilihan paling stabil: tidak ada batas koneksi seperti
+   pooler dan tidak perlu reserving slot IPv4. Pooler (port `6543`) adalah
+   alternatif untuk server yang tidak punya IPv6:
 
 ```env
 DB_CONNECTION=pgsql
-DB_URL="postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require"
+DB_URL="postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres?sslmode=require"
 ```
 
 4. Pastikan password URL-encoded (huruf besar/kecil & karakter khusus).
@@ -311,6 +345,7 @@ token login — tapi harus tetap berada di domain HTTPS yang sama dengan aplikas
 | Gejala | Penyebab & solusi |
 |---|---|
 | `could not find driver` | `pdo_pgsql` tidak aktif → buka tiket support, atau pindah ke MySQL. |
+| `composer install` gagal "requires PHP 8.4" | Lock ter-resolve tanpa `config.platform.php`. Restore pin `php: 8.3.36` lalu `composer update --no-dev --with-all-dependencies` di commit berikutnya. |
 | `composer install` gagal "requires PHP 8.3" | Terminal PHP beda versi → `PHP_BIN=/usr/bin/php8.3 bash scripts/deploy-hostinger.sh`. |
 | Halaman 500, `whoops` | `APP_DEBUG=false` disembunyikan → cek `storage/logs/laravel.log`. |
 | Deep link 404 | `public_html/index.html` tidak ada → ulangi langkah "salin hasil build". |
