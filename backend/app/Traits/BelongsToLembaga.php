@@ -25,7 +25,7 @@ trait BelongsToLembaga
         static::addGlobalScope('lembaga', function ($q) {
             $lembagaId = session('lembaga_id');
             if ($lembagaId !== null) {
-                $q->where('lembaga_id', $lembagaId);
+                static::applyLembagaScope($q, $lembagaId);
             }
         });
 
@@ -39,6 +39,15 @@ trait BelongsToLembaga
                 }
             }
         });
+    }
+
+    /**
+     * Filter global scope 'lembaga'. Model yang punya akses ke lebih dari satu
+     * lembaga (mis. lewat pivot) dapat override method ini.
+     */
+    protected static function applyLembagaScope($q, string $lembagaId): void
+    {
+        $q->where($q->getModel()->getTable() . '.lembaga_id', $lembagaId);
     }
 
     public function lembaga(): BelongsTo

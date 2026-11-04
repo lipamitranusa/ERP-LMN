@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Auth\Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 
 class AkunPengguna extends Model implements AuthenticatableContract
@@ -83,6 +84,28 @@ class AkunPengguna extends Model implements AuthenticatableContract
     public function siklusAkreditasi(): HasMany
     {
         return $this->hasMany(SiklusAkreditasi::class, 'divalidasi_oleh');
+    }
+
+    /**
+     * Akun pengguna bisa punya akses ke beberapa lembaga lewat pivot
+     * `akun_pengguna_lembaga`. Filter global scope harus ikut mempertimbangkan
+     * pivot tersebut — kalau tidak, begitu session berpindah ke lemma kedua
+     * akun yang sedang login tidak ditemukan (401 → logout) dan login ulang
+     * gagal karena baris akun tersaring.
+     */
+    protected static function applyLembagaScope($q, string $lembagaId): void
+    {
+        $table = $q->getModel()->getTable();
+
+        $q->where(function ($sub) use ($lembagaId, $table) {
+            $sub->where($table . '.lembaga_id', $lembagaId)
+                ->orWhereExists(function ($pivot) use ($lembagaId, $table) {
+                    $pivot->select(DB::raw(1))
+                        ->from('akun_pengguna_lembaga')
+                        ->whereColumn('akun_pengguna_lembaga.akun_pengguna_id', $table . '.id')
+                        ->where('akun_pengguna_lembaga.lembaga_id', $lembagaId);
+                });
+        });
     }
 
     public function hasPrivilege(string $modul, string $action): bool
