@@ -112,14 +112,34 @@ export PATH="$HOME/bin:$PATH"
 ```sh
 cd ~/domains/lipamitranusa.com/app/backend
 cp .env.production.example .env
-nano .env      # isi APP_URL, APP_KEY (kosong dulu), DB_*, R2, WhatsApp, dll
-php artisan key:generate
+nano .env      # isi APP_URL, DB_*, R2, WhatsApp, dll
 ```
 
-`APP_KEY` wajib diisi (`php artisan key:generate`). Pastikan `APP_DEBUG=false`
-dan `APP_ENV=production`.
+`APP_KEY` boleh kosong — skrip deploy akan meng-generate-nya otomatis, dan
+hanya bila memang kosong (jadi key produksi tidak berubah tiap deploy).
+Pastikan `APP_DEBUG=false` dan `APP_ENV=production`.
 
 ### 3.4 Jalankan skrip deploy
+
+Dari komputer lokal (butuh SSH):
+
+```sh
+bash scripts/run-deploy.sh
+```
+
+Runner itu: clone repo (kalau belum ada) → upload `frontend/dist` → jalankan
+`scripts/deploy-hostinger.sh` di server → verifikasi endpoint. Host dan path
+bisa dioverride lewat env var:
+
+```sh
+HOST=u123456789@lipamitranusa.com \
+PORT=65002 \
+APP_DIR=/home/u123456789/domains/lipamitranusa.com/app \
+WEB_ROOT=/home/u123456789/domains/lipamitranusa.com/public_html \
+bash scripts/run-deploy.sh
+```
+
+Manual di server:
 
 ```sh
 cd ~/domains/lipamitranusa.com/app
@@ -136,6 +156,17 @@ izin folder.
 > **PHP CLI vs PHP hPanel.** Hostinger bisa memakai versi PHP berbeda antara
 > web (hPanel) dan terminal. Kalau `composer install` gagal dengan
 > *"requires PHP 8.3"*, jalankan skrip dengan `PHP_BIN=/usr/bin/php8.3`.
+
+> **Document root.** Kalau path `WEB_ROOT` yang diberikan tidak ada, skrip
+> otomatis mencari `~/domains/<domain>/public_html` lalu `~/public_html`.
+
+> **Situs yang sedang live.** `public_html/index.html` yang sedang dilayani
+> (mis. halaman "Segera hadir") di-backup dulu ke
+> `index.html.bak.<timestamp>` sebelum diganti SPA.
+
+> **Tanpa SSH.** Pakai **Advanced → Git** di hPanel: repo
+> `https://github.com/lipamitranusa/ERP-LMN.git`, branch `main`, folder `app`,
+> lalu jalankan skrip deploy lewat Terminal hPanel.
 
 ### 3.5 Verifikasi
 
@@ -191,18 +222,41 @@ Lalu jalankan `php artisan migrate --force` untuk membuat skema di MySQL.
 
 ## 5. Deploy berikutnya (rutinitas)
 
-Di komputer lokal:
+**Cara tercepat** — dari komputer lokal, satu perintah:
+
+```sh
+bash scripts/run-deploy.sh
+```
+
+Runner melakukan clone/pull di server, upload `frontend/dist` (paket build
+lokal), jalankan skrip deploy, lalu verifikasi endpoint produksi.
+
+**Tanpa OpenSSH (PuTTY)** — kalau mesin lokal tidak punya `ssh`/`scp` CLI,
+pakai plink/pscp dengan password hPanel:
+
+```sh
+HOST=u123456789@lipamitranusa.com \
+PORT=65002 \
+PW='password-hpanel' \
+bash scripts/run-deploy-putty.sh
+```
+
+Host key di-pin ke sidik jari ED25519 yang sudah diverifikasi, jadi koneksi
+gagal keras kalau server-nya berubah.
+
+**Lewat PowerShell** (build + commit + push + deploy via SSH):
 
 ```powershell
 .\scripts\deploy-hostinger.ps1 -Server u123456789@lipamitranusa.com `
     -AppDir /home/u123456789/domains/lipamitranusa.com/app `
-    -WebRoot /home/u123456789/domains/lipamitranusa.com/public_html
+    -WebRoot /home/u123456789/domains/lipamitranusa.com/public_html `
+    -UploadDist
 ```
 
-Skrip PowerShell: build frontend → (opsional) commit → `git push` → menjalankan
-`scripts/deploy-hostinger.sh` di server lewat SSH.
+Opsi `-UploadDist` mengunggah `frontend/dist` lewat scp lalu menjalankan
+deploy dengan `SKIP_FRONTEND_BUILD=1` — dipakai kalau server tidak punya npm.
 
-Manual, tanpa SSH script:
+**Manual, tanpa script:**
 
 ```sh
 # lokal
@@ -210,7 +264,7 @@ cd frontend && npm run build && cd ..
 git add -A && git commit -m "deploy" && git push origin main
 
 # server
-cd ~/domains/lipamitranusa.com/app && git pull origin main
+cd ~/domains/lipamitranusa.com/app
 APP_DIR=$HOME/domains/lipamitranusa.com/app \
 WEB_ROOT=$HOME/domains/lipamitranusa.com/public_html \
 bash scripts/deploy-hostinger.sh
