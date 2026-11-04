@@ -33,8 +33,15 @@
 .PARAMETER SkipSsh
     Push ke GitHub tapi jangan jalankan skrip deploy di server.
 
+.PARAMETER UploadDist
+    Upload frontend/dist ke server lewat scp, lalu jalankan deploy dengan
+    SKIP_FRONTEND_BUILD=1. Diperlukan kalau server tidak punya npm.
+
 .EXAMPLE
     .\scripts\deploy-hostinger.ps1 -Server u123456789@lipamitranusa.com
+
+.EXAMPLE
+    .\scripts\deploy-hostinger.ps1 -Server u123456789@lipamitranusa.com -UploadDist
 #>
 param(
     [string]$Branch = 'main',
@@ -44,7 +51,8 @@ param(
     [string]$Message = '',
     [switch]$SkipBuild,
     [switch]$SkipPush,
-    [switch]$SkipSsh
+    [switch]$SkipSsh,
+    [switch]$UploadDist
 )
 
 $ErrorActionPreference = 'Stop'
@@ -121,9 +129,28 @@ if (-not $AppDir) {
     Write-Err "Parameter -AppDir wajib diisi bila -Server dipakai (contoh: /home/u123/domains/lipamitranusa.com/app)"
 }
 
+# --- 4a. Upload hasil build frontend (opsional) ------------------------------
+$skipBuildFlag = ''
+if ($UploadDist) {
+    $dist = Join-Path $root 'frontend\dist'
+    if (-not (Test-Path (Join-Path $dist 'index.html'))) {
+        Write-Err "frontend/dist/index.html tidak ada — jalankan build dulu (tanpa -SkipBuild)."
+    }
+
+    Write-Step "Upload frontend/dist ke $Server"
+    ssh $Server "mkdir -p '$AppDir/frontend/dist'"
+    if ($LASTEXITCODE -ne 0) { Write-Err "Gagal membuat folder dist di server" }
+
+    scp -r "$dist\*" "${Server}:$AppDir/frontend/dist/"
+    if ($LASTEXITCODE -ne 0) { Write-Err "scp frontend/dist gagal" }
+
+    $skipBuildFlag = 'SKIP_FRONTEND_BUILD=1 '
+    Write-Step "Frontend diunggah — build di server dilewati"
+}
+
 Write-Step "Menjalankan deploy di server $Server"
 
-$remote = "cd '$AppDir' && APP_DIR='$AppDir' WEB_ROOT='$WebRoot' BRANCH='$Branch' bash scripts/deploy-hostinger.sh"
+$remote = "cd '$AppDir' && ${skipBuildFlag}APP_DIR='$AppDir' WEB_ROOT='$WebRoot' BRANCH='$Branch' bash scripts/deploy-hostinger.sh"
 ssh $Server $remote
 
 if ($LASTEXITCODE -ne 0) { Write-Err "Deploy di server gagal" }

@@ -52,14 +52,30 @@ cd "$APP_DIR"
 log "Mengambil kode terbaru dari origin/$BRANCH"
 git fetch origin "$BRANCH"
 git checkout "$BRANCH"
-git pull --ff-only origin "$BRANCH"
+
+# --ff-only gagal kalau branch lokal punya commit di depan origin. Jangan
+# reset paksa (bisa menghapus pekerjaan di server) — berhenti dan suruh
+# operator menyelesaikan sendiri.
+if ! git pull --ff-only origin "$BRANCH"; then
+    die "git pull --ff-only gagal: branch lokal '$BRANCH' menyimpang dari origin/$BRANCH.
+    Periksa dulu di server:  git log --oneline -3
+    Kalau commit lokal memang tidak perlu:  git reset --hard origin/$BRANCH
+    (perintah itu menghapus commit lokal — jalankan hanya kalau yakin.)"
+fi
 
 # --- 2. Dependency backend --------------------------------------------------
 cd "$APP_DIR/backend"
 [ -f .env ] || die "backend/.env belum ada di server. Salin .env.production.example ke .env, isi kredensialnya, lalu ulangi."
 
-command -v "$COMPOSER_BIN" >/dev/null 2>&1 \
-    || die "composer tidak ditemukan. Pasang via: curl -sS https://getcomposer.org/installer | php"
+command -v "$COMPOSER_BIN" >/dev/null 2>&1 || {
+    # Composer sering ada di ~/bin/composer tapi belum ada di PATH terminal.
+    if [ -x "$HOME/bin/composer" ] || [ -f "$HOME/bin/composer.phar" ]; then
+        COMPOSER_BIN="$HOME/bin/composer"
+        [ -x "$COMPOSER_BIN" ] || COMPOSER_BIN="$HOME/bin/composer.phar"
+    else
+        die "composer tidak ditemukan. Pasang via: curl -sS https://getcomposer.org/installer | php"
+    fi
+}
 
 log "composer install --no-dev"
 "$COMPOSER_BIN" install --no-dev --optimize-autoloader --no-interaction --no-progress
