@@ -86,11 +86,6 @@ set_env() {
 }
 
 log "Mengisi kredensial dari environment variable"
-set_env APP_KEY ""
-if [ -z "${APP_KEY:-}" ]; then
-    "$PHP_BIN" artisan key:generate --force
-    echo "  APP_KEY                        di-generate"
-fi
 
 set_env DB_CONNECTION "$DB_CONNECTION"
 set_env DB_URL "${DB_URL:-}"
@@ -105,10 +100,25 @@ set_env CLOUDFLARE_R2_BUCKET "${CLOUDFLARE_R2_BUCKET:-}"
 set_env CLOUDFLARE_R2_ENDPOINT "${CLOUDFLARE_R2_ENDPOINT:-}"
 set_env CLOUDFLARE_R2_URL "${CLOUDFLARE_R2_URL:-}"
 
-# --- 3. Pastikan APP_KEY terisi ----------------------------------------------
-if grep -qE '^APP_KEY=base64:' .env; then
-    echo "  APP_KEY                         terisi"
+# --- 3. Dependency dulu, baru APP_KEY ---------------------------------------
+# artisan butuh vendor/autoload.php, jadi composer install harus jalan lebih
+# dulu sebelum key:generate bisa dipakai.
+command -v "$COMPOSER_BIN" >/dev/null 2>&1 || {
+    if [ -x "$HOME/bin/composer" ] || [ -f "$HOME/bin/composer.phar" ]; then
+        COMPOSER_BIN="$HOME/bin/composer"
+        [ -x "$COMPOSER_BIN" ] || COMPOSER_BIN="$HOME/bin/composer.phar"
+    else
+        die "composer tidak ditemukan. Pasang via: curl -sS https://getcomposer.org/installer | php"
+    fi
+}
+
+log "composer install --no-dev"
+"$COMPOSER_BIN" install --no-dev --optimize-autoloader --no-interaction --no-progress
+
+if grep -qE '^APP_KEY=base64:.+' .env; then
+    echo "  APP_KEY                         sudah terisi"
 else
+    log "APP_KEY kosong — membuat APP_KEY baru"
     "$PHP_BIN" artisan key:generate --force
 fi
 

@@ -34,8 +34,27 @@ die()  { printf '\n\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
 # --- Validasi environment ---------------------------------------------------
 [ -d "$APP_DIR" ]  || die "APP_DIR tidak ditemukan: $APP_DIR"
-[ -d "$WEB_ROOT" ] || die "WEB_ROOT tidak ditemukan: $WEB_ROOT"
 [ "$WEB_ROOT" != "/" ] || die "WEB_ROOT tidak boleh /"
+
+# Hostinger shared hosting punya dua layout umum:
+#   ~/domains/<domain>/public_html  (domain yang ditambahkan lewat hPanel)
+#   ~/public_html                   (domain bawaan / primary)
+# Kalau path yang diberikan tidak ada, cari sendiri supaya tidak salah tulis.
+if [ ! -d "$WEB_ROOT" ]; then
+    for candidate in \
+        "$HOME/domains/lipamitranusa.com/public_html" \
+        "$HOME/public_html" \
+        "$HOME/domains/erp.lipa.co.id/public_html"
+    do
+        if [ -d "$candidate" ]; then
+            warn "WEB_ROOT '$WEB_ROOT' tidak ada — memakai '$candidate'."
+            WEB_ROOT="$candidate"
+            break
+        fi
+    done
+fi
+
+[ -d "$WEB_ROOT" ] || die "WEB_ROOT tidak ditemukan: $WEB_ROOT (coba: ~/public_html atau ~/domains/<domain>/public_html)"
 
 command -v "$PHP_BIN" >/dev/null 2>&1 || die "PHP CLI tidak ditemukan ($PHP_BIN). Set PHP_BIN ke path absolut, mis. /usr/bin/php8.3"
 
@@ -67,13 +86,6 @@ fi
 cd "$APP_DIR/backend"
 [ -f .env ] || die "backend/.env belum ada di server. Salin .env.production.example ke .env, isi kredensialnya, lalu ulangi."
 
-# APP_KEY wajib ada sebelum session/cookie dipakai. Generate hanya bila kosong
-# supaya key produksi tidak berubah diam-diam tiap deploy.
-if ! grep -qE '^APP_KEY=base64:.+' .env; then
-    log "APP_KEY kosong — membuat APP_KEY baru"
-    "$PHP_BIN" artisan key:generate --force
-fi
-
 command -v "$COMPOSER_BIN" >/dev/null 2>&1 || {
     # Composer sering ada di ~/bin/composer tapi belum ada di PATH terminal.
     if [ -x "$HOME/bin/composer" ] || [ -f "$HOME/bin/composer.phar" ]; then
@@ -86,6 +98,14 @@ command -v "$COMPOSER_BIN" >/dev/null 2>&1 || {
 
 log "composer install --no-dev"
 "$COMPOSER_BIN" install --no-dev --optimize-autoloader --no-interaction --no-progress
+
+# APP_KEY wajib ada sebelum session/cookie dipakai. Generate hanya bila kosong
+# supaya key produksi tidak berubah diam-diam tiap deploy.
+# Harus setelah composer install — artisan butuh vendor/autoload.php.
+if ! grep -qE '^APP_KEY=base64:.+' .env; then
+    log "APP_KEY kosong — membuat APP_KEY baru"
+    "$PHP_BIN" artisan key:generate --force
+fi
 
 # --- 3. Build frontend ------------------------------------------------------
 DIST="$APP_DIR/frontend/dist"
