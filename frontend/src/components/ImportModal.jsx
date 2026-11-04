@@ -311,7 +311,7 @@ export default function ImportModal({
                 textAlign: "center",
                 cursor: uploading ? "not-allowed" : "pointer",
                 background: dragging ? "#F0FDF4" : "#FAFAFA",
-                transition: "all 0.15s ease",
+                transition: "border-color 180ms cubic-bezier(.2,0,.2,1), background-color 180ms cubic-bezier(.2,0,.2,1), box-shadow 180ms cubic-bezier(.2,0,.2,1)",
                 marginBottom: "16px",
               }}
             >

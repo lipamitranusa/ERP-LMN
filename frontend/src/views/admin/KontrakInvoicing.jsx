@@ -425,7 +425,7 @@ function DetailPanel({ pksId, onClose }) {
                       marginBottom: "10px",
                       cursor: "pointer",
                       background: kirimMode === "template" ? "#F0FDF4" : "#FAFAFA",
-                      transition: "all 0.15s",
+                      transition: "border-color 180ms cubic-bezier(.2,0,.2,1), background-color 180ms cubic-bezier(.2,0,.2,1), box-shadow 180ms cubic-bezier(.2,0,.2,1)",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
@@ -464,7 +464,7 @@ function DetailPanel({ pksId, onClose }) {
                       marginBottom: "16px",
                       cursor: "pointer",
                       background: kirimMode === "upload" ? "#F0FDF4" : "#FAFAFA",
-                      transition: "all 0.15s",
+                      transition: "border-color 180ms cubic-bezier(.2,0,.2,1), background-color 180ms cubic-bezier(.2,0,.2,1), box-shadow 180ms cubic-bezier(.2,0,.2,1)",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
@@ -1095,7 +1095,7 @@ export default function KontrakInvoicing() {
                             borderRadius: "8px",
                             cursor: "pointer",
                             background: selectedSiklus?.id === siklus.id ? "#F0FDF4" : "#FAFAFA",
-                            transition: "all 0.15s",
+                            transition: "border-color 180ms cubic-bezier(.2,0,.2,1), background-color 180ms cubic-bezier(.2,0,.2,1), box-shadow 180ms cubic-bezier(.2,0,.2,1)",
                           }}
                         >
                           <div style={{ fontSize: "13px", fontWeight: "600", color: "#1E293B" }}>{siklus.faskes?.nama || "—"}</div>

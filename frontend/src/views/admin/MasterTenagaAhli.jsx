@@ -92,6 +92,7 @@ const STATUS_COLORS = {
   Resign: { bg: "#FEE2E2", fg: "#991B1B" },
 };
 const EXCLUDED_ROLES = ["Admin", "Faskes"];
+const PER_PAGE = 10;
 
 function StatusBadgeTA({ status }) {
   const c = STATUS_COLORS[status] || STATUS_COLORS.Nonaktif;
@@ -113,6 +114,7 @@ export default function MasterTenagaAhli() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterLembaga, setFilterLembaga] = useState("");
   const [showImport, setShowImport] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const { lembagaId: activeLembagaId } = useLembaga();
 
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -130,14 +132,30 @@ export default function MasterTenagaAhli() {
   if (filterJenis) qs.set("jenis", filterJenis);
   if (filterStatus) qs.set("status_aktif", filterStatus);
   if (effectiveLembagaId) qs.set("lembaga_id", effectiveLembagaId);
+  qs.set("page", currentPage);
+  qs.set("per_page", PER_PAGE);
 
   const { data: listData, isLoading } = useApi(
-    ["tenaga-ahli", debouncedSearch, filterPeran, filterJenis, filterStatus, effectiveLembagaId],
+    ["tenaga-ahli", debouncedSearch, filterPeran, filterJenis, filterStatus, effectiveLembagaId, currentPage],
     `/master/tenaga-ahli?${qs.toString()}`
   );
   const { data: rolesData } = useApi("roles-tenaga-ahli", "/admin/roles");
   const items = listData?.data ?? [];
+  const pagination = {
+    current_page: listData?.current_page ?? 1,
+    last_page: listData?.last_page ?? 1,
+    per_page: listData?.per_page ?? PER_PAGE,
+    total: listData?.total ?? 0,
+  };
   const roles = (rolesData?.data ?? []).filter(r => !EXCLUDED_ROLES.includes(r.nama_role));
+
+  // Data terakhir di halaman ini dihapus → total mengecil, halaman sekarang
+  // bisa jadi tidak ada lagi. Kembalikan ke halaman terakhir yang valid.
+  useEffect(() => {
+    if (listData && currentPage > pagination.last_page) {
+      setCurrentPage(pagination.last_page);
+    }
+  }, [listData, currentPage, pagination.last_page]);
   const mutateSubmit = useMutateKeys([["tenaga-ahli"], ["roles-tenaga-ahli"]], {
     onSuccess: data => {
       if (data?.generated_password) {
@@ -233,7 +251,7 @@ export default function MasterTenagaAhli() {
     <div className="space-y-5">
       <PageHeader
         title="Master Data — Tenaga Ahli"
-        subtitle={`${items.length} tenaga ahli terdaftar`}
+        subtitle={`${pagination.total} tenaga ahli terdaftar`}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setShowImport(true)}><Upload size={16} /> Import CSV</Button>
@@ -246,23 +264,23 @@ export default function MasterTenagaAhli() {
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-xs">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
-          <Input placeholder="Cari nama atau NIK..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Cari nama atau NIK..." value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} className="pl-9" />
         </div>
         {[
           { val: filterPeran, set: setFilterPeran, opts: ["", "surveior", "verifikator", "kedua", "rekomendator"], labels: ["Semua Peran", "Surveior", "Verifikator", "Keduanya", "Reksa"] },
           { val: filterJenis, set: setFilterJenis, opts: ["", "TKPP", "TKSDU"], labels: ["Semua Jenis", "TKPP", "TKSDU"] },
           { val: filterStatus, set: setFilterStatus, opts: ["", "Aktif", "Nonaktif", "Cuti", "Resign"], labels: ["Semua Status", "Aktif", "Nonaktif", "Cuti", "Resign"] },
         ].map(({ val, set, opts, labels }, i) => (
-          <select key={i} className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={val} onChange={e => set(e.target.value)} style={{ flex: "0 0 150px" }}>
+          <select key={i} className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={val} onChange={e => { set(e.target.value); setCurrentPage(1); }} style={{ flex: "0 0 150px" }}>
             {opts.map((o, j) => <option key={o} value={o}>{labels[j]}</option>)}
           </select>
         ))}
-        <select className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={filterLembaga} onChange={e => setFilterLembaga(e.target.value)} style={{ flex: "0 0 220px" }}>
+        <select className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary" value={filterLembaga} onChange={e => { setFilterLembaga(e.target.value); setCurrentPage(1); }} style={{ flex: "0 0 220px" }}>
           <option value="">— Semua Lembaga / Lembaga Aktif —</option>
           {(lembagaList?.data || []).map(l => <option key={l.id} value={l.id}>{l.nama}{l.id === activeLembagaId ? " (Aktif)" : ""}</option>)}
         </select>
         {(filterPeran || filterJenis || filterStatus || search || filterLembaga) && (
-          <Button variant="ghost" size="sm" onClick={() => { setFilterPeran(""); setFilterJenis(""); setFilterStatus(""); setSearch(""); setFilterLembaga(""); }}>Reset</Button>
+          <Button variant="ghost" size="sm" onClick={() => { setFilterPeran(""); setFilterJenis(""); setFilterStatus(""); setSearch(""); setFilterLembaga(""); setCurrentPage(1); }}>Reset</Button>
         )}
       </div>
 
@@ -329,6 +347,33 @@ export default function MasterTenagaAhli() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* Pagination */}
+      {pagination.last_page > 1 && (
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <span className="text-xs text-slate-400 dark:text-slate-500">
+            Menampilkan {(pagination.current_page - 1) * pagination.per_page + 1}–{Math.min(pagination.current_page * pagination.per_page, pagination.total)} dari {pagination.total} tenaga ahli
+          </span>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => setCurrentPage(1)} disabled={currentPage <= 1} title="Halaman pertama">«</Button>
+            <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage <= 1} title="Halaman sebelumnya">‹</Button>
+            {Array.from({ length: Math.min(5, pagination.last_page) }, (_, i) => {
+              let pageNum;
+              if (pagination.last_page <= 5) pageNum = i + 1;
+              else if (currentPage <= 3) pageNum = i + 1;
+              else if (currentPage >= pagination.last_page - 2) pageNum = pagination.last_page - 4 + i;
+              else pageNum = currentPage - 2 + i;
+              return (
+                <Button key={pageNum} variant={pageNum === currentPage ? "default" : "outline"} size="sm" className="h-8 w-8 p-0" onClick={() => setCurrentPage(pageNum)}>
+                  {pageNum}
+                </Button>
+              );
+            })}
+            <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage >= pagination.last_page} title="Halaman berikutnya">›</Button>
+            <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => setCurrentPage(pagination.last_page)} disabled={currentPage >= pagination.last_page} title="Halaman terakhir">»</Button>
+          </div>
+        </div>
+      )}
 
       <Dialog open={showModal} onOpenChange={closeModal}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -448,8 +493,8 @@ export default function MasterTenagaAhli() {
                   <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Akun Login</p>
                   <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Buat sekaligus agar tidak perlu input dua kali.</p>
                 </div>
-                <button type="button" onClick={() => setValue("buat_akun", !watchedBuatAkun)} className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors" style={{ background: watchedBuatAkun ? "#4CAF50" : "#CBD5E1" }}>
-                  <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${watchedBuatAkun ? "translate-x-5" : "translate-x-0.5"}`} />
+                <button type="button" onClick={() => setValue("buat_akun", !watchedBuatAkun)} className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-fast ease-standard" style={{ background: watchedBuatAkun ? "#4CAF50" : "#CBD5E1" }}>
+                  <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-base ease-standard ${watchedBuatAkun ? "translate-x-5" : "translate-x-0.5"}`} />
                 </button>
               </div>
 

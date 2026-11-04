@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LMNIcon } from "@/components/LMNIcon";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { readJson } from "@/utils/storage";
 
 const NAV = [
   {
@@ -48,7 +49,7 @@ const NAV = [
 export default function SurveiorLayout({ children }) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const user = readJson("user", {});
   // Baca langsung dari localStorage agar langsung tampil saat render pertama
   // (tanpa tunggu context sync setelah login)
   const lembagaName = localStorage.getItem("lembaga_name") || null;
@@ -114,7 +115,7 @@ export default function SurveiorLayout({ children }) {
                     key={n.to}
                     to={n.to}
                     onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-fast ease-standard ${
                       isActive
                         ? "bg-primary/10 text-primary border-l-2 border-primary"
                         : "text-slate-400 hover:bg-slate-700 hover:text-slate-200"
@@ -138,7 +139,7 @@ export default function SurveiorLayout({ children }) {
               </div>
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors"
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors duration-fast ease-standard"
               >
                 <LogOut size={14} />
                 Keluar
@@ -178,7 +179,7 @@ export default function SurveiorLayout({ children }) {
               <Link
                 key={n.to}
                 to={n.to}
-                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-fast ease-standard ${
                   isActive
                     ? "bg-primary/10 text-primary border-l-2 border-primary ml-[-3px]"
                     : "text-slate-400 dark:text-slate-500 hover:bg-slate-700 hover:text-slate-200"
@@ -205,7 +206,7 @@ export default function SurveiorLayout({ children }) {
           </div>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm text-slate-400 dark:text-slate-500 hover:bg-slate-700 hover:text-slate-200 transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm text-slate-400 dark:text-slate-500 hover:bg-slate-700 hover:text-slate-200 transition-colors duration-fast ease-standard"
           >
             <LogOut size={14} />
             Keluar

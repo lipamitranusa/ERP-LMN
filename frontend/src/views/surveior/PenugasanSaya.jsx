@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
 import { formatDate } from "@/utils/dateFormat";
+import { readJson } from "@/utils/storage";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -233,7 +234,7 @@ export default function PenugasanSaya() {
     <div>
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-          Halo, {JSON.parse(localStorage.getItem("user") || "{}").nama || "Surveior"}!
+          Halo, {readJson("user", {}).nama || "Surveior"}!
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5">
           Daftar penugasan yang diberikan kepada Anda. Silakan konfirmasi kesediaan Anda.
@@ -383,7 +384,7 @@ export default function PenugasanSaya() {
                     onChange={handleFileChange}
                   />
                   <div
-                    className="border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-colors"
+                    className="border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-colors duration-fast ease-standard"
                     style={{
                       borderColor: lapFile ? "#22C55E" : "#CBD5E1",
                       background: lapFile ? "#F0FDF4" : "#F8FAFC",

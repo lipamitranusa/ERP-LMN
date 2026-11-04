@@ -8,6 +8,7 @@ import PenugasanSaya from "@/views/surveior/PenugasanSaya";
 import LaporanKendala from "@/views/surveior/LaporanKendala";
 import GantiPassword from "@/views/surveior/GantiPassword";
 import routes from "@/routes";
+import { readJson } from "@/utils/storage";
 
 // ─── Theme initialization — runs before first render ───────────────────────────
 (function initTheme() {
@@ -111,7 +112,7 @@ function App() {
       window.location.replace("/auth/login");
       return;
     }
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const user = readJson("user", {});
     if (user.role === "Faskes") {
       window.location.replace("/faskes/");
     } else if (user.role === "Surveior") {

@@ -34,10 +34,10 @@ function MobileNavItem({ route, onNavigate }) {
     <button
       onClick={() => { history.push(routeFullPath); onNavigate(); }}
       className={cn(
-        "w-full flex items-center gap-3 rounded-md text-sm font-medium transition-colors py-2.5 px-3 text-left",
+        "w-full flex items-center gap-3 rounded-md text-sm font-medium transition-[color,background-color,border-color,transform] duration-fast ease-standard py-2.5 px-3 text-left",
         isActive
           ? "bg-primary/10 text-primary border-l-2 border-primary"
-          : "text-slate-400 hover:bg-slate-700 hover:text-white"
+          : "text-slate-400 hover:bg-slate-700 hover:text-white hover:translate-x-0.5"
       )}
     >
       {route.icon && (
@@ -115,7 +115,7 @@ function MobileSidebar({ routes, onNavigate, open, onClose }) {
           </button>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-md text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-md text-slate-400 hover:bg-slate-700 hover:text-white transition-colors duration-fast ease-standard"
           >
             <X size={18} />
           </button>
@@ -131,10 +131,10 @@ function MobileSidebar({ routes, onNavigate, open, onClose }) {
                 <div key={`mg-${key}`} className="space-y-1">
                   <button
                     onClick={() => toggleGroup(entry.group)}
-                    className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-slate-300 transition-colors"
+                    className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-slate-300 transition-colors duration-fast ease-standard"
                   >
                     <span>{entry.group}</span>
-                    <svg className={cn("w-3 h-3 transition-transform", isGroupOpen(entry.group) ? "" : "-rotate-90")} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <svg className={cn("w-3 h-3 transition-transform duration-base ease-standard", isGroupOpen(entry.group) ? "" : "-rotate-90")} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
@@ -206,7 +206,7 @@ export default function AdminLayout({ children }) {
       {/* Main content area */}
       <div
         className={cn(
-          "flex flex-col min-h-screen transition-all duration-200",
+          "flex flex-col min-h-screen transition-[margin] duration-base ease-standard",
           sidebarCollapsed ? "lg:ml-[68px]" : "lg:ml-[240px]"
         )}
       >

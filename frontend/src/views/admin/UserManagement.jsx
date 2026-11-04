@@ -412,7 +412,7 @@ export default function UserManagement() {
                         ) : lembagaList.map(l => {
                           const checked = (field.value || []).includes(l.id);
                           return (
-                            <label key={l.id} className="flex items-center gap-2 p-2 rounded cursor-pointer transition-colors" style={{ background: checked ? "#F0FDF4" : "transparent", border: checked ? "1px solid #BBF7D0" : "1px solid transparent" }}>
+                            <label key={l.id} className="flex items-center gap-2 p-2 rounded cursor-pointer transition-colors duration-fast ease-standard" style={{ background: checked ? "#F0FDF4" : "transparent", border: checked ? "1px solid #BBF7D0" : "1px solid transparent" }}>
                               <input type="checkbox" checked={checked} onChange={() => toggleLembaga(l.id)} className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary" />
                               <span className="text-xs" style={{ color: checked ? "#166534" : "#1E293B", fontWeight: checked ? 600 : 400 }}>{l.nama}</span>
                             </label>

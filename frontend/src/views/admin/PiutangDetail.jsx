@@ -86,7 +86,7 @@ function ProgressBar({ received, total }) {
         <div style={{
           height: "100%", width: `${pct}%`,
           background: color, borderRadius: "9999px",
-          transition: "width 0.3s ease",
+          transition: "width 240ms cubic-bezier(.2,0,.2,1)",
         }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px", fontSize: "11px", color: "#94A3B8" }}>

@@ -355,7 +355,7 @@ export default function FaskesKontrak() {
               onDrop={handleDrop}
               onDragOver={handleDragOver}
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors mb-4"
+              className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors duration-fast ease-standard mb-4"
               style={{
                 borderColor: signedFile ? "#16A34A" : "#D1D5DB",
                 background: signedFile ? "#F0FDF4" : "#FAFAFA",

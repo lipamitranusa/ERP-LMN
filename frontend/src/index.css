@@ -37,6 +37,7 @@
   --color-slate-50: #F8FAFC;
   --color-slate-100: #F1F5F9;
   --color-slate-200: #E2E8F0;
+  --color-slate-300: #CBD5E1;
   --color-border: #E2E8F0;
   --color-white: #FFFFFF;
   --color-brand-ungu: #7E57C2;
@@ -51,6 +52,13 @@
   --sidebar-width: 240px;
   --sidebar-collapsed-width: 72px;
   --header-height: 64px;
+
+  /* ─── Motion tokens (docs/design-tokens.md §2.11) ─── */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 240ms;
+  --ease-standard: cubic-bezier(.2,0,.2,1);
+  --ease-out: cubic-bezier(0,0,.2,1);
 }
 
 /* ─── Dark mode tokens — override on .dark class */
@@ -80,6 +88,7 @@
   --color-slate-50: #0F172A;
   --color-slate-100: #1E293B;
   --color-slate-200: #334155;
+  --color-slate-300: #475569;
   --color-border: #334155;
   --color-white: #1E293B;
 }
@@ -184,11 +193,14 @@ html, body {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06);
-  transition: box-shadow 0.15s ease;
+  transition: box-shadow var(--dur-base) var(--ease-standard),
+              border-color var(--dur-base) var(--ease-standard),
+              transform var(--dur-base) var(--ease-standard);
 }
 
 .card:hover {
-  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08);
+  box-shadow: 0 6px 16px -4px rgba(15,23,42,0.10), 0 2px 6px -2px rgba(15,23,42,0.05);
+  border-color: var(--color-slate-300);
 }
 
 .card-header {
@@ -230,11 +242,17 @@ html, body {
   border-bottom: 1px solid var(--color-slate-100);
   vertical-align: middle;
   color: #334155;
+  transition: background-color var(--dur-fast) var(--ease-standard);
 }
 
 .data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr { transition: background-color var(--dur-fast) var(--ease-standard); }
 .data-table tbody tr:hover td { background: var(--color-slate-50); }
 .data-table tbody td:first-child { border-left: none; }
+
+/* Bar aksen kiri muncul saat baris di-hover — penanda interaksi tanpa menambah density */
+.data-table tbody tr { position: relative; }
+.data-table tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--color-primary); }
 
 /* ─── Status Badges ─── */
 .status-badge {
@@ -281,25 +299,41 @@ html, body {
   border-radius: 6px;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease,
-              border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color var(--dur-fast) var(--ease-standard),
+              color var(--dur-fast) var(--ease-standard),
+              border-color var(--dur-fast) var(--ease-standard),
+              box-shadow var(--dur-fast) var(--ease-standard),
+              transform var(--dur-fast) var(--ease-standard);
   text-decoration: none;
   white-space: nowrap;
   font-family: inherit;
   line-height: 1;
 }
 
-.btn:active { transform: scale(0.98); }
+.btn:hover:not(:disabled) { transform: translateY(-1px); }
+.btn:active:not(:disabled) { transform: translateY(0) scale(0.98); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-primary { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
-.btn-primary:hover:not(:disabled) { background: var(--color-primary-dark); border-color: var(--color-primary-dark); }
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+  box-shadow: 0 4px 10px -2px rgba(76,175,80,0.35);
+}
 
 .btn-secondary { background: var(--color-white); color: #334155; border-color: #CBD5E1; }
-.btn-secondary:hover:not(:disabled) { background: var(--color-slate-50); border-color: #94A3B8; }
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-slate-50);
+  border-color: #94A3B8;
+  box-shadow: 0 2px 6px -2px rgba(15,23,42,0.12);
+}
 
 .btn-danger { background: var(--color-danger); color: #fff; border-color: var(--color-danger); }
-.btn-danger:hover:not(:disabled) { background: #B91C1C; border-color: #B91C1C; }
+.btn-danger:hover:not(:disabled) {
+  background: #B91C1C;
+  border-color: #B91C1C;
+  box-shadow: 0 4px 10px -2px rgba(220,38,38,0.35);
+}
 
 .btn-ghost { background: transparent; color: #64748B; border-color: transparent; }
 .btn-ghost:hover:not(:disabled) { background: var(--color-slate-100); color: #334155; }
@@ -317,9 +351,13 @@ html, body {
   background: var(--color-white);
   color: #1E293B;
   font-family: inherit;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--dur-fast) var(--ease-standard),
+              box-shadow var(--dur-fast) var(--ease-standard),
+              background-color var(--dur-fast) var(--ease-standard);
   outline: none;
 }
+
+.form-input:hover:not(:disabled):not(:focus) { border-color: #94A3B8; }
 
 .form-input:focus {
   border-color: var(--color-primary);
@@ -339,17 +377,25 @@ html, body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  transition: box-shadow 0.15s ease;
+  transition: box-shadow var(--dur-base) var(--ease-standard),
+              border-color var(--dur-base) var(--ease-standard),
+              transform var(--dur-base) var(--ease-standard);
 }
 
-.stat-card:hover { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08); }
+.stat-card:hover {
+  box-shadow: 0 6px 16px -4px rgba(15,23,42,0.10), 0 2px 6px -2px rgba(15,23,42,0.05);
+  border-color: var(--color-slate-300);
+}
 
 .stat-card-icon {
   width: 40px; height: 40px;
   border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
+  transition: transform var(--dur-base) var(--ease-standard);
 }
+
+.stat-card:hover .stat-card-icon { transform: scale(1.06); }
 
 .stat-card-icon svg { width: 20px; height: 20px; }
 
@@ -662,6 +708,13 @@ body.modal-open { overflow: hidden; }
 .dark .data-table tbody td {
   background-color: transparent !important;
 }
+/* Letakkan SESUDAH aturan di atas: bg hover harus menang atas `transparent !important` */
+.dark .data-table tbody tr:hover td {
+  background-color: #1E293B !important;
+}
+.dark .data-table tbody tr:hover td:first-child {
+  box-shadow: inset 3px 0 0 #4CAF50;
+}
 .dark .data-table thead th {
   background: #0F172A !important;
   color: #94A3B8 !important;
@@ -684,6 +737,10 @@ body.modal-open { overflow: hidden; }
   background-color: #1E293B !important;
   border-color: #334155 !important;
 }
+.dark .card:hover {
+  border-color: #475569 !important;
+  box-shadow: 0 6px 16px -4px rgba(0,0,0,0.45) !important;
+}
 .dark .card-header {
   background-color: transparent !important;
   border-color: #334155 !important;
@@ -696,6 +753,10 @@ body.modal-open { overflow: hidden; }
 .dark .stat-card {
   background-color: #1E293B !important;
   border-color: #334155 !important;
+}
+.dark .stat-card:hover {
+  border-color: #475569 !important;
+  box-shadow: 0 6px 16px -4px rgba(0,0,0,0.45) !important;
 }
 .dark .stat-card .stat-card-icon {
   /* keep tone-colored backgrounds */

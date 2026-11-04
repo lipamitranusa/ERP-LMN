@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useApi, useMutate } from "@/hooks/useApi";
+import { readJson } from "@/utils/storage";
 import { Button } from "@/components/ui/button";
 
 function Modal({ title, onClose, children }) {
@@ -31,7 +32,7 @@ function Modal({ title, onClose, children }) {
 export default function RekomendasiSettings() {
   const { menuActions } = useAuth();
   const canEdit = menuActions?.some(a => a.modul === "Rekomendasi" && a.action === "Ubah");
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const user = readJson("user", {});
   const [editOpen, setEditOpen] = useState(false);
   const [editSelected, setEditSelected] = useState("");
   const [message, setMessage] = useState("");

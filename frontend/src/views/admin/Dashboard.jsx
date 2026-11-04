@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { LayoutDashboard, Activity, CheckCircle2, AlertCircle } from "lucide-react";
 import { formatDate } from "@/utils/dateFormat";
+import { readJson } from "@/utils/storage";
 import { useApi } from "@/hooks/useApi";
 import { SkeletonStatCards, EmptyTableRow } from "@/components/Skeleton";
 import { StatCard } from "@/components/StatCard";
@@ -19,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { LMNIcon } from "@/components/LMNIcon";
 
 function Dashboard() {
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const user = readJson("user", {});
   const { data, isLoading } = useApi("dashboard-prefetch", "/admin/dashboard");
 
   const stats = {
@@ -127,7 +128,7 @@ function Dashboard() {
                     {s.faskes?.nama || s.faskes_id || "—"}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={s.status_kelengkapan || s.status} />
+                    <StatusBadge status={s.status} />
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
                     {formatDate(s.tanggal_pengajuan)}

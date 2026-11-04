@@ -144,7 +144,7 @@ export default function AccountingDashboard() {
             <a
               key={i}
               href={item.path}
-              className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md p-3 cursor-pointer transition-colors hover:border-blue-500 block no-underline"
+              className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md p-3 cursor-pointer transition-colors duration-fast ease-standard hover:border-blue-500 block no-underline"
             >
               <div className="text-[13px] font-semibold text-slate-700 dark:text-slate-200">{item.label}</div>
               <div className="text-[11px] text-muted-foreground mt-0.5">{item.desc}</div>

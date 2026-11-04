@@ -54,7 +54,7 @@ function AgingBar({ buckets }) {
             <div
               key={s.key}
               title={`${s.label}: ${formatRp(buckets[s.key]?.nilai || 0)} (${buckets[s.key]?.count || 0} honor)`}
-              className="transition-all"
+              className="transition-[width] duration-base ease-standard"
               style={{ width: `${pct}%`, background: s.color }}
             />
           );

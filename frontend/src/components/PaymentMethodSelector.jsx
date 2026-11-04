@@ -54,9 +54,21 @@ export default function PaymentMethodSelector({ value, onChange, disabled }) {
               borderRadius: "8px",
               cursor: disabled ? "not-allowed" : "pointer",
               textAlign: "left",
-              transition: "all 0.15s ease",
+              transition: "background-color 120ms cubic-bezier(.2,0,.2,1), border-color 120ms cubic-bezier(.2,0,.2,1), box-shadow 180ms cubic-bezier(.2,0,.2,1), transform 180ms cubic-bezier(.2,0,.2,1)",
               opacity: disabled ? 0.6 : 1,
               fontFamily: "inherit",
+            }}
+            onMouseEnter={e => {
+              if (disabled || active) return;
+              e.currentTarget.style.borderColor = "#94A3B8";
+              e.currentTarget.style.boxShadow = "0 6px 16px -4px rgba(15,23,42,0.10)";
+              e.currentTarget.style.transform = "translateY(-2px)";
+            }}
+            onMouseLeave={e => {
+              if (disabled || active) return;
+              e.currentTarget.style.borderColor = "#E2E8F0";
+              e.currentTarget.style.boxShadow = "none";
+              e.currentTarget.style.transform = "none";
             }}
           >
             <div style={{

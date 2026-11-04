@@ -312,14 +312,14 @@ function DetailModal({ group, histori, onClose, onReplaceOpen }) {
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => handleView(`/penugasan/surat-tugas/${t.surat_tugas.id}/serve`)}
-                        className="flex items-center gap-1 text-[11px] font-semibold text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                        className="flex items-center gap-1 text-[11px] font-semibold text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 px-2 py-1 rounded-md transition-colors duration-fast ease-standard cursor-pointer"
                       >
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         Lihat
                       </button>
                       <button
                         onClick={() => handleDownload(`/penugasan/surat-tugas/${t.surat_tugas.id}/download`, `Surat_Tugas_${t.surat_tugas.nomor_surat || "ST"}.pdf`)}
-                        className="flex items-center gap-1 text-[11px] font-semibold text-green-700 dark:text-green-300 hover:text-green-900 dark:hover:text-green-100 bg-green-100 dark:bg-green-900 hover:bg-green-200 dark:hover:bg-green-800 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                        className="flex items-center gap-1 text-[11px] font-semibold text-green-700 dark:text-green-300 hover:text-green-900 dark:hover:text-green-100 bg-green-100 dark:bg-green-900 hover:bg-green-200 dark:hover:bg-green-800 px-2 py-1 rounded-md transition-colors duration-fast ease-standard cursor-pointer"
                       >
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         Unduh
@@ -371,14 +371,14 @@ function DetailModal({ group, histori, onClose, onReplaceOpen }) {
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => handleView(`/penugasan/laporan-pengerjaan/${t.laporan_pengerjaan.id}/download`)}
-                        className="flex items-center gap-1 text-[11px] font-semibold text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                        className="flex items-center gap-1 text-[11px] font-semibold text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 px-2 py-1 rounded-md transition-colors duration-fast ease-standard cursor-pointer"
                       >
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         Lihat
                       </button>
                       <button
                         onClick={() => handleDownload(`/penugasan/laporan-pengerjaan/${t.laporan_pengerjaan.id}/download`, t.laporan_pengerjaan.nama_file_asli || "laporan_pengerjaan")}
-                        className="flex items-center gap-1 text-[11px] font-semibold text-green-700 dark:text-green-300 hover:text-green-900 dark:hover:text-green-100 bg-green-100 dark:bg-green-900 hover:bg-green-200 dark:hover:bg-green-800 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                        className="flex items-center gap-1 text-[11px] font-semibold text-green-700 dark:text-green-300 hover:text-green-900 dark:hover:text-green-100 bg-green-100 dark:bg-green-900 hover:bg-green-200 dark:hover:bg-green-800 px-2 py-1 rounded-md transition-colors duration-fast ease-standard cursor-pointer"
                       >
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         Unduh

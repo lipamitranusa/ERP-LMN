@@ -22,7 +22,7 @@ function SortableHeader({ column, label }) {
   if (!column.getCanSort()) return <span>{label}</span>;
   return (
     <button
-      className="flex items-center gap-1 hover:text-slate-700 dark:text-slate-300 transition-colors"
+      className="flex items-center gap-1 rounded transition-[color,transform] duration-fast ease-standard hover:text-slate-700 dark:hover:text-slate-200 active:scale-95"
       onClick={column.getToggleSortingHandler()}
     >
       {label}
@@ -66,7 +66,7 @@ export function DataTable({ columns, data, pageSize = 10 }) {
             placeholder="Cari..."
             value={globalFilter || ""}
             onChange={e => setGlobalFilter(e.target.value)}
-            className="h-9 w-full max-w-xs rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 text-sm placeholder:text-slate-400 dark:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+            className="h-9 w-full max-w-xs rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 text-sm placeholder:text-slate-400 dark:text-slate-500 transition-[color,box-shadow,border-color] duration-fast ease-standard hover:border-slate-300 dark:hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
           />
         </div>
       )}

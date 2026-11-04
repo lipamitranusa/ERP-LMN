@@ -199,7 +199,7 @@ export function PrivilegeMatrixPage() {
                             {exists ? (
                               <button
                                 onClick={() => toggle(modul, action)}
-                                className={`w-7 h-7 rounded flex items-center justify-center text-xs font-bold mx-auto transition-colors ${
+                                className={`w-7 h-7 rounded flex items-center justify-center text-xs font-bold mx-auto transition-colors duration-fast ease-standard ${
                                   allowed
                                     ? 'bg-brand-100 text-brand-700 hover:bg-brand-200'
                                     : 'bg-slate-100 text-slate-400 hover:bg-slate-200'

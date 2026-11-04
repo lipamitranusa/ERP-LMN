@@ -1,17 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
+import { readJson, writeJson } from "@/utils/storage";
 
 const API_BASE = '/api';
 
 export function useAuth() {
   const [token, setToken] = useState(() => localStorage.getItem('token'));
-  const [user, setUser] = useState(() => {
-    const stored = localStorage.getItem('user');
-    return stored ? JSON.parse(stored) : null;
-  });
-  const [menuActions, setMenuActions] = useState(() => {
-    const stored = localStorage.getItem('menu_actions');
-    return stored ? JSON.parse(stored) : [];
-  });
+  const [user, setUser] = useState(() => readJson('user'));
+  const [menuActions, setMenuActions] = useState(() => readJson('menu_actions', []));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const mountedRef = useRef(true);
@@ -37,8 +32,8 @@ export function useAuth() {
       setUser(data.user);
       setMenuActions(data.menu_actions || []);
       localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      localStorage.setItem('menu_actions', JSON.stringify(data.menu_actions || []));
+      writeJson('user', data.user);
+      writeJson('menu_actions', data.menu_actions || []);
       return data;
     } catch (err) {
       setError(err.message);
@@ -79,8 +74,8 @@ export function useAuth() {
     if (!mountedRef.current) return;
     setUser(data.user);
     setMenuActions(data.menu_actions || []);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    localStorage.setItem('menu_actions', JSON.stringify(data.menu_actions || []));
+    writeJson('user', data.user);
+    writeJson('menu_actions', data.menu_actions || []);
     // Ikuti server HANYA kalau server menolak lemma yang diminta (mis. akses
     // dicabut). Tanpa ini, session server bisa menimpa pilihan lemma client.
     if (data.lembaga_id && data.lembaga_id !== activeLembaga) {

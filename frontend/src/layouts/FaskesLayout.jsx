@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { LMNIcon } from "@/components/LMNIcon";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useLembaga } from "@/contexts/LembagaContext";
+import { readJson } from "@/utils/storage";
 
 const NAV = [
   {
@@ -69,7 +70,7 @@ const NAV = [
 export default function FaskesLayout({ children }) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const user = readJson("user", {});
   // Baca langsung dari localStorage agar langsung tampil saat render pertama
   const lembagaName = localStorage.getItem("lembaga_name") || null;
   const lembagaLogo = localStorage.getItem("lembaga_logo") || null;
@@ -166,7 +167,7 @@ export default function FaskesLayout({ children }) {
                     key={n.to}
                     to={n.to}
                     onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-fast ease-standard ${
                       isActive
                         ? "bg-green-50 text-green-800 font-semibold dark:bg-green-950 dark:text-green-300"
                         : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:hover:text-slate-200"
@@ -193,7 +194,7 @@ export default function FaskesLayout({ children }) {
               </div>
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-slate-400 dark:text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-slate-400 dark:text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors duration-fast ease-standard"
               >
                 <LogOut size={14} />
                 Keluar
@@ -239,7 +240,7 @@ export default function FaskesLayout({ children }) {
               <Link
                 key={n.to}
                 to={n.to}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-fast ease-standard ${
                   isActive
                     ? "bg-green-50 text-green-800 font-semibold dark:bg-green-950 dark:text-green-300"
                     : "text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:bg-slate-800/50 dark:hover:bg-slate-800 dark:hover:text-slate-200"
@@ -266,7 +267,7 @@ export default function FaskesLayout({ children }) {
           </div>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-slate-400 dark:text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-slate-400 dark:text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors duration-fast ease-standard"
           >
             <LogOut size={14} />
             Keluar

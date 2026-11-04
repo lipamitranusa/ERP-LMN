@@ -37,16 +37,19 @@ function SidebarNavItem({ route, collapsed, onNavigate }) {
       to={routeFullPath}
       onClick={onNavigate}
       className={cn(
-        "flex items-center gap-3 rounded-md text-sm font-medium transition-colors",
+        "group flex items-center gap-3 rounded-md text-sm font-medium transition-[color,background-color,border-color] duration-fast ease-standard",
         isActive
           ? "bg-primary/10 text-primary border-l-2 border-primary ml-[-3px]"
-          : "text-slate-400 dark:text-slate-500 hover:bg-slate-800 hover:text-slate-100",
+          : "text-slate-400 dark:text-slate-500 hover:bg-slate-800 hover:text-slate-100 hover:translate-x-0.5",
         collapsed ? "justify-center px-2 py-2" : "px-3 py-2"
       )}
       title={collapsed ? route.name : undefined}
     >
       {route.icon && (
-        <span className={cn("shrink-0", isActive ? "text-primary" : "text-slate-400 dark:text-slate-500")}>
+        <span className={cn(
+          "shrink-0 transition-transform duration-fast ease-standard group-hover:scale-110",
+          isActive ? "text-primary" : "text-slate-400 dark:text-slate-500"
+        )}>
           {route.icon}
         </span>
       )}
@@ -97,11 +100,11 @@ function SidebarGroup({ group, collapsed, menuActions, roleName, onNavigate }) {
     <div className="space-y-1">
       <button
         onClick={toggleOpen}
-        className="flex w-full items-center justify-between px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-300 dark:hover:text-slate-300 transition-colors"
+        className="flex w-full items-center justify-between px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-300 dark:hover:text-slate-300 transition-colors duration-fast ease-standard"
       >
         <span>{group.group}</span>
         <ChevronDown
-          className={cn("h-3 w-3 transition-transform", open ? "" : "-rotate-90")}
+          className={cn("h-3 w-3 transition-transform duration-base ease-standard", open ? "" : "-rotate-90")}
         />
       </button>
       {open && visibleItems.map((route, ki) => (
@@ -127,7 +130,7 @@ export function Sidebar({ routes, collapsed, onCollapse, onNavigate }) {
   return (
     <aside
       className={cn(
-        "fixed top-0 left-0 z-40 h-screen bg-slate-800 border-r border-slate-700 flex flex-col transition-all duration-200",
+        "fixed top-0 left-0 z-40 h-screen bg-slate-800 border-r border-slate-700 flex flex-col transition-[width] duration-base ease-standard",
         collapsed ? "w-[68px]" : "w-[240px]"
       )}
     >
@@ -194,7 +197,7 @@ export function Sidebar({ routes, collapsed, onCollapse, onNavigate }) {
         <button
           onClick={onCollapse}
           className={cn(
-            "flex items-center w-full gap-3 rounded-md px-3 py-2 text-sm text-slate-400 dark:text-slate-500 hover:bg-slate-700 hover:text-slate-200 transition-colors"
+            "flex items-center w-full gap-3 rounded-md px-3 py-2 text-sm text-slate-400 dark:text-slate-500 hover:bg-slate-700 hover:text-slate-200 transition-colors duration-fast ease-standard"
           )}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >

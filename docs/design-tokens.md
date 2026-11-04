@@ -201,6 +201,39 @@ ease-out          cubic-bezier(0,0,.2,1)    (entrance)
 Hanya untuk state yang **disebabkan user action** (hover, click, submit).
 TIDAK ada entrance animation otomatis saat page load.
 
+**Implementasi:** token tersedia di tiga tempat agar bisa dipakai tanpa
+konsistensi token:
+
+| Artefak | Isi |
+|---|---|
+| `frontend/tailwind.config.js` → `extend.transitionDuration` | `duration-fast` (120ms), `duration-base` (180ms), `duration-slow` (240ms) |
+| `frontend/tailwind.config.js` → `extend.transitionTimingFunction` | `ease-standard` |
+| `frontend/tailwind.config.js` → `extend.boxShadow` | `shadow-elevate` (hover card), `shadow-focus` |
+| `frontend/src/index.css` → `:root` | `--dur-fast`, `--dur-base`, `--dur-slow`, `--ease-standard`, `--ease-out` (untuk CSS class legacy) |
+
+Pola pemakaian pada komponen Tailwind:
+
+```jsx
+className="transition-[color,background-color,border-color,box-shadow] duration-fast ease-standard"
+```
+
+`transition-[...]` **harus** dipasangkan dengan `duration-*` dan
+`ease-standard` — tanpa itu, Tailwind memakai default `150ms` +
+`cubic-bezier(.4,0,.2,1)` yang bukan token produk ini.
+
+**Hover effect yang dipakai (standar):**
+
+| Elemen | Efek |
+|---|---|
+| Button | shadow naik saat hover, `scale(0.97)` saat active |
+| Card | `shadow-elevate` + borderGelap + `translateY(-2px)` (StatCard) |
+| Table row | background slate-50 + bar aksen hijau 3px di kolom pertama |
+| Input / Select | border Gelap saat hover, ring brand saat focus |
+| Sidebar nav | background + `translateX(2px)` + ikon `scale(1.1)` |
+| Tabs trigger | background + text color |
+| Kartu aksi (portal Faskes) | `shadow-elevate` + `translateY(-4px)`, `translateY(0)` saat active |
+| Progress bar / donut segment | `transition-[width]` saja, `duration-base` |
+
 ---
 
 ## 3. Semantic Tokens

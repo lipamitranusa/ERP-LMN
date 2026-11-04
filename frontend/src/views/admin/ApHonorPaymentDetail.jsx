@@ -295,7 +295,7 @@ export default function ApHonorPaymentDetail() {
                     <p className="text-[12px] font-semibold text-slate-600 dark:text-slate-300 dark:text-slate-500 mb-2">Pilih Channel Pengiriman</p>
                     <div className="flex gap-3">
                       {[{ value: "whatsapp", label: "WhatsApp" }, { value: "email", label: "Email" }, { value: "both", label: "Keduanya" }].map(ch => (
-                        <label key={ch.value} className="flex items-center gap-2 px-4 py-2.5 rounded-lg cursor-pointer border-2 transition-all" style={{ borderColor: sendChannel === ch.value ? "#7C3AED" : "#E2E8F0", background: sendChannel === ch.value ? "#FAF5FF" : "#fff", color: sendChannel === ch.value ? "#5B21B6" : "#475569", fontWeight: sendChannel === ch.value ? 600 : 400 }}>
+                        <label key={ch.value} className="flex items-center gap-2 px-4 py-2.5 rounded-lg cursor-pointer border-2 transition-[border-color,background-color,box-shadow] duration-fast ease-standard hover:shadow-[0_4px_12px_-2px_rgba(15,23,42,0.10)]" style={{ borderColor: sendChannel === ch.value ? "#7C3AED" : "#E2E8F0", background: sendChannel === ch.value ? "#FAF5FF" : "#fff", color: sendChannel === ch.value ? "#5B21B6" : "#475569", fontWeight: sendChannel === ch.value ? 600 : 400 }}>
                           <input type="radio" name="sendChannel" value={ch.value} checked={sendChannel === ch.value} onChange={() => setSendChannel(ch.value)} className="hidden" />
                           {ch.label}
                         </label>

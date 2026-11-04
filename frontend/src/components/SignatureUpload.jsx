@@ -42,7 +42,7 @@ export default function SignatureUpload({ value, onChange, error }) {
           padding: "20px",
           textAlign: "center",
           cursor: "pointer",
-          transition: "all 0.15s ease",
+          transition: "border-color 180ms cubic-bezier(.2,0,.2,1), background-color 180ms cubic-bezier(.2,0,.2,1), box-shadow 180ms cubic-bezier(.2,0,.2,1)",
         }}
       >
         {preview ? (

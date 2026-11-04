@@ -23,11 +23,12 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { api } from "@/lib/api";
 import { useLembaga } from "@/contexts/LembagaContext";
 import { useAuth } from "@/hooks/useAuth";
+import { readJson } from "@/utils/storage";
 
 export function AdminHeader({ onMenuToggle }) {
   const location = useLocation();
   const { user: authUser } = useAuth();
-  const user = authUser || JSON.parse(localStorage.getItem("user") || "{}");
+  const user = authUser || readJson("user", {});
   const { lembagaId, lembagaName, switchLembaga } = useLembaga();
   const [switchError, setSwitchError] = useState(null);
   const [switching, setSwitching] = useState(false);
@@ -122,7 +123,7 @@ export function AdminHeader({ onMenuToggle }) {
       {/* Mobile menu toggle */}
       <button
         onClick={onMenuToggle}
-        className="lg:hidden flex items-center justify-center w-9 h-9 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        className="lg:hidden flex items-center justify-center w-9 h-9 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-[background-color,transform] duration-fast ease-standard active:scale-95"
         aria-label="Toggle menu"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
@@ -150,7 +151,7 @@ export function AdminHeader({ onMenuToggle }) {
           <input
             type="text"
             placeholder="Cari menu atau data..."
-            className="w-full h-8 pl-9 pr-3 text-sm rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+            className="w-full h-8 pl-9 pr-3 text-sm rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-[color,box-shadow,border-color] duration-fast ease-standard hover:border-slate-300 dark:hover:border-slate-600"
           />
         </div>
       </div>
@@ -161,7 +162,7 @@ export function AdminHeader({ onMenuToggle }) {
         {lembagaId && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button disabled={switching} variant="outline" size="sm" className="h-8 gap-2 border-green-200 bg-green-50 text-green-800 hover:bg-green-100 hover:text-green-900 font-medium text-xs">
+              <Button disabled={switching} variant="outline" size="sm" className="h-8 gap-2 border-green-200 bg-green-50 text-green-800 hover:bg-green-100 hover:text-green-900 hover:border-green-300 font-medium text-xs transition-[background-color,border-color,box-shadow,transform] duration-fast ease-standard hover:-translate-y-px hover:shadow-[0_4px_10px_-2px_rgba(76,175,80,0.28)]">
                 <Home size={12} />
                 <span className="max-w-[120px] sm:max-w-[160px] truncate">
                   {displayName}

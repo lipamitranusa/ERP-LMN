@@ -89,7 +89,7 @@ function RevisiModal({ currentVersion, onConfirm, onCancel, loading }) {
             />
             <div
               onClick={() => fileRef.current?.click()}
-              className={`border-2 border-dashed rounded-lg p-3 cursor-pointer flex items-center gap-3 transition-colors ${
+              className={`border-2 border-dashed rounded-lg p-3 cursor-pointer flex items-center gap-3 transition-colors duration-fast ease-standard ${
                 file
                   ? "border-green-500 bg-green-50 dark:border-green-400 dark:bg-green-950/40"
                   : "border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-800/40"
@@ -265,7 +265,7 @@ function DropZone({ jenis, currentDok, onUpload, onReplace, uploading, error }) 
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
       onClick={() => !uploading && inputRef.current?.click()}
-      className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${zoneClasses}`}
+      className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors duration-fast ease-standard ${zoneClasses}`}
       style={{ cursor: uploading ? "wait" : "pointer" }}
     >
       <input
@@ -327,7 +327,7 @@ function ProgressHeader({ uploaded, total }) {
         </Badge>
       </div>
       <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-400" style={{ width: `${pct}%`, background: "#2E7D32" }} />
+        <div className="h-full rounded-full transition-[width] duration-base ease-standard" style={{ width: `${pct}%`, background: "#2E7D32" }} />
       </div>
     </div>
   );
@@ -597,7 +597,7 @@ export default function FaskesDokumen() {
                   </Button>
                   <button
                     onClick={() => downloadDokumen(current).catch(err => alert(err.message))}
-                    className="inline-flex items-center gap-1 px-2.5 h-7 text-[11px] text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md font-medium transition-colors"
+                    className="inline-flex items-center gap-1 px-2.5 h-7 text-[11px] text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md font-medium transition-colors duration-fast ease-standard"
                   >
                     <Download size={12} />Unduh
                   </button>

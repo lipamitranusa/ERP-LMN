@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Upload, Eye, Check, X } from "lucide-react";
 import SiklusStepper from "@/components/SiklusStepper";
+import { StatusBadge as StatusSiklus } from "@/components/StatusBadge";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -181,7 +182,8 @@ export default function SiklusDetail() {
         title={siklus.faskes?.nama || siklus.nama || "Detail Siklus"}
         subtitle={
           <div className="flex items-center gap-3 mt-1">
-            <StatusBadge label={siklus.status_kelengkapan || siklus.status} />
+            <StatusSiklus status={siklus.status} />
+            {siklus.status_kelengkapan && <StatusBadge label={siklus.status_kelengkapan} />}
             {siklus.faskes?.jenis && <span className="text-xs text-slate-400 dark:text-slate-500">{siklus.faskes.jenis}</span>}
             {siklus.faskes?.alamat && <span className="text-xs text-slate-400 dark:text-slate-500">{siklus.faskes.alamat}</span>}
           </div>

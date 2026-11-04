@@ -158,7 +158,7 @@ export default function FaskesChangePassword() {
                 <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
                   <div className="flex-1 h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                     <div
-                      className="h-full rounded-full transition-all duration-200"
+                      className="h-full rounded-full transition-[width] duration-base ease-standard"
                       style={{ width: `${(strength.score / 5) * 100}%`, background: strength.color }}
                     />
                   </div>

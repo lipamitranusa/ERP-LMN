@@ -44,7 +44,7 @@ export default function InvoiceStatusCard({ invoice, onClick }) {
       borderRadius: "8px",
       padding: "20px",
       cursor: onClick ? "pointer" : "default",
-      transition: "box-shadow 0.15s",
+      transition: "box-shadow 180ms cubic-bezier(.2,0,.2,1)",
     }}
     onClick={onClick}
     onMouseEnter={e => { if (onClick) e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)"; }}
@@ -95,7 +95,7 @@ export default function InvoiceStatusCard({ invoice, onClick }) {
           width: `${pct}%`,
           height: "100%",
           background: invoice.status === "lunas" ? "#4CAF50" : "#F59E0B",
-          transition: "width 0.3s ease",
+          transition: "width 240ms cubic-bezier(.2,0,.2,1)",
         }} />
       </div>
       <div style={{ marginTop: "6px", fontSize: "11px", color: "#94A3B8", textAlign: "right" }}>

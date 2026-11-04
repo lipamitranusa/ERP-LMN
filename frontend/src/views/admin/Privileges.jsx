@@ -204,7 +204,7 @@ export default function Privileges() {
                       <td key={r.id} className="px-3 py-2 text-center">
                         <button
                           onClick={() => toggle(r.id, act.id)}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-muted transition-colors"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-muted transition-colors duration-fast ease-standard"
                           title={`${r.nama_role} — ${mod.modul} / ${act.action}`}
                         >
                           {hasPrivilege(r.id, act.id) ? (

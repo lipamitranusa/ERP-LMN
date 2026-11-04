@@ -189,7 +189,7 @@ export default function MasterBiaya() {
                   <button
                     key={g.jenis_faskes.id}
                     onClick={() => setActiveTab(g.jenis_faskes.id)}
-                    className="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+                    className="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-fast ease-standard"
                     style={{
                       borderBottomColor: activeTab === g.jenis_faskes.id ? "#4CAF50" : "transparent",
                       color: activeTab === g.jenis_faskes.id ? "#4CAF50" : "#64748B",

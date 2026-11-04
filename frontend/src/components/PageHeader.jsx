@@ -15,7 +15,7 @@ export function PageHeader({ title, subtitle, icon, actions, className }) {
     <div className={cn("flex items-start justify-between mb-6 gap-4", className)}>
       <div className="flex items-center gap-3">
         {icon && (
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-primary/10 dark:bg-primary/20">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-primary/10 dark:bg-primary/20 transition-transform duration-base ease-standard">
             <div className="text-primary">{icon}</div>
           </div>
         )}

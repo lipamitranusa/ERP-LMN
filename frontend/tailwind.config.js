@@ -90,6 +90,15 @@ export default {
         'sidebar': '240px',
         'sidebarCollapsed': '72px',
       },
+      /* ─── Motion tokens (docs/design-tokens.md §2.11) ─── */
+      transitionDuration: {
+        fast: '120ms',
+        base: '180ms',
+        slow: '240ms',
+      },
+      transitionTimingFunction: {
+        standard: 'cubic-bezier(.2,0,.2,1)',
+      },
       backdropBlur: {
         sidebar: '12px',
       },
@@ -97,6 +106,8 @@ export default {
         'card': '0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.04)',
         'cardHover': '0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -2px rgba(0,0,0,0.04)',
         'sidebar': '4px 0 24px rgba(0,0,0,0.12)',
+        'elevate': '0 6px 16px -4px rgba(15,23,42,0.10), 0 2px 6px -2px rgba(15,23,42,0.05)',
+        'focus': '0 0 0 3px rgba(76,175,80,0.15)',
       },
       keyframes: {
         "accordion-down": {

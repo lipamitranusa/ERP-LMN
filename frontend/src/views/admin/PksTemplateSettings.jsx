@@ -439,7 +439,7 @@ function ToolbarButton({ title, onClick, active, children }) {
         fontSize: "12px",
         fontWeight: active ? "700" : "400",
         color: active ? "#1D4ED8" : "#374151",
-        transition: "all 0.15s",
+        transition: "background-color 180ms cubic-bezier(.2,0,.2,1), border-color 180ms cubic-bezier(.2,0,.2,1), color 180ms cubic-bezier(.2,0,.2,1)",
         padding: "0 4px",
         flexShrink: 0,
       }}

@@ -138,7 +138,7 @@ export function ErrorState({
       {onRetry && (
         <button
           onClick={onRetry}
-          className="mt-2 px-4 py-1.5 text-xs font-medium text-white bg-slate-600 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 rounded-md transition-colors"
+          className="mt-2 px-4 py-1.5 text-xs font-medium text-white bg-slate-600 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 rounded-md transition-colors duration-fast ease-standard"
         >
           Coba Lagi
         </button>

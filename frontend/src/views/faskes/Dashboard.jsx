@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import SiklusStepper from "@/components/SiklusStepper";
 import { formatDate } from "@/utils/dateFormat";
+import { readJson } from "@/utils/storage";
 import { useApi, useMutateKeys } from "@/hooks/useApi";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,7 @@ const schema = z.object({
 });
 
 function AjukanForm({ onSuccess, authData, pengajuanTerakhir }) {
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const user = readJson("user", {});
   const freshUser = authData?.user || user;
   const faskes = freshUser.faskes || {};
   const faskesLembagaId = faskes.lembaga_id || localStorage.getItem("lembaga_id") || null;
@@ -222,7 +223,7 @@ function StatusView({ siklus }) {
   const history = useHistory();
   const tahap = siklus.tahapan || 1;
   const subTahap = siklus.sub_tahapan_survei || 0;
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const user = readJson("user", {});
 
   const { data: invoiceData } = useApi(
     ["invoice-status", siklus?.id],
@@ -294,7 +295,7 @@ function StatusView({ siklus }) {
       <div className="grid grid-cols-2 gap-3">
         <button
           onClick={() => history.push("/faskes/dokumen")}
-          className="card text-left p-4 border border-slate-200 dark:border-slate-700 bg-white transition-all hover:border-slate-300 hover:shadow-sm"
+          className="card group text-left p-4 border border-slate-200 dark:border-slate-700 bg-white cursor-pointer transition-[box-shadow,border-color,transform] duration-base ease-standard hover:-translate-y-1 hover:border-slate-300 hover:shadow-elevate dark:hover:border-slate-600 active:translate-y-0"
         >
           <div className="flex items-center gap-2.5 mb-2">
             <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
@@ -311,7 +312,7 @@ function StatusView({ siklus }) {
         {tahap >= 3 && (
           <button
             onClick={() => history.push(`/faskes/kontrak/${siklus.id}`)}
-            className="card text-left p-4 border border-slate-200 dark:border-slate-700 bg-white transition-all hover:border-slate-300 hover:shadow-sm"
+            className="card group text-left p-4 border border-slate-200 dark:border-slate-700 bg-white cursor-pointer transition-[box-shadow,border-color,transform] duration-base ease-standard hover:-translate-y-1 hover:border-slate-300 hover:shadow-elevate dark:hover:border-slate-600 active:translate-y-0"
           >
             <div className="flex items-center gap-2.5 mb-2">
               <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
@@ -329,7 +330,7 @@ function StatusView({ siklus }) {
         {tahap >= 4 && (
           <button
             onClick={() => history.push("/faskes/tagihan")}
-            className="card text-left p-4 border border-slate-200 dark:border-slate-700 bg-white transition-all hover:border-slate-300 hover:shadow-sm"
+            className="card group text-left p-4 border border-slate-200 dark:border-slate-700 bg-white cursor-pointer transition-[box-shadow,border-color,transform] duration-base ease-standard hover:-translate-y-1 hover:border-slate-300 hover:shadow-elevate dark:hover:border-slate-600 active:translate-y-0"
           >
             <div className="flex items-center gap-2.5 mb-2">
               <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">

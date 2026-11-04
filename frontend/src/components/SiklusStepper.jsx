@@ -143,9 +143,10 @@ export default function SiklusStepper({
                   display: "flex", alignItems: "center", justifyContent: "center",
                   color: dotColor,
                   fontSize: fontSize, fontWeight: "600",
-                  transition: "all 0.2s ease",
+                  transition: "background-color 180ms cubic-bezier(.2,0,.2,1), border-color 180ms cubic-bezier(.2,0,.2,1), color 180ms cubic-bezier(.2,0,.2,1), transform 180ms cubic-bezier(.2,0,.2,1), box-shadow 180ms cubic-bezier(.2,0,.2,1)",
                   zIndex: 1,
                   flexShrink: 0,
+                  cursor: "default",
                 }}>
                   {isWarning ? (
                     <svg viewBox="0 0 24 24" width={Math.round(dotSize * 0.52)} height={Math.round(dotSize * 0.52)}>

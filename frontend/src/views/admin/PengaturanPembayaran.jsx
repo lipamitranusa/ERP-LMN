@@ -125,8 +125,8 @@ export default function PengaturanPembayaran() {
 
     if (tipe === "boolean") return (
       <div className="flex items-center gap-2.5 cursor-pointer select-none" onClick={() => setVal(setting.kategori, setting.kunci, val === "1" ? "0" : "1")}>
-        <div className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors" style={{ background: val === "1" ? "#22C55E" : "#CBD5E1" }}>
-          <div className="h-5 w-5 rounded-full bg-white shadow transition-transform" style={{ transform: val === "1" ? "translateX(22px)" : "translateX(2px)" }} />
+        <div className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-fast ease-standard" style={{ background: val === "1" ? "#22C55E" : "#CBD5E1" }}>
+          <div className="h-5 w-5 rounded-full bg-white shadow transition-transform duration-base ease-standard" style={{ transform: val === "1" ? "translateX(22px)" : "translateX(2px)" }} />
         </div>
         <span className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-500">{setting.label}</span>
       </div>
@@ -193,7 +193,7 @@ export default function PengaturanPembayaran() {
       <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
         {CATEGORIES.map(cat => (
           <button key={cat.id} onClick={() => setActiveTab(cat.id)}
-            className="px-4 py-2 text-sm border-b-2 transition-colors"
+            className="px-4 py-2 text-sm border-b-2 transition-colors duration-fast ease-standard"
             style={{ borderColor: activeTab === cat.id ? "#22C55E" : "transparent", color: activeTab === cat.id ? "#22C55E" : "#64748B", fontWeight: activeTab === cat.id ? 600 : 400, marginBottom: "-1px" }}>
             {cat.label}
           </button>

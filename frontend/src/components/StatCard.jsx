@@ -18,9 +18,9 @@ import { cn } from "@/lib/utils";
 export function StatCard({ label, value, trend, subtitle, icon, iconColor = "#4CAF50", iconBg = "#E8F5E9", className }) {
   return (
     <Card className={cn(
-      "p-3 sm:p-5 flex items-start justify-between gap-3 sm:gap-4",
-      "hover:shadow-md transition-shadow duration-200",
-      "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:border-slate-700",
+      "p-3 sm:p-5 flex items-start justify-between gap-3 sm:gap-4 group",
+      "transition-[box-shadow,border-color,transform] duration-base ease-standard hover:shadow-elevate hover:-translate-y-0.5 hover:border-slate-300 dark:hover:border-slate-600",
+      "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700",
       className
     )}>
       <div className="flex-1 min-w-0">
@@ -52,7 +52,7 @@ export function StatCard({ label, value, trend, subtitle, icon, iconColor = "#4C
       {/* Icon */}
       {icon && (
         <div
-          className="w-8 h-8 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 mt-0.5 p-1.5 sm:p-0"
+          className="w-8 h-8 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 mt-0.5 p-1.5 sm:p-0 transition-transform duration-base ease-standard group-hover:scale-110"
           style={{ background: iconBg, opacity: 0.95 }}
         >
           <div style={{ color: iconColor }}>{icon}</div>
