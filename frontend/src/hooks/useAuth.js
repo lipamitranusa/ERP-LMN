@@ -70,6 +70,9 @@ export function useAuth() {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) { logout(); return; }
+    // Server error (500/502/timeout): jangan timpa state lokal. Tanpa guard ini
+    // menu_actions dari login ikut terhapus dan sidebar jadi kosong.
+    if (!res.ok) return;
     const data = await res.json();
     if (!mountedRef.current) return;
     setUser(data.user);
