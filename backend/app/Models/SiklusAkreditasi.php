@@ -15,11 +15,14 @@ use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
 class SiklusAkreditasi extends Model
 {
-    use HasFactory, HasUuids, BelongsToLembaga;
+    use BelongsToLembaga, HasFactory, HasUuids;
 
     public $incrementing = false;
+
     protected $keyType = 'string';
+
     protected $table = 'siklus_akreditasi';
+
     public $timestamps = false;
 
     protected $fillable = [
@@ -90,8 +93,8 @@ class SiklusAkreditasi extends Model
     public function suratTugas(): HasOneThrough
     {
         return $this->hasOneThrough(
-            \App\Models\SuratTugas::class,
-            \App\Models\Penugasan::class,
+            SuratTugas::class,
+            Penugasan::class,
             'siklus_id',
             'penugasan_id',
             'id',
@@ -106,14 +109,14 @@ class SiklusAkreditasi extends Model
 
     public function penugasanVerifikasi(): HasMany
     {
-        return $this->hasMany(\App\Models\Penugasan::class, 'siklus_id');
+        return $this->hasMany(Penugasan::class, 'siklus_id');
     }
 
     public function laporanVerifikasi(): HasManyThrough
     {
         return $this->hasManyThrough(
-            \App\Models\LaporanVerifikasi::class,
-            \App\Models\Penugasan::class,
+            LaporanVerifikasi::class,
+            Penugasan::class,
             'siklus_id',
             'verifikasi_penugasan_id',
             'id',
@@ -150,6 +153,38 @@ class SiklusAkreditasi extends Model
         $tahapan = (int) ($this->attributes['tahapan'] ?? 0);
 
         return $tahapan >= 7 || in_array($this->status, self::STATUS_TUNTAS, true);
+    }
+
+    /**
+     * Status siklus yang ditampilkan ke user.
+     *
+     * Kolom `status` hanya ditulis oleh alur kontrak & pembayaran
+     * (PksController, InvoicePaidCalculator). Jalur verifikasi & rekomendasi
+     * tidak menyentuhnya, sehingga siklus yang sudah tuntas masih bisa
+     * terbaca "Aktif" atau "Lunas" pada kolom mentah.
+     *
+     * Karena itu penanda tuntas yang dipakai di sini adalah `tahapan` (>= 7),
+     * bukan isi kolom `status`. Sisanya: siklus berstatus 'menunggu_pembayaran'
+     * tapi invoice-nya sudah lunas (data lama / siklus yang sudah lanjut tahap)
+     * menampilkan status pembayaran invoice, bukan "Menunggu Pembayaran" basi.
+     *
+     * Dipakai bersama oleh Pendaftaran, Dashboard, dan Kontrak & Invoicing
+     * agar ketiganya menampilkan status yang sama.
+     */
+    public function statusTerlihat(): string
+    {
+        if ($this->isTahapanSelesai()) {
+            return 'selesai';
+        }
+
+        if ($this->status === 'menunggu_pembayaran') {
+            $invoice = $this->relationLoaded('invoice') ? $this->invoice : $this->invoice()->first();
+            if ($invoice && in_array($invoice->status, ['lunas', 'dibayar', 'sebagian', 'refunded', 'superseded'], true)) {
+                return $invoice->status;
+            }
+        }
+
+        return (string) $this->status;
     }
 
     /**
@@ -276,6 +311,7 @@ class SiklusAkreditasi extends Model
             if ($invoice && in_array($invoice->status, ['lunas', 'dibayar'])) {
                 return 5;
             }
+
             return 4;
         }
 

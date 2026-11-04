@@ -5,15 +5,15 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AkunPengguna;
 use App\Models\LaporanVerifikasi;
+use App\Models\Lembaga;
 use App\Models\Penugasan;
+use App\Models\SiklusAkreditasi;
 use App\Models\TenagaAhli;
 use App\Services\AuditService;
 use App\Services\Keuangan\LedgerService;
 use App\Services\Rekomendasi\DefaultReksaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 /**
  * Alur rekomendasi (FR-5.x):
@@ -55,10 +55,10 @@ class RekomendasiController extends Controller
             ->where('status_final', LaporanVerifikasi::STATUS_FINAL)
             ->where(function ($q) {
                 $q->whereNull('status_rekomendasi')
-                  ->orWhereIn('status_rekomendasi', [
-                      LaporanVerifikasi::STATUS_REKOMENDASI_MENUNGGU,
-                      LaporanVerifikasi::STATUS_REKOMENDASI_DITOLAK,
-                  ]);
+                    ->orWhereIn('status_rekomendasi', [
+                        LaporanVerifikasi::STATUS_REKOMENDASI_MENUNGGU,
+                        LaporanVerifikasi::STATUS_REKOMENDASI_DITOLAK,
+                    ]);
             })
             ->when(session('lembaga_id'), fn ($q, $lembagaId) => $q->whereHas(
                 'laporan.penugasan.siklus',
@@ -126,7 +126,7 @@ class RekomendasiController extends Controller
             $term = $request->string('q')->toString();
             $query->whereHas(
                 'laporan.penugasan.siklus.faskes',
-                fn ($fq) => $fq->where('nama', 'like', '%' . $term . '%')
+                fn ($fq) => $fq->where('nama', 'like', '%'.$term.'%')
             );
         }
 
@@ -225,6 +225,7 @@ class RekomendasiController extends Controller
     public function getDefault(Request $request): JsonResponse
     {
         $user = $this->getDefaultRekomendator();
+
         return response()->json(['data' => $user]);
     }
 
@@ -260,7 +261,7 @@ class RekomendasiController extends Controller
             ]);
 
         $lembagaAktif = $sessionLembagaId
-            ? \App\Models\Lembaga::find($sessionLembagaId)
+            ? Lembaga::find($sessionLembagaId)
             : null;
 
         return response()->json([
@@ -304,7 +305,7 @@ class RekomendasiController extends Controller
         $this->reksa->setFor(
             $sessionLembagaId,
             $target->id,
-            "Default rekomendator untuk lembaga aktif (auto-muncul di menu Rekomendasi setelah verifikator finalize)."
+            'Default rekomendator untuk lembaga aktif (auto-muncul di menu Rekomendasi setelah verifikator finalize).'
         );
 
         $this->audit->record(
@@ -338,7 +339,8 @@ class RekomendasiController extends Controller
         // (tiap lembaga punya rekomendator sendiri, lookup via session lembaga_id)
         $defaultUserId = $this->reksa->userIdFor(session('lembaga_id'));
         if (! $defaultUserId || $user->id !== $defaultUserId) {
-            $lembagaName = session('lembaga_id') ? (\App\Models\Lembaga::find(session('lembaga_id'))?->nama ?? 'lembaga ini') : 'lembaga ini';
+            $lembagaName = session('lembaga_id') ? (Lembaga::find(session('lembaga_id'))?->nama ?? 'lembaga ini') : 'lembaga ini';
+
             return response()->json([
                 'message' => "Hanya default rekomendator untuk lembaga {$lembagaName} yang dapat menyetujui.",
             ], 403);
@@ -355,6 +357,11 @@ class RekomendasiController extends Controller
             'direkomendasikan_at' => now(),
         ])->save();
 
+        // Rekomendasi disetujui → siklus tuntas. Kolom `status` siklus tidak
+        // pernah ditulis jalur verifikasi/rekomendasi, jadi harus ditulis di
+        // sini supaya daftar pendaftaran & filter status konsisten.
+        $this->tandaiSiklusSelesai($lv);
+
         // Trigger pencatatan 3 AP honor
         try {
             $result = $this->ledger->triggerHonorSetelahRekomendasi($lv);
@@ -363,8 +370,9 @@ class RekomendasiController extends Controller
                 'laporan_verifikasi_id' => $lv->id,
                 'error' => $e->getMessage(),
             ]);
+
             return response()->json([
-                'message' => 'Rekomendasi disetujui, tetapi pencatatan AP honor gagal: ' . $e->getMessage(),
+                'message' => 'Rekomendasi disetujui, tetapi pencatatan AP honor gagal: '.$e->getMessage(),
             ], 500);
         }
 
@@ -407,7 +415,8 @@ class RekomendasiController extends Controller
 
         $defaultUserId = $this->reksa->userIdFor(session('lembaga_id'));
         if (! $defaultUserId || $user->id !== $defaultUserId) {
-            $lembagaName = session('lembaga_id') ? (\App\Models\Lembaga::find(session('lembaga_id'))?->nama ?? 'lembaga ini') : 'lembaga ini';
+            $lembagaName = session('lembaga_id') ? (Lembaga::find(session('lembaga_id'))?->nama ?? 'lembaga ini') : 'lembaga ini';
+
             return response()->json([
                 'message' => "Hanya default rekomendator untuk lembaga {$lembagaName} yang dapat menolak.",
             ], 403);
@@ -440,6 +449,38 @@ class RekomendasiController extends Controller
     }
 
     /**
+     * Tandai siklus yang terkait dengan laporan verifikasi ini sebagai tuntas.
+     *
+     * Diperlukan karena jalur auto-finalize (RekomendasiQueueService) dan
+     * penyelesaian penugasan verifikasi (PenugasanController) hanya menaikkan
+     * `tahapan` tanpa menyentuh kolom `status`.
+     */
+    private function tandaiSiklusSelesai(LaporanVerifikasi $lv): void
+    {
+        $siklus = $lv->laporan?->penugasan?->siklus
+            ?? $lv->verifikasiPenugasan?->siklus;
+
+        if (! $siklus) {
+            return;
+        }
+
+        $update = [];
+
+        if (! in_array($siklus->status, SiklusAkreditasi::STATUS_TUNTAS, true)) {
+            $update['status'] = 'selesai';
+        }
+
+        $tahapan = (int) ($siklus->getAttributes()['tahapan'] ?? 0);
+        if ($tahapan < 7) {
+            $update['tahapan'] = 7;
+        }
+
+        if ($update) {
+            $siklus->forceFill($update)->save();
+        }
+    }
+
+    /**
      * Pastikan laporan verifikasi yang diakses berada di lembaga aktif
      * session. Menolak dengan 403 agar rekomendator satu lembaga tidak
      * bisa menyetujui verifikasi lembaga lain.
@@ -463,7 +504,7 @@ class RekomendasiController extends Controller
             return;
         }
 
-        $nama = \App\Models\Lembaga::find($lembagaPemilik)?->nama ?? 'lain';
+        $nama = Lembaga::find($lembagaPemilik)?->nama ?? 'lain';
 
         abort(response()->json([
             'message' => "Laporan verifikasi ini milik lembaga \"{$nama}\". Anda sedang di lembaga lain.",
@@ -482,6 +523,7 @@ class RekomendasiController extends Controller
             return null;
         }
         $u->loadMissing(['role', 'tenagaAhli' => fn ($q) => $q->withoutGlobalScope('lembaga')]);
+
         return [
             'user_id' => $u->id,
             'nama' => $u->nama,

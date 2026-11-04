@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\AkunPengguna;
 use App\Models\Role;
 use App\Models\TenagaAhli;
+use App\Rules\IndonesianNpwp;
 use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * CRUD for Master Data Tenaga Ahli (Surveior / Verifikator).
@@ -39,7 +41,7 @@ class MasterTenagaAhliController extends Controller
             $q = $request->string('q')->toString();
             $query->where(function ($w) use ($q) {
                 $w->where('nama', 'like', "%{$q}%")
-                  ->orWhere('nomor_induk_surveior', 'like', "%{$q}%");
+                    ->orWhere('nomor_induk_surveior', 'like', "%{$q}%");
             });
         }
         if ($request->filled('peran')) {
@@ -52,26 +54,27 @@ class MasterTenagaAhliController extends Controller
             $query->where('status_aktif', $request->string('status_aktif'));
         }
 
-        $list = $query
+        $perPage = min((int) $request->integer('per_page', 25), 200);
+        $paginator = $query
             ->orderBy('nama')
-            ->limit(200)
-            ->get()
-            ->map(fn ($t) => array_merge($t->only([
-                'id', 'nomor_induk_surveior', 'nama', 'no_wa', 'peran', 'jenis',
-                'status_aktif', 'status_penugasan_saat_ini', 'batas_penugasan_per_periode',
-                'npwp', 'nik', 'nama_pajak', 'kode_objek_pajak',
-                'status_ptkp', 'kode_kpp',
-            ]), [
-                'has_akun' => $t->akunPengguna->count() > 0,
-                'akun_email' => $t->akunPengguna->first()?->email,
-                'akun_username' => $t->akunPengguna->first()?->username,
-                'akun_id' => $t->akunPengguna->first()?->id,
-                'no_rekening' => $t->no_rekening,
-                'nama_bank' => $t->nama_bank,
-                'atas_nama_rekening' => $t->atas_nama_rekening,
-            ]));
+            ->paginate($perPage);
 
-        return response()->json(['data' => $list]);
+        $paginator->getCollection()->transform(fn ($t) => array_merge($t->only([
+            'id', 'nomor_induk_surveior', 'nama', 'no_wa', 'peran', 'jenis',
+            'status_aktif', 'status_penugasan_saat_ini', 'batas_penugasan_per_periode',
+            'npwp', 'nik', 'nama_pajak', 'kode_objek_pajak',
+            'status_ptkp', 'kode_kpp',
+        ]), [
+            'has_akun' => $t->akunPengguna->count() > 0,
+            'akun_email' => $t->akunPengguna->first()?->email,
+            'akun_username' => $t->akunPengguna->first()?->username,
+            'akun_id' => $t->akunPengguna->first()?->id,
+            'no_rekening' => $t->no_rekening,
+            'nama_bank' => $t->nama_bank,
+            'atas_nama_rekening' => $t->atas_nama_rekening,
+        ]));
+
+        return response()->json($paginator);
     }
 
     public function store(Request $request): JsonResponse
@@ -93,6 +96,7 @@ class MasterTenagaAhliController extends Controller
             if ($akunResult instanceof JsonResponse) {
                 // rollback tenaga ahli if akun gagal
                 $ta->delete();
+
                 return $akunResult;
             }
             $result['akun'] = $akunResult['akun'];
@@ -248,7 +252,7 @@ class MasterTenagaAhliController extends Controller
             'batas_penugasan_per_periode' => 'nullable|integer|min:0',
             'lembaga_id' => 'required|uuid|exists:lembaga,id',
             // FR-5.8: NPWP & NIK untuk bukti potong PPh 21
-            'npwp' => ['nullable', 'string', 'max:30', new \App\Rules\IndonesianNpwp()],
+            'npwp' => ['nullable', 'string', 'max:30', new IndonesianNpwp],
             'nik' => ['nullable', 'string', 'max:20', 'regex:/^\d{16}$/'],
             'nama_pajak' => 'nullable|string|max:255',
             'alamat_pajak' => 'nullable|string|max:500',
@@ -293,7 +297,7 @@ class MasterTenagaAhliController extends Controller
      * GET /api/master/tenaga-ahli/template
      * Download CSV template for batch import.
      */
-    public function template(): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function template(): StreamedResponse
     {
         $headers = [
             'Content-Type' => 'text/csv',
@@ -342,6 +346,7 @@ class MasterTenagaAhliController extends Controller
         $headers = fgetcsv($handle);
         if (! $headers) {
             fclose($handle);
+
             return response()->json(['message' => 'File CSV tidak valid atau kosong.'], 422);
         }
 
@@ -361,6 +366,7 @@ class MasterTenagaAhliController extends Controller
             if (! $data) {
                 $results['rows'][] = ['row' => $rowNumber, 'status' => 'failed', 'message' => 'Format baris tidak valid.'];
                 $results['failed']++;
+
                 continue;
             }
 
@@ -372,10 +378,18 @@ class MasterTenagaAhliController extends Controller
             $peran = strtolower(trim($data['peran'] ?? ''));
             $status = trim($data['status_aktif'] ?? '');
 
-            if (empty($nik)) $errors[] = 'nomor_induk_surveior wajib diisi.';
-            if (empty($nama)) $errors[] = 'nama wajib diisi.';
-            if (! in_array($peran, ['surveior', 'verifikator', 'rekomendator', 'kedua'], true)) $errors[] = "peran harus surveior, verifikator, rekomendator, atau keduanya. Nilai '$peran' tidak valid.";
-            if (! in_array($status, ['Aktif', 'Nonaktif', 'Cuti', 'Resign'], true)) $errors[] = "status_aktif harus Aktif, Nonaktif, Cuti, atau Resign.";
+            if (empty($nik)) {
+                $errors[] = 'nomor_induk_surveior wajib diisi.';
+            }
+            if (empty($nama)) {
+                $errors[] = 'nama wajib diisi.';
+            }
+            if (! in_array($peran, ['surveior', 'verifikator', 'rekomendator', 'kedua'], true)) {
+                $errors[] = "peran harus surveior, verifikator, rekomendator, atau keduanya. Nilai '$peran' tidak valid.";
+            }
+            if (! in_array($status, ['Aktif', 'Nonaktif', 'Cuti', 'Resign'], true)) {
+                $errors[] = 'status_aktif harus Aktif, Nonaktif, Cuti, atau Resign.';
+            }
 
             // Validate NPWP if provided
             $npwp = trim($data['npwp'] ?? '');
@@ -397,7 +411,7 @@ class MasterTenagaAhliController extends Controller
             // Validate buat_akun
             $buatAkun = strtolower(trim($data['buat_akun'] ?? ''));
             if (! empty($buatAkun) && ! in_array($buatAkun, ['ya', 'tidak', '1', '0', 'yes', 'no'], true)) {
-                $errors[] = "buat_akun harus ya/tidak.";
+                $errors[] = 'buat_akun harus ya/tidak.';
             }
 
             // Validate username uniqueness if provided
@@ -415,6 +429,7 @@ class MasterTenagaAhliController extends Controller
                     'message' => implode(' ', $errors),
                 ];
                 $results['failed']++;
+
                 continue;
             }
 
@@ -429,13 +444,16 @@ class MasterTenagaAhliController extends Controller
                     'message' => "nomor_induk_surveior '$nik' sudah terdaftar.",
                 ];
                 $results['failed']++;
+
                 continue;
             }
 
             try {
                 $batas = trim($data['batas_penugasan_per_periode'] ?? '');
                 $jenis = strtoupper(trim($data['jenis'] ?? ''));
-                if (! in_array($jenis, ['TKPP', 'TKSDU', ''], true)) $jenis = '';
+                if (! in_array($jenis, ['TKPP', 'TKSDU', ''], true)) {
+                    $jenis = '';
+                }
 
                 $ta = TenagaAhli::create([
                     'id' => (string) Str::uuid(),
@@ -534,7 +552,7 @@ class MasterTenagaAhliController extends Controller
                     'status' => 'failed',
                     'nik' => $nik ?: '?',
                     'nama' => $nama ?: '?',
-                    'message' => 'Error: ' . $e->getMessage(),
+                    'message' => 'Error: '.$e->getMessage(),
                 ];
                 $results['failed']++;
             }

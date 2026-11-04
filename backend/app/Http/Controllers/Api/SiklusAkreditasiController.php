@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\LaporanPengerjaan;
 use App\Models\Lembaga;
 use App\Models\Penugasan;
 use App\Models\SiklusAkreditasi;
@@ -10,7 +11,6 @@ use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 /**
  * FR-1.1: Form permohonan penilaian oleh Faskes (DFO, tanggal, pilih lembaga).
@@ -37,8 +37,8 @@ class SiklusAkreditasiController extends Controller
 
         if ($request->filled('q')) {
             $term = $request->string('q')->toString();
-            $query->where(fn ($q) => $q->whereHas('faskes', fn ($fq) => $fq->where('nama', 'like', '%' . $term . '%'))
-                ->orWhere('status', 'like', '%' . $term . '%'));
+            $query->where(fn ($q) => $q->whereHas('faskes', fn ($fq) => $fq->where('nama', 'like', '%'.$term.'%'))
+                ->orWhere('status', 'like', '%'.$term.'%'));
         }
 
         // Faskes hanya bisa lihat miliknya
@@ -84,32 +84,12 @@ class SiklusAkreditasiController extends Controller
             $siklus->selesai_lengkap = $siklus->isSelesaiLengkap();
             $siklus->invoice_belum_lunas = $siklus->invoice
                 && ! in_array($siklus->invoice->status, ['lunas', 'dibayar'], true);
-            $siklus->status = $this->statusTerlihat($siklus);
+            $siklus->status = $siklus->statusTerlihat();
+
             return $siklus;
         });
 
         return response()->json($items);
-    }
-
-    /**
-     * Status yang ditampilkan ke user.
-     *
-     * Siklus yang masih berstatus 'menunggu_pembayaran' tapi invoice-nya
-     * sudah lunas (data lama / siklus yang sudah lanjut tahap) menampilkan
-     * status pembayaran invoice, bukan "Menunggu Pembayaran" yang basi.
-     */
-    private function statusTerlihat(SiklusAkreditasi $siklus): string
-    {
-        if ($siklus->status !== 'menunggu_pembayaran' || ! $siklus->invoice) {
-            return $siklus->status;
-        }
-
-        $statusInvoice = $siklus->invoice->status;
-        if (in_array($statusInvoice, ['lunas', 'dibayar', 'sebagian', 'refunded', 'superseded'], true)) {
-            return $statusInvoice;
-        }
-
-        return $siklus->status;
     }
 
     /**
@@ -205,13 +185,14 @@ class SiklusAkreditasiController extends Controller
         $siklus->setRelation('dokumen', $siklus->dokumen->map(function ($d) {
             $d->created_at = $d->tanggal_unduh;
             $d->file_url = $d->id ? url("/api/pendaftaran/dokumen/{$d->id}/serve") : null;
+
             return $d;
         }));
 
         $siklus->survei_selesai = $this->cekSurveiSelesai($siklus->id);
         $siklus->invoice_belum_lunas = $siklus->invoice
             && ! in_array($siklus->invoice->status, ['lunas', 'dibayar'], true);
-        $siklus->status = $this->statusTerlihat($siklus);
+        $siklus->status = $siklus->statusTerlihat();
 
         return response()->json(['data' => $siklus]);
     }
@@ -312,15 +293,15 @@ class SiklusAkreditasiController extends Controller
         }
 
         $items = SiklusAkreditasi::with([
-            'faskes' => fn($q) => $q->withoutGlobalScope('lembaga'),
-            'faskes.jenisFaskes' => fn($q) => $q->withoutGlobalScope('lembaga'),
+            'faskes' => fn ($q) => $q->withoutGlobalScope('lembaga'),
+            'faskes.jenisFaskes' => fn ($q) => $q->withoutGlobalScope('lembaga'),
             'lembaga:id,nama',
         ])
-            ->whereHas('faskes', fn($q) => $q->withoutGlobalScope('lembaga'))
+            ->whereHas('faskes', fn ($q) => $q->withoutGlobalScope('lembaga'))
             ->whereNotIn('id', $siklusDenganPenugasanAktif)
             ->where(function ($q) {
                 $q->where('tahapan', '>=', 3)
-                  ->orWhereIn('status', ['menunggu_kontrak', 'menunggu_pembayaran', 'aktif', 'survei', 'verifikasi']);
+                    ->orWhereIn('status', ['menunggu_kontrak', 'menunggu_pembayaran', 'aktif', 'survei', 'verifikasi']);
             })
             ->orderBy('tanggal_pengajuan', 'desc')
             ->limit(100)
@@ -329,6 +310,7 @@ class SiklusAkreditasiController extends Controller
                 $s->faskes_nama = $s->faskes?->nama;
                 $s->jenis_faskes = $s->faskes?->jenisFaskes?->nama;
                 $s->lembaga_nama = $s->lembaga?->nama;
+
                 return $s;
             });
 
@@ -341,9 +323,9 @@ class SiklusAkreditasiController extends Controller
      */
     private function cekSurveiSelesai(string $siklusId): bool
     {
-        return \App\Models\LaporanPengerjaan::whereHas('penugasan', function ($q) use ($siklusId) {
+        return LaporanPengerjaan::whereHas('penugasan', function ($q) use ($siklusId) {
             $q->where('siklus_id', $siklusId)
-              ->where('jenis', Penugasan::JENIS_SURVEI);
+                ->where('jenis', Penugasan::JENIS_SURVEI);
         })->exists();
     }
 
@@ -358,10 +340,11 @@ class SiklusAkreditasiController extends Controller
         if (empty($siklusIds)) {
             return [];
         }
-        return \App\Models\LaporanPengerjaan::query()
+
+        return LaporanPengerjaan::query()
             ->whereHas('penugasan', function ($q) use ($siklusIds) {
                 $q->whereIn('siklus_id', $siklusIds)
-                  ->where('jenis', Penugasan::JENIS_SURVEI);
+                    ->where('jenis', Penugasan::JENIS_SURVEI);
             })
             // Kolom id wajib ikut dipilih: relasi penugasan adalah BelongsTo
             // yang dicocokkan via primary key, jadi tanpa id relasinya tidak

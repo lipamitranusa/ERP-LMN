@@ -22,7 +22,7 @@ class DashboardController extends Controller
         $lembagaId = session('lembaga_id');
         // Cache key include lembaga_id agar tiap lembaga punya cache sendiri
         // dan data tidak bocor lintas lembaga.
-        $cacheKey = 'dashboard:stats:' . ($lembagaId ?? 'all');
+        $cacheKey = 'dashboard:stats:'.($lembagaId ?? 'all');
 
         $stats = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($lembagaId) {
             // Subquery: penugasan verifikasi selesai, di-scope ke lembaga aktif
@@ -32,7 +32,7 @@ class DashboardController extends Controller
             if ($lembagaId) {
                 $verifikasiSelesai->whereIn('siklus_id', function ($q) use ($lembagaId) {
                     $q->select('id')->from('siklus_akreditasi')
-                      ->where('lembaga_id', $lembagaId);
+                        ->where('lembaga_id', $lembagaId);
                 });
             }
             $verifikasiSelesai = $verifikasiSelesai->select('siklus_id');
@@ -55,7 +55,7 @@ class DashboardController extends Controller
             if ($lembagaId) {
                 $counts->whereIn('siklus_id', function ($q) use ($lembagaId) {
                     $q->select('id')->from('siklus_akreditasi')
-                      ->where('lembaga_id', $lembagaId);
+                        ->where('lembaga_id', $lembagaId);
                 });
             }
 
@@ -71,9 +71,9 @@ class DashboardController extends Controller
 
         // ✅ Eager load semua relasi sekaligus — 1 query, tidak N+1
         $penugasanAktif = Penugasan::with([
-                'tenagaAhli',
-                'siklus.faskes',
-            ])
+            'tenagaAhli',
+            'siklus.faskes',
+        ])
             ->where('jenis', Penugasan::JENIS_SURVEI)
             ->where('status', Penugasan::STATUS_SEDANG_BERTUGAS)
             ->when($lembagaId, function ($q) use ($lembagaId) {
@@ -93,7 +93,11 @@ class DashboardController extends Controller
                 'tanggal_selesai' => $p->tanggal_selesai,
             ]);
 
-        $recentSiklus = SiklusAkreditasi::with('faskes:id,nama')
+        // Status siklus yang ditampilkan harus sama dengan Pendaftaran &
+        // Kontrak & Invoicing → pakai statusTerlihat() yang sama
+        // (live di model), bukan kolom `status` mentah yang hanya ditulis
+        // alur kontrak/pembayaran.
+        $recentSiklus = SiklusAkreditasi::with(['faskes:id,nama', 'invoice:id,siklus_id,status'])
             ->when($lembagaId, fn ($q) => $q->where('lembaga_id', $lembagaId))
             ->orderBy('created_at', 'desc')
             ->limit(5)
@@ -101,7 +105,7 @@ class DashboardController extends Controller
             ->map(fn ($s) => [
                 'id' => $s->id,
                 'faskes' => $s->faskes ? ['nama' => $s->faskes->nama] : null,
-                'status' => $s->status,
+                'status' => $s->statusTerlihat(),
                 'tanggal_pengajuan' => $s->tanggal_pengajuan,
             ]);
 
