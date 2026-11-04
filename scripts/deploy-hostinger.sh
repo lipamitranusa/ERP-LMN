@@ -67,6 +67,13 @@ fi
 cd "$APP_DIR/backend"
 [ -f .env ] || die "backend/.env belum ada di server. Salin .env.production.example ke .env, isi kredensialnya, lalu ulangi."
 
+# APP_KEY wajib ada sebelum session/cookie dipakai. Generate hanya bila kosong
+# supaya key produksi tidak berubah diam-diam tiap deploy.
+if ! grep -qE '^APP_KEY=base64:.+' .env; then
+    log "APP_KEY kosong — membuat APP_KEY baru"
+    "$PHP_BIN" artisan key:generate --force
+fi
+
 command -v "$COMPOSER_BIN" >/dev/null 2>&1 || {
     # Composer sering ada di ~/bin/composer tapi belum ada di PATH terminal.
     if [ -x "$HOME/bin/composer" ] || [ -f "$HOME/bin/composer.phar" ]; then
