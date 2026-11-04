@@ -19,6 +19,7 @@ set -euo pipefail
 HOST="${HOST:-u849325814@145.79.9.65}"
 PORT="${PORT:-65002}"
 PW="${PW:-}"
+PWFILE="${PWFILE:-$HOME/.ssh/hostinger.pw}"
 APP_DIR="${APP_DIR:-/home/u849325814/domains/lipamitranusa.com/app}"
 WEB_ROOT="${WEB_ROOT:-/home/u849325814/domains/lipamitranusa.com/public_html}"
 REPO_URL="${REPO_URL:-https://github.com/lipamitranusa/ERP-LMN.git}"
@@ -33,16 +34,25 @@ DIST_TGZ="${DIST_TGZ:-$ROOT/.omc/deploy/frontend-dist.tar.gz}"
 log() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 die() { printf '\n\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
-[ -n "$PW" ] || die "Environment variable PW belum diisi (password hPanel)."
 [ -x "$PLINK" ] || die "plink.exe tidak ditemukan di $PLINK"
 [ -x "$PSCP" ] || die "pscp.exe tidak ditemukan di $PSCP"
 
+# Password diambil dari file (-pwfile) supaya tidak muncul di daftar argumen
+# proses. Kalau file tidak ada, jatuh ke PW dari environment.
+if [ -s "$PWFILE" ]; then
+    PW_ARGS=(-pwfile "$PWFILE")
+elif [ -n "$PW" ]; then
+    PW_ARGS=(-pw "$PW")
+else
+    die "Tidak ada sumber password: buat file $PWFILE (isi password di baris pertama) atau set env var PW."
+fi
+
 # -hostkey mem-pin sidik jari host; -batch menolak prompt interaktif.
 plink_run() {
-    "$PLINK" -ssh -P "$PORT" -l "$HOST" -pw "$PW" -hostkey "$HOSTKEY" -batch "$HOST" "$@"
+    "$PLINK" -ssh -P "$PORT" -l "$HOST" "${PW_ARGS[@]}" -hostkey "$HOSTKEY" -batch "$HOST" "$@"
 }
 pscp_run() {
-    "$PSCP" -P "$PORT" -pw "$PW" -hostkey "$HOSTKEY" -batch "$@"
+    "$PSCP" -P "$PORT" "${PW_ARGS[@]}" -hostkey "$HOSTKEY" -batch "$@"
 }
 
 log "Target  : $HOST:$PORT"
