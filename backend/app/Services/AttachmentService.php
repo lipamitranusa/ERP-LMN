@@ -25,7 +25,7 @@ class AttachmentService
     {
         $path = $this->buildPath($module, $file->getClientOriginalName());
 
-        Storage::disk($this->disk)->put($path, $file->getContent());
+        $this->putToDisk($path, $file->getContent());
 
         // Delete old file if replacing
         if ($oldPath && $oldPath !== $path) {
@@ -42,7 +42,7 @@ class AttachmentService
     {
         $path = $this->buildPath($module, $filename);
 
-        Storage::disk($this->disk)->put($path, $content);
+        $this->putToDisk($path, $content);
 
         if ($oldPath && $oldPath !== $path) {
             $this->delete($oldPath);
@@ -59,13 +59,31 @@ class AttachmentService
         $path = $this->buildPath($module, $filename);
 
         $content = Storage::disk('local')->get($localPath);
-        Storage::disk($this->disk)->put($path, $content);
+        $this->putToDisk($path, $content);
 
         if ($oldPath && $oldPath !== $path) {
             $this->delete($oldPath);
         }
 
         return $path;
+    }
+
+    /**
+     * Tulis ke disk R2 dan gagalkan eksplisit bila gagal.
+     *
+     * Disk R2 dikonfigurasi dengan `throw => false`, jadi tanpa guard ini
+     * upload yang gagal (mis. kredensial R2 belum diisi) dianggap berhasil
+     * dan hanya menghasilkan path yang tidak pernah ada di bucket.
+     */
+    private function putToDisk(string $path, string $content): void
+    {
+        $stored = Storage::disk($this->disk)->put($path, $content);
+
+        if ($stored === false) {
+            throw new \RuntimeException(
+                'Upload ke Cloudflare R2 gagal. Periksa konfigurasi CLOUDFLARE_R2_* pada file .env.'
+            );
+        }
     }
 
     /**
