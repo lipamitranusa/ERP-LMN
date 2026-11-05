@@ -301,6 +301,12 @@ menjalankan `npm ci` + `npm run build`, lalu menghasilkan
 > working tree yang belum di-push, server bisa menjalankan frontend versi
 > lama dengan backend versi baru — atau sebaliknya.
 
+> **Jalur cepat:** kalau sumber frontend di working tree sudah identik dengan
+> `origin/main` (dicek via `git diff origin/main -- frontend/`) dan
+> `node_modules` sudah ada, skrip langsung build di working tree tanpa
+> `npm ci`. Hasilnya identik, dan langkah ini juga menghindari `npm ci` yang
+> kadang macet lama di folder baru.
+
 **Langkah 4 — Deploy ke server.**
 
 ```sh
