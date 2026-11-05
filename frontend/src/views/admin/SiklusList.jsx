@@ -1,13 +1,12 @@
 import React, { useState } from "react";
 import { useHistory } from "react-router-dom";
-import { Search, Plus } from "lucide-react";
+import { Search } from "lucide-react";
 import { formatDate } from "@/utils/dateFormat";
-import { useApi, useMutateKeys } from "@/hooks/useApi";
+import { useApi } from "@/hooks/useApi";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -17,71 +16,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-
-const schema = z.object({
-  lembaga_id: z.string().min(1, "Lembaga wajib dipilih"),
-  tanggal_permohonan_survei: z.string().min(1, "Tanggal permohonan wajib diisi"),
-});
 
 export default function SiklusList() {
   const history = useHistory();
-  const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
 
   const { data: siklusData, isLoading } = useApi(
     ["siklus", search],
     `/pendaftaran/siklus?q=${encodeURIComponent(search)}`
   );
-  const { data: lembagaData } = useApi("lembaga", "/pendaftaran/lembaga");
-
   const siklus = siklusData?.data ?? [];
-  const lembaga = lembagaData?.data ?? [];
-
-  const mutate = useMutateKeys([["siklus"], ["lembaga"]]);
-
-  const { register, handleSubmit, reset, formState: { errors } } = useForm({
-    resolver: zodResolver(schema),
-    defaultValues: { lembaga_id: "", tanggal_permohonan_survei: "" },
-  });
-
-  function openForm() {
-    reset({ lembaga_id: "", tanggal_permohonan_survei: "" });
-    setShowForm(true);
-  }
-
-  const onSubmit = (formData) => {
-    mutate.mutate({
-      path: "/pendaftaran/siklus",
-      method: "POST",
-      body: formData,
-      onSuccess: () => {
-        setShowForm(false);
-        reset({ lembaga_id: "", tanggal_permohonan_survei: "" });
-      },
-    });
-  };
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Pendaftaran & Validasi Dokumen"
         subtitle={`${siklus.length} siklus terdaftar`}
-        actions={
-          <Button onClick={openForm}>
-            <Plus size={16} />
-            Ajukan Permohonan
-          </Button>
-        }
       />
 
       <div className="flex items-center gap-3">
@@ -161,51 +111,6 @@ export default function SiklusList() {
           </TableBody>
         </Table>
       </Card>
-
-      <Dialog open={showForm} onOpenChange={v => { if (!mutate.isLoading) setShowForm(v); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Ajukan Permohonan Survei</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="lembaga">Lembaga Akreditasi *</Label>
-              <select
-                id="lembaga"
-                className="flex h-9 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
-                {...register("lembaga_id")}
-              >
-                <option value="">— Pilih Lembaga —</option>
-                {lembaga.map(l => (
-                  <option key={l.id} value={l.id}>{l.nama}</option>
-                ))}
-              </select>
-              {errors.lembaga_id && (
-                <p className="text-xs text-red-600">{errors.lembaga_id.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="tanggal">Tanggal Permohonan Survei *</Label>
-              <Input
-                id="tanggal"
-                type="date"
-                {...register("tanggal_permohonan_survei")}
-              />
-              {errors.tanggal_permohonan_survei && (
-                <p className="text-xs text-red-600">{errors.tanggal_permohonan_survei.message}</p>
-              )}
-            </div>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)} disabled={mutate.isLoading}>
-                Batal
-              </Button>
-              <Button type="submit" disabled={mutate.isLoading}>
-                {mutate.isLoading ? "Menyimpan..." : "Ajukan"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
