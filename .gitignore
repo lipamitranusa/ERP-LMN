@@ -54,3 +54,6 @@ LPT1
 /frontend/dist
 /frontend/node_modules
 /frontend/.vite
+
+# State tool internal di dalam docs/manual/.notes
+docs/manual/**/.omc/
