@@ -120,6 +120,45 @@ node scripts/check-docs-clean.mjs docs/manual      # karakter/kata asing yang te
 
 ---
 
+## Manual dalam satu berkas
+
+Sepuluh bab dan seluruh 63 tangkapan layar juga tersedia sebagai satu
+berkas, siap dibagikan ke pengguna yang lebih liking membaca PDF atau
+mengedit di Word:
+
+| Berkas | Isi |
+|---------|-----|
+| [ERP-Akreditasi-Faskes-Manual.pdf](ERP-Akreditasi-Faskes-Manual.pdf) | 138 halaman, daftar isi otomatis dengan nomor halaman, 63 tangkapan layar tertanam |
+| [ERP-Akreditasi-Faskes-Manual.docx](ERP-Akreditasi-Faskes-Manual.docx) | Berkas sama dalam format Word, dapat diedit |
+
+Keduanya dibuat ulang dengan:
+
+```sh
+# 1. Gabungkan seluruh bab menjadi satu HTML + salin aset gambar
+node scripts/build-manual.mjs
+
+# 2. Ekspor ke DOCX dan PDF lewat Microsoft Word (Windows)
+powershell -File scripts/export-manual-word.ps1
+```
+
+Langkah 1 menulis ke `docs/manual/.build/` (folder ini diabaikan git):
+`manual.html` untuk pratinjau, `manual-word.html` untuk impor Word, dan
+`word-manifest.json` berisi daftar gambar yang disisipkan.
+
+Langkah 2 membuka `manual-word.html` di Word, menyisipkan tiap gambar
+sebagai gambar tertanam (bukan tautan ke file), menambahkan daftar isi
+otomatis, lalu menyimpan hasilnya sebagai `.docx` dan mengekspor `.pdf`.
+
+Untuk memeriksa beberapa halaman PDF sebagai gambar:
+
+```sh
+powershell -File scripts/pdf-preview.ps1 -Pdf docs/manual/ERP-Akreditasi-Faskes-Manual.pdf -Pages 1,2,3
+```
+
+Hasilnya ditulis ke `docs/manual/.build/preview/`.
+
+---
+
 ## Dokumen lain di repo ini
 
 | Dokumen | Isi |

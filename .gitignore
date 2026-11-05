@@ -57,3 +57,6 @@ LPT1
 
 # State tool internal di dalam docs/manual/.notes
 docs/manual/**/.omc/
+
+# Hasil build manual gabungan (dibuat ulang lewat scripts/build-manual.mjs)
+docs/manual/.build/
