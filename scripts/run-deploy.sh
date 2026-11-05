@@ -44,9 +44,13 @@ if [ -f "$DIST_TGZ" ]; then
     log "Mengunggah frontend build (npm tidak diperlukan di server)"
     ssh "${ssh_opts[@]}" "$HOST" "mkdir -p '$APP_DIR/frontend'"
     scp "${scp_opts[@]}" "$DIST_TGZ" "$HOST:$APP_DIR/frontend-dist.tar.gz"
+    # Ekstraksi tahan format: tarball bisa berisi `dist/...` (hasil tar dari
+    # dalam folder frontend) atau `frontend/dist/...` (hasil tar dari root repo).
+    # Both harus berakhir di $APP_DIR/frontend/dist.
+    #
     # dist lama harus dihapus dulu: deploy-hostinger.sh menyalin SELURUH
     # $DIST/assets/ ke document root, jadi aset versi lama ikut terbawa.
-    ssh "${ssh_opts[@]}" "$HOST" "rm -rf '$APP_DIR/frontend/dist' && mkdir -p '$APP_DIR/frontend/dist' && cd '$APP_DIR/frontend' && tar -xzf '$APP_DIR/frontend-dist.tar.gz' --strip-components=1 && rm -f '$APP_DIR/frontend-dist.tar.gz'"
+    ssh "${ssh_opts[@]}" "$HOST" "cd '$APP_DIR' && rm -rf frontend/dist && mkdir -p frontend/dist && tar -xzf frontend-dist.tar.gz --strip-components=1 -C frontend/dist && if [ ! -f frontend/dist/index.html ] && [ -f frontend/dist/dist/index.html ]; then mv frontend/dist/dist/* frontend/dist/ && rmdir frontend/dist/dist; fi && rm -f frontend-dist.tar.gz && test -f frontend/dist/index.html"
     export SKIP_FRONTEND_BUILD=1
 else
     warn_msg="frontend-dist.tar.gz tidak ada di $DIST_TGZ — server akan build sendiri (butuh npm)."

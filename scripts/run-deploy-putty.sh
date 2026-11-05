@@ -71,7 +71,7 @@ if [ -f "$DIST_TGZ" ]; then
     log "Mengunggah frontend build"
     plink_run "mkdir -p '$APP_DIR/frontend'"
     pscp_run "$DIST_TGZ" "$HOST:$APP_DIR/frontend-dist.tar.gz"
-    plink_run "cd '$APP_DIR/frontend' && tar -xzf '$APP_DIR/frontend-dist.tar.gz' --strip-components=1 && rm -f '$APP_DIR/frontend-dist.tar.gz'"
+    plink_run "cd '$APP_DIR' && rm -rf frontend/dist && mkdir -p frontend/dist && tar -xzf frontend-dist.tar.gz --strip-components=1 -C frontend/dist && if [ ! -f frontend/dist/index.html ] && [ -f frontend/dist/dist/index.html ]; then mv frontend/dist/dist/* frontend/dist/ && rmdir frontend/dist/dist; fi && rm -f frontend-dist.tar.gz && test -f frontend/dist/index.html"
     SKIP_FLAG="SKIP_FRONTEND_BUILD=1"
 else
     printf '\033[1;33m[warn] %s\033[0m\n' "frontend-dist.tar.gz tidak ada — server build sendiri (butuh npm)."

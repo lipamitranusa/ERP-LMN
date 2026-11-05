@@ -7,6 +7,9 @@ utama dan **MySQL native Hostinger** sebagai fallback.
 > Strategi deploy: `git push` ke GitHub → `git pull` di server → skrip deploy
 > menarik dependensi, build frontend, dan menyalin aset ke document root.
 
+> **Butuh cepat?** Langsung ke [§5.1 Alur lengkap](#51-alur-lengkap-commit--push--build--deploy)
+> — itu langkah Update dari Lokal ke Live via GitHub.
+
 ---
 
 ## 1. Arsitektur di server
@@ -256,20 +259,113 @@ Lalu jalankan `php artisan migrate --force` untuk membuat skema di MySQL.
 
 ## 5. Deploy berikutnya (rutinitas)
 
-**Cara tercepat** — dari komputer lokal, satu perintah:
+> Ringkasan satu layar: **commit → push → build → deploy**. Detail per langkah
+> ada di [§5.1](#51-alur-lengkap-commit--push--build--deploy).
+
+### 5.1 Alur lengkap: commit → push → build → deploy
+
+Semua perintah dijalankan dari **komputer lokal**, di repo root.
+
+**Langkah 1 — Commit perubahan.**
+
+```sh
+git status
+git add <file-yang-diubah>        # jangan pakai `git add -A`
+git commit -m "pesan singkat"
+```
+
+> Jangan pernah `git add -A` — folder `.omc/` berisi file state tooling yang
+> tidak boleh masuk repo. Sebutkan path-nya satu per satu.
+
+**Langkah 2 — Push ke GitHub.**
+
+```sh
+git push origin main
+```
+
+Server hanya melihat perubahan setelah ada di GitHub — inilah bagian "via
+GitHub" dari alur ini.
+
+**Langkah 3 — Build SPA dari `origin/main`.**
+
+```sh
+bash scripts/build-frontend-dist.sh
+```
+
+Skrip ini menarik sumber frontend dari `origin/main` (bukan working tree),
+menjalankan `npm ci` + `npm run build`, lalu menghasilkan
+`.omc/deploy/frontend-dist.tar.gz`.
+
+> Kenapa harus dari `origin/main`? Backend di server diambil dengan
+> `git pull`, frontend dikirim sebagai tarball. Kalau frontend dibangun dari
+> working tree yang belum di-push, server bisa menjalankan frontend versi
+> lama dengan backend versi baru — atau sebaliknya.
+
+**Langkah 4 — Deploy ke server.**
 
 ```sh
 bash scripts/run-deploy.sh
 ```
 
-Runner melakukan clone/pull di server, upload `frontend/dist` (paket build
-lokal), jalankan skrip deploy, lalu verifikasi endpoint produksi.
+Runner akan: memastikan repo ada di server → mengunggah tarball frontend →
+menjalankan `scripts/deploy-hostinger.sh` di server → memverifikasi endpoint.
 
-**Tanpa OpenSSH (PuTTY)** — kalau mesin lokal tidak punya `ssh`/`scp` CLI,
-pakai plink/pscp dengan password hPanel:
+Tanpa skrip pembantu, tarball bisa dibuat manual:
 
 ```sh
-HOST=u123456789@lipamitranusa.com \
+cd frontend && npm run build && cd ..
+tar -czf /tmp/frontend-dist.tar.gz --transform 's|^dist|frontend/dist|' dist
+DIST_TGZ=/tmp/frontend-dist.tar.gz bash scripts/run-deploy.sh
+```
+
+> Struktur tarball harus berisi `frontend/dist/...`. `run-deploy.sh` mengekstrak
+> dengan `--strip-components=1` ke `$APP_DIR/frontend/dist`, jadi awalan
+> `frontend/dist/` menghasilkan `$APP_DIR/frontend/dist/index.html` yang benar.
+> Tarball berawalan `dist/` saja akan mendarat di lokasi yang salah.
+
+**Langkah 5 — Verifikasi.**
+
+```sh
+# Bundle aktif (hash berubah kalau frontend berubah)
+curl -s https://lipamitranusa.com/ | grep -o 'assets/index-[A-Za-z0-9_-]*\.js'
+
+curl -s -o /dev/null -w '%{http_code}\n' https://lipamitranusa.com/up          # 200
+curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+     https://lipamitranusa.com/api/auth/login -H 'Content-Type: application/json' -d '{}'
+# 422 = endpoint hidup & menolak payload kosong (benar)
+```
+
+Lalu buka `https://lipamitranusa.com` di browser dan cek halaman yang
+diubah. Untuk memastikan bundle yang benar-benar ter-deploy, bandingkan hash
+file di server dengan file lokal:
+
+```sh
+curl -s https://lipamitranusa.com/assets/SiklusList-<hash>.js | md5sum
+md5sum frontend/dist/assets/SiklusList-<hash>.js
+```
+
+Kalau hash sama, isi yang berjalan di browser persis sama dengan yang sudah
+diuji lokal.
+
+### 5.2 Kalau hanya backend yang berubah
+
+Tak perlu build frontend — cukup:
+
+```sh
+git push origin main
+DIST_TGZ=/dev/null bash scripts/run-deploy.sh
+```
+
+`DIST_TGZ=/dev/null` membuat runner melewati langkah upload frontend (server
+memakai `frontend/dist` yang sudah ada). Bundle live tidak berubah.
+
+### 5.3 Deploy dari Windows tanpa OpenSSH (PuTTY)
+
+Kalau mesin lokal tidak punya `ssh`/`scp` CLI, pakai plink/pscp dengan
+password hPanel:
+
+```sh
+HOST=u849325814@145.79.9.65 \
 PORT=65002 \
 PW='password-hpanel' \
 bash scripts/run-deploy-putty.sh
@@ -278,7 +374,7 @@ bash scripts/run-deploy-putty.sh
 Host key di-pin ke sidik jari ED25519 yang sudah diverifikasi, jadi koneksi
 gagal keras kalau server-nya berubah.
 
-**Lewat PowerShell** (build + commit + push + deploy via SSH):
+### 5.4 Lewat PowerShell (build + commit + push + deploy via SSH)
 
 ```powershell
 .\scripts\deploy-hostinger.ps1 -Server u123456789@lipamitranusa.com `
@@ -289,13 +385,15 @@ gagal keras kalau server-nya berubah.
 
 Opsi `-UploadDist` mengunggah `frontend/dist` lewat scp lalu menjalankan
 deploy dengan `SKIP_FRONTEND_BUILD=1` — dipakai kalau server tidak punya npm.
+Skrip ini mengunggah isi `dist` langsung ke `$AppDir/frontend/dist`, jadi
+tidak perlu tarball.
 
-**Manual, tanpa script:**
+### 5.5 Manual, tanpa script
 
 ```sh
 # lokal
 cd frontend && npm run build && cd ..
-git add -A && git commit -m "deploy" && git push origin main
+git add <file-yang-diubah> && git commit -m "deploy" && git push origin main
 
 # server
 cd ~/domains/lipamitranusa.com/app
@@ -306,6 +404,9 @@ bash scripts/deploy-hostinger.sh
 
 > Kalau `npm` tidak tersedia di server, jalankan `SKIP_FRONTEND_BUILD=1` dan
 > salin `frontend/dist` ke server secara manual (hPanel File Manager / scp).
+>
+> Kalau deploy manual, bersihkan `frontend/dist` server sebelum menyalin —
+> aset versi lama akan ikut tertinggal kalau tidak.
 
 ---
 
@@ -354,6 +455,11 @@ token login — tapi harus tetap berada di domain HTTPS yang sama dengan aplikas
 | Mixed content / CORS | API dan SPA harus host sama; jangan set `API_BASE` absolut. |
 | `APP_KEY` berubah diam-diam | `php artisan key:generate` hanya sekali — jangan diulang tiap deploy. |
 | Notifikasi WhatsApp tidak terkirim | `config:cache` aktif → `env()` bernilai null. Semua kredensial integrasi sudah dibaca lewat `config()`, pastikan `.env` terisi lalu ulangi `php artisan optimize`. |
+| Deploy "berhasil" tapi tampilan lama | Bandingkan hash bundle: `curl -s https://lipamitranusa.com/ \| grep -o 'assets/index-[A-Za-z0-9_-]*\.js'`. Kalau hash tidak berubah padahal sudah push, cek `index.html` di `public_html` — mungkin `npm run build` di server tidak dijalankan (`SKIP_FRONTEND_BUILD=1` tanpa tarball baru). |
+| `frontend/dist/index.html tidak ditemukan` di server | Tarball frontend salah format. Harus berisi `frontend/dist/...` (lihat [§5.1](#51-alur-lengkap-commit--push--build--deploy)). Pakai `scripts/build-frontend-dist.sh` supaya formatnya pasti benar. |
+| Aset versi lama masih tersaji | `frontend/dist` server tidak dibersihkan sebelum ekstrak. `run-deploy.sh` sudah-membersihkannya otomatis; kalau deploy manual, hapus `frontend/dist` di server lebih dulu. |
+| `Permission denied (publickey,password)` saat SSH | Host tidak pakai `~/.ssh/config`, jadi OpenSSH tidak tahu key-nya. Pakai `-i ~/.ssh/id_ed25519_hostinger -o IdentitiesOnly=yes`, atau muat key ke agent: `eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_ed25519_hostinger`. |
+| `npm ci` macet >30 menit tanpa output | Jaringan ke registry npm bermasalah. Kalau `node_modules` sudah ada di working tree dan `git diff origin/main -- frontend/` kosong, build di working tree saja — hasilnya identik. |
 
 ---
 
