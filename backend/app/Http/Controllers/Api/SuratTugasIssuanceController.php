@@ -8,8 +8,10 @@ use App\Models\Penugasan;
 use App\Models\SuratTugas;
 use App\Models\TenagaAhli;
 use App\Services\AuditService;
+use App\Services\AttachmentService;
 use App\Services\Notification\PenugasanNotifier;
 use App\Services\Penugasan\SuratTugasGatekeeper;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -27,6 +29,7 @@ class SuratTugasIssuanceController extends Controller
         private SuratTugasGatekeeper $gatekeeper,
         private AuditService $audit,
         private PenugasanNotifier $notifier,
+        private AttachmentService $attachment,
     ) {}
 
     public function issue(Request $request): JsonResponse
@@ -81,11 +84,32 @@ class SuratTugasIssuanceController extends Controller
                 strtoupper(Str::random(6))
             );
 
+            $suratPath = $data['path_pdf'] ?? null;
+            if (! $suratPath || ! $this->attachment->exists($suratPath)) {
+                $pdf = Pdf::loadView('surat_tugas.survei', [
+                    'surat' => [
+                        'nomor_surat' => $nomor,
+                        'tanggal_terbit' => now()->locale('id')->format('d F Y'),
+                        'nama_lembaga' => $siklus->lembaga?->nama ?? 'LIPA MITRA NUSA',
+                        'nama_faskes' => $siklus->faskes->nama ?? '-',
+                        'alamat_faskes' => $siklus->faskes->alamat ?? '-',
+                        'tipe_faskes' => $siklus->faskes->tipe_faskes ?? '-',
+                        'nama_surveior' => $tenagaAhli->nama,
+                        'nomor_induk_surveior' => $tenagaAhli->nomor_induk_surveior,
+                        'jenis_penugasan' => $data['jenis'],
+                        'tanggal_permohonan' => $siklus->tanggal_pengajuan
+                            ? $siklus->tanggal_pengajuan->locale('id')->format('d F Y')
+                            : '-',
+                    ],
+                ]);
+                $suratPath = $this->attachment->put($pdf->output(), 'surat_tugas', $nomor . '.pdf');
+            }
+
             $surat = SuratTugas::create([
                 'penugasan_id' => $penugasan->id,
                 'nomor_surat' => $nomor,
                 'tanggal_terbit' => now()->toDateString(),
-                'path_pdf' => $data['path_pdf'] ?? null,
+                'path_pdf' => $suratPath,
                 'diterbitkan_oleh' => $user->id,
             ]);
 

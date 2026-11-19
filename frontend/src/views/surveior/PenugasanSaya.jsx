@@ -34,8 +34,8 @@ async function openPdfPreview(suratId) {
     const blob = await fetchBlob(`/api/penugasan/surat-tugas/${suratId}/serve`);
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
-  } catch {
-    alert("Gagal membuka Surat Tugas.");
+  } catch (err) {
+    alert(err.message === "HTTP 404" ? "File Surat Tugas belum tersedia. Silakan muat ulang halaman." : "Gagal membuka Surat Tugas.");
   }
 }
 
@@ -50,8 +50,8 @@ async function downloadPdf(suratId, filename) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  } catch {
-    alert("Gagal mengunduh Surat Tugas.");
+  } catch (err) {
+    alert(err.message === "HTTP 404" ? "File Surat Tugas belum tersedia. Silakan muat ulang halaman." : "Gagal mengunduh Surat Tugas.");
   }
 }
 

@@ -95,6 +95,7 @@ class SuratTugasController extends Controller
      */
     public function download(SuratTugas $surat, AttachmentService $attachment, AuditService $audit)
     {
+        $this->ensurePdfAvailable($surat, $attachment);
         $surat->forceFill(['diunduh_pada' => now()])->save();
 
         return $attachment->response($surat->path_pdf, "Surat_Tugas_{$surat->nomor_surat}.pdf");
@@ -106,7 +107,53 @@ class SuratTugasController extends Controller
      */
     public function serve(SuratTugas $surat, AttachmentService $attachment)
     {
+        $this->ensurePdfAvailable($surat, $attachment);
         return $attachment->response($surat->path_pdf, null, true);
+    }
+
+    /**
+     * Regenerasi Surat Tugas bila record lama menunjuk file yang sudah hilang,
+     * atau bila penerbitan lama menyimpan path lampiran yang bukan PDF Surat Tugas.
+     */
+    private function ensurePdfAvailable(SuratTugas $surat, AttachmentService $attachment): void
+    {
+        if ($surat->path_pdf && $attachment->exists($surat->path_pdf)) {
+            return;
+        }
+
+        $surat->loadMissing([
+            'penugasan.siklus.faskes',
+            'penugasan.siklus.lembaga',
+            'penugasan.tenagaAhli',
+        ]);
+
+        $penugasan = $surat->penugasan;
+        if (! $penugasan) {
+            abort(404, 'Penugasan Surat Tugas tidak ditemukan.');
+        }
+
+        $pdf = Pdf::loadView('surat_tugas.survei', [
+            'surat' => [
+                'nomor_surat' => $surat->nomor_surat,
+                'tanggal_terbit' => now()->locale('id')->format('d F Y'),
+                'nama_lembaga' => $penugasan->siklus->lembaga?->nama ?? 'LIPA MITRA NUSA',
+                'nama_faskes' => $penugasan->siklus->faskes->nama ?? '-',
+                'alamat_faskes' => $penugasan->siklus->faskes->alamat ?? '-',
+                'tipe_faskes' => $penugasan->siklus->faskes->tipe_faskes ?? '-',
+                'nama_surveior' => $penugasan->tenagaAhli->nama,
+                'nomor_induk_surveior' => $penugasan->tenagaAhli->nomor_induk_surveior,
+                'jenis_penugasan' => $penugasan->jenis,
+                'tanggal_permohonan' => $penugasan->siklus->tanggal_pengajuan
+                    ? $penugasan->siklus->tanggal_pengajuan->locale('id')->format('d F Y')
+                    : '-',
+            ],
+        ]);
+
+        $filename = ($surat->nomor_surat ?: 'Surat-Tugas') . '.pdf';
+        $oldPath = $surat->path_pdf;
+        $newPath = $attachment->put($pdf->output(), 'surat_tugas', $filename, $oldPath);
+
+        $surat->forceFill(['path_pdf' => $newPath])->save();
     }
 
     /**
