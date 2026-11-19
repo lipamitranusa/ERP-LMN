@@ -183,14 +183,14 @@ class LembagaController extends Controller
      */
     private function validateLembaga(Request $request, bool $isUpdate): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'nama' => 'required|string|max:255',
             'nama_pt' => 'nullable|string|max:255',
             'alamat' => 'nullable|string|max:500',
             'kota' => 'nullable|string|max:100',
             'telepon' => 'nullable|string|max:30',
             'email' => 'nullable|email|max:100',
-            'website' => 'nullable|url|max:200',
+            'website' => 'nullable|string|max:200',
             'nama_cp' => 'nullable|string|max:150',
             'telepon_cp' => 'nullable|string|max:30',
             'deskripsi' => 'nullable|string|max:5000',
@@ -204,8 +204,27 @@ class LembagaController extends Controller
             'kota_pajak' => 'nullable|string|max:100',
             'nama_pejabat_pajak' => 'nullable|string|max:150',
             'jabatan_pejabat_pajak' => 'nullable|string|max:100',
+            'no_rekening' => 'nullable|string|max:50',
+            'nama_bank' => 'nullable|string|max:100',
+            'atas_nama_rekening' => 'nullable|string|max:100',
             'logo' => 'nullable|image|mimes:png,jpg,jpeg,svg|max:2048',
         ]);
+
+        foreach (['website', 'no_rekening', 'nama_bank', 'atas_nama_rekening'] as $field) {
+            if (array_key_exists($field, $data) && trim((string) $data[$field]) === '') {
+                $data[$field] = null;
+            }
+        }
+
+        if (array_key_exists('website', $data) && $data['website'] !== null) {
+            $website = trim((string) $data['website']);
+            if (! preg_match('/^https?:\\/\\//i', $website)) {
+                $website = 'https://' . $website;
+            }
+            $data['website'] = $website;
+        }
+
+        return $data;
     }
 
     public function getLogo(string $lembaga): \Illuminate\Http\Response

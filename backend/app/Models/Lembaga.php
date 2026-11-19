@@ -40,6 +40,9 @@ class Lembaga extends Model
         'jabatan_pejabat_pajak',
         'npwp_diverifikasi_at',
         'default_bank_coa_id',
+        'no_rekening',
+        'nama_bank',
+        'atas_nama_rekening',
     ];
 
     protected $casts = [

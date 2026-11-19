@@ -34,6 +34,7 @@ const EMPTY_FORM = {
   nama_pejabat: "", jabatan_pejabat: "",
   npwp: "", kode_kpp: "", alamat_pajak: "", kota_pajak: "",
   nama_pejabat_pajak: "", jabatan_pejabat_pajak: "",
+  no_rekening: "", nama_bank: "", atas_nama_rekening: "",
   status: "aktif",
 };
 
@@ -58,6 +59,9 @@ const schema = z.object({
   kota_pajak: z.string().default(""),
   nama_pejabat_pajak: z.string().default(""),
   jabatan_pejabat_pajak: z.string().default(""),
+  no_rekening: z.string().default(""),
+  nama_bank: z.string().default(""),
+  atas_nama_rekening: z.string().default(""),
   status: z.string().default("aktif"),
 });
 
@@ -128,6 +132,9 @@ export default function MasterLembaga() {
       kota_pajak: item.kota_pajak || "",
       nama_pejabat_pajak: item.nama_pejabat_pajak || "",
       jabatan_pejabat_pajak: item.jabatan_pejabat_pajak || "",
+      no_rekening: item.no_rekening || "",
+      nama_bank: item.nama_bank || "",
+      atas_nama_rekening: item.atas_nama_rekening || "",
       status: item.status || "aktif",
     });
     setShowModal(true);
@@ -190,6 +197,7 @@ export default function MasterLembaga() {
               <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Kota</TableHead>
               <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Kontak</TableHead>
               <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Email / Website</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Rekening</TableHead>
               <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Status</TableHead>
               <TableHead className="w-[100px] text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 dark:text-slate-500">Aksi</TableHead>
             </TableRow>
@@ -197,11 +205,11 @@ export default function MasterLembaga() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">Memuat...</TableCell>
+                <TableCell colSpan={8} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">Memuat...</TableCell>
               </TableRow>
             ) : lembaga.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">
+                <TableCell colSpan={8} className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">
                   {search ? "Tidak ada hasil" : "Belum ada lembaga."}
                 </TableCell>
               </TableRow>
@@ -222,6 +230,15 @@ export default function MasterLembaga() {
                       {l.website.replace(/^https?:\/\//, "")}
                     </a>
                   )}
+                </TableCell>
+                <TableCell className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                  {l.no_rekening ? (
+                    <div>
+                      <div className="font-mono">{l.no_rekening}</div>
+                      <div className="text-[11px]">{l.nama_bank || "—"}</div>
+                      {l.atas_nama_rekening && <div className="text-[11px]">{l.atas_nama_rekening}</div>}
+                    </div>
+                  ) : "—"}
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={l.status === "aktif" ? "lengkap" : "ditolak"} />
@@ -356,6 +373,25 @@ export default function MasterLembaga() {
                 <div className="space-y-1.5">
                   <Label htmlFor="lem-jabatan-pejabat">Jabatan</Label>
                   <Input id="lem-jabatan-pejabat" {...register("jabatan_pejabat")} placeholder="cth: Ketua Lembaga" />
+                </div>
+              </div>
+            </div>
+
+            {/* Rekening */}
+            <div>
+              <SectionTitle>Rekening Lembaga</SectionTitle>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-no-rekening">No. Rekening</Label>
+                  <Input id="lem-no-rekening" {...register("no_rekening")} placeholder="cth: 1234567890" className="font-mono" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lem-nama-bank">Nama Bank</Label>
+                  <Input id="lem-nama-bank" {...register("nama_bank")} placeholder="cth: Bank BCA" />
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <Label htmlFor="lem-atas-nama-rekening">Atas Nama Rekening</Label>
+                  <Input id="lem-atas-nama-rekening" {...register("atas_nama_rekening")} placeholder="Nama pemilik rekening lembaga" />
                 </div>
               </div>
             </div>
