@@ -85,7 +85,10 @@ class SuratTugasIssuanceController extends Controller
             );
 
             $suratPath = $data['path_pdf'] ?? null;
-            if (! $suratPath || ! $this->attachment->exists($suratPath)) {
+            $suppliedName = $suratPath ? strtolower(basename($suratPath)) : '';
+            $suppliedIsWrongAttachment = str_contains($suppliedName, 'permohonan')
+                || str_contains($suppliedName, 'lampiran');
+            if (! $suratPath || ! $this->attachment->exists($suratPath) || $suppliedIsWrongAttachment) {
                 $pdf = Pdf::loadView('surat_tugas.survei', [
                     'surat' => [
                         'nomor_surat' => $nomor,

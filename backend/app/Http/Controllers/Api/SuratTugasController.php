@@ -117,7 +117,11 @@ class SuratTugasController extends Controller
      */
     private function ensurePdfAvailable(SuratTugas $surat, AttachmentService $attachment): void
     {
-        if ($surat->path_pdf && $attachment->exists($surat->path_pdf)) {
+        $fileName = $surat->path_pdf ? strtolower(basename($surat->path_pdf)) : '';
+        $isWrongAttachment = str_contains($fileName, 'permohonan')
+            || str_contains($fileName, 'lampiran');
+
+        if ($surat->path_pdf && $attachment->exists($surat->path_pdf) && ! $isWrongAttachment) {
             return;
         }
 
