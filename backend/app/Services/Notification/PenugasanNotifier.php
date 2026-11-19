@@ -40,7 +40,13 @@ class PenugasanNotifier
         }
 
         $noWa = trim((string) $ta->no_wa);
-        $email = $ta->akunPengguna()->first()?->email;
+        $akun = $ta->akunPengguna()->first();
+        $email = $akun?->email;
+        $username = $akun?->username
+            ?: $akun?->email
+            ?: $ta->nomor_induk_surveior
+            ?: '-';
+        $passwordHint = 'Gunakan password akun Anda. Password sementara harus diganti saat login. Jika lupa password, hubungi administrator untuk reset.';
 
         // Sakelar admin: '0' = WhatsApp dimatikan. Baris yang belum ada
         // diperlakukan sebagai aktif agar notifikasi tetap terkirim.
@@ -74,6 +80,8 @@ class PenugasanNotifier
         Nomor Surat Tugas: {$nomorSurat}
 
         Silakan login ke sistem ERP Akreditasi untuk melihat detail dan mengkonfirmasi kesediaan.
+        Username/Login: {$username}
+        Password: {$passwordHint}
 
         Terima kasih,
         {$namaLembaga}
@@ -94,6 +102,8 @@ class PenugasanNotifier
                 'nama_faskes' => $faskesName,
                 'jenis_penugasan' => $jenisLabel,
                 'nama_lembaga' => $namaLembaga,
+                'username' => $username,
+                'password_hint' => $passwordHint,
             ],
         );
     }

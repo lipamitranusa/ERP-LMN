@@ -339,6 +339,8 @@ TXT,
                 'nama_faskes' => ['label' => 'Nama Faskes', 'contoh' => 'RS Srcaba'],
                 'jenis_penugasan' => ['label' => 'Jenis Penugasan', 'contoh' => 'Survei'],
                 'nama_lembaga' => ['label' => 'Nama Lembaga', 'contoh' => 'Lembaga Akreditasi Kesehatan'],
+                'username' => ['label' => 'Username / Identitas Login', 'contoh' => 'surveior01'],
+                'password_hint' => ['label' => 'Instruksi Password', 'contoh' => 'Gunakan password akun Anda'],
             ],
             'defaults' => [
                 'whatsapp' => [
@@ -353,6 +355,8 @@ Faskes: {{nama_faskes}}
 Jenis: {{jenis_penugasan}}
 
 Silakan login ke sistem ERP Akreditasi untuk melihat detail dan mengkonfirmasi kesediaan.
+Username/Login: {{username}}
+Password: {{password_hint}}
 
 Terima kasih,
 {{nama_lembaga}}
@@ -370,6 +374,8 @@ Faskes: {{nama_faskes}}
 Jenis: {{jenis_penugasan}}
 
 Silakan login ke sistem ERP Akreditasi untuk melihat detail dan mengkonfirmasi kesediaan.
+Username/Login: {{username}}
+Password: {{password_hint}}
 
 Terima kasih,
 {{nama_lembaga}}

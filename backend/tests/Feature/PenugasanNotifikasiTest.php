@@ -108,6 +108,8 @@ class PenugasanNotifikasiTest extends TestCase
         $this->assertSame('081298765432', $terkirim[1]['to']);
         $this->assertStringContainsString('TKPP Notifikasi', $terkirim[0]['message']);
         $this->assertStringContainsString('RS Notifikasi', $terkirim[0]['message']);
+        $this->assertStringContainsString('Username/Login:', $terkirim[0]['message']);
+        $this->assertStringContainsString('Password:', $terkirim[0]['message']);
 
         $this->assertDatabaseHas('notifikasi_tagihan', [
             'jenis' => 'penugasan_baru',
