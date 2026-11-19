@@ -218,10 +218,14 @@ class LembagaController extends Controller
 
         if (array_key_exists('website', $data) && $data['website'] !== null) {
             $website = trim((string) $data['website']);
-            if (! preg_match('/^https?:\\/\\//i', $website)) {
+            if (in_array(strtolower($website), ['https://', 'http://'], true)) {
+                $data['website'] = null;
+            } elseif (! preg_match('/^https?:\\/\\//i', $website)) {
                 $website = 'https://' . $website;
+                $data['website'] = $website;
+            } else {
+                $data['website'] = $website;
             }
-            $data['website'] = $website;
         }
 
         return $data;

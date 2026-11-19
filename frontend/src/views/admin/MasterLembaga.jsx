@@ -142,7 +142,13 @@ export default function MasterLembaga() {
 
   const onSubmit = (data) => {
     const fd = new FormData();
-    Object.entries(data).forEach(([k, v]) => fd.append(k, v ?? ""));
+    Object.entries(data).forEach(([k, v]) => {
+      if (k === "website" && ["", "https://", "http://"].includes(String(v).trim())) {
+        fd.append(k, "");
+      } else {
+        fd.append(k, v ?? "");
+      }
+    });
     if (logoFile) fd.append("logo", logoFile);
     if (hapusLogo) fd.append("hapus_logo", "1");
     mutate.mutate({

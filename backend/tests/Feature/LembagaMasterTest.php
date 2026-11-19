@@ -32,7 +32,7 @@ class LembagaMasterTest extends TestCase
                 'kota' => $lembaga->kota,
                 'telepon' => $lembaga->telepon,
                 'email' => $lembaga->email,
-                'website' => '',
+                'website' => 'https://',
                 'status' => 'aktif',
                 'npwp' => '00.000.000.0-000.000',
                 'no_rekening' => '1234567890',
