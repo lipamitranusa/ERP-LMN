@@ -290,7 +290,7 @@ export default function PenugasanSaya() {
                   )}
                 </div>
 
-                {(p.surat_tugas ?? siblingSuratMap[`${p.siklus_id}|${p.jenis}`]) && (() => {
+                {!isMenunggu && (p.surat_tugas ?? siblingSuratMap[`${p.siklus_id}|${p.jenis}`]) && (() => {
                   const st = p.surat_tugas ?? siblingSuratMap[`${p.siklus_id}|${p.jenis}`];
                   return (
                     <div className="border-t border-slate-100 pt-3 mt-3">
