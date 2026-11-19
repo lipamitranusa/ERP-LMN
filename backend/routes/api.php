@@ -552,6 +552,8 @@ Route::prefix('master')->middleware(['auth:sanctum', 'lembaga'])->group(function
         ->post('/lembaga', [LembagaController::class, 'store']);
     Route::middleware('privilege:Master Data,Ubah')
         ->put('/lembaga/{lembaga}', [LembagaController::class, 'update']);
+    Route::middleware('privilege:Master Data,Ubah')
+        ->post('/lembaga/{lembaga}', [LembagaController::class, 'update']);
     Route::middleware('privilege:Master Data,Hapus')
         ->delete('/lembaga/{lembaga}', [LembagaController::class, 'destroy']);
 

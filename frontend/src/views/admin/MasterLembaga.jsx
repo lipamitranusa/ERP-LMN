@@ -142,6 +142,7 @@ export default function MasterLembaga() {
 
   const onSubmit = (data) => {
     const fd = new FormData();
+    fd.append("_method", "PUT");
     Object.entries(data).forEach(([k, v]) => {
       if (k === "website" && ["", "https://", "http://"].includes(String(v).trim())) {
         fd.append(k, "");
@@ -153,7 +154,7 @@ export default function MasterLembaga() {
     if (hapusLogo) fd.append("hapus_logo", "1");
     mutate.mutate({
       path: editTarget ? `/master/lembaga/${editTarget.id}` : "/master/lembaga",
-      method: editTarget ? "PUT" : "POST",
+      method: editTarget ? "POST" : "POST",
       body: fd,
     });
   };

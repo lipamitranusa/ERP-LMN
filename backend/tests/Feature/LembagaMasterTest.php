@@ -46,4 +46,32 @@ class LembagaMasterTest extends TestCase
             ->assertJsonPath('data.atas_nama_rekening', 'LAMDAKU')
             ->assertJsonPath('data.website', null);
     }
+
+    public function test_edit_multipart_post_diterima(): void
+    {
+        $admin = AkunPengguna::where('email', 'admin@erp.local')->firstOrFail();
+        $lembaga = Lembaga::findOrFail('00000000-0000-0000-0000-000000000002');
+
+        $response = $this->actingAs($admin, 'sanctum')
+            ->withSession(['lembaga_id' => '00000000-0000-0000-0000-000000000002'])
+            ->post("/api/master/lembaga/{$lembaga->id}?lembaga_id=00000000-0000-0000-0000-000000000002", [
+                '_method' => 'PUT',
+                'nama' => $lembaga->nama,
+                'nama_pt' => $lembaga->nama_pt,
+                'alamat' => $lembaga->alamat,
+                'kota' => $lembaga->kota,
+                'telepon' => $lembaga->telepon,
+                'email' => $lembaga->email,
+                'website' => 'https://',
+                'nama_cp' => $lembaga->nama_cp,
+                'status' => 'aktif',
+                'no_rekening' => '1234567890',
+                'nama_bank' => 'Bank BCA',
+                'atas_nama_rekening' => 'LIPA MITRA NUSA',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.no_rekening', '1234567890')
+            ->assertJsonPath('data.website', null);
+    }
 }
