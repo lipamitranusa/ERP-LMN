@@ -224,7 +224,7 @@ class RekomendasiController extends Controller
      */
     public function getDefault(Request $request): JsonResponse
     {
-        $user = $this->getDefaultRekomendator();
+        $user = $this->getDefaultRekomendator($this->resolveActiveLembagaId($request));
 
         return response()->json(['data' => $user]);
     }
@@ -238,7 +238,7 @@ class RekomendasiController extends Controller
      */
     public function getCandidates(Request $request): JsonResponse
     {
-        $sessionLembagaId = session('lembaga_id');
+        $sessionLembagaId = $this->resolveActiveLembagaId($request);
 
         // Kandidat hanya milik lembaga aktif — akun dan tenaga ahlinya
         // harus satu lembaga, kalau tidak honor reksa masuk ke lembaga lain.
@@ -294,7 +294,7 @@ class RekomendasiController extends Controller
 
         // Reksa milik satu lembaga: akunnya harus terdaftar di lemma
         // session dan tenaga ahlinya (bila ada) juga milik lemma itu.
-        $sessionLembagaId = session('lembaga_id');
+        $sessionLembagaId = $this->resolveActiveLembagaId($request);
         if ($sessionLembagaId !== null && ! $this->reksa->selaras($target, $sessionLembagaId)) {
             return response()->json([
                 'message' => 'User Rekomendator yang dipilih bukan milik lembaga Anda saat ini.',
@@ -512,13 +512,33 @@ class RekomendasiController extends Controller
     }
 
     /**
+     * Gunakan lembaga yang sudah diselesaikan middleware dari session/query.
+     * Helper ini menjaga endpoint pengaturan konsisten meski dipanggil dengan
+     * query lembaga_id atau dalam sesi switch lembaga.
+     */
+    private function resolveActiveLembagaId(Request $request): ?string
+    {
+        $sessionId = session('lembaga_id');
+        if (is_string($sessionId) && $sessionId !== '') {
+            return $sessionId;
+        }
+
+        $requested = $request->query('lembaga_id');
+        if (is_string($requested) && $requested !== '') {
+            return $requested;
+        }
+
+        return null;
+    }
+
+    /**
      * Ambil profil default rekomendator untuk lembaga aktif session.
      * Hanya berlaku bila user yang terpointer masih milik lembaga aktif.
      * Return null jika belum disetel (atau tidak selaras) untuk lemma itu.
      */
-    private function getDefaultRekomendator(): ?array
+    private function getDefaultRekomendator(?string $lembagaId = null): ?array
     {
-        $u = $this->reksa->userFor(session('lembaga_id'));
+        $u = $this->reksa->userFor($lembagaId ?? session('lembaga_id'));
         if (! $u) {
             return null;
         }
